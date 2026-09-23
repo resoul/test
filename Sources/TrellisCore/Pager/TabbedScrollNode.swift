@@ -28,8 +28,10 @@ public struct TabsConfiguration: Sendable, Hashable {
     ///
     /// Ownership: the caller owns the value. Isolation: none. Errors: none. Cancellation: not
     /// applicable.
-    public init(placement: TabsPlacement = .pinned, appearance: TabsAppearance = TabsAppearance())
-    {
+    public init(
+        placement: TabsPlacement = .pinned,
+        appearance: TabsAppearance = TabsAppearance()
+    ) {
         self.placement = placement
         self.appearance = appearance
     }
