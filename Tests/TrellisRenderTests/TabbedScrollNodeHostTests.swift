@@ -223,7 +223,8 @@ func test_tabbed_theBlockFillsTheViewportBelowThePinLine() async {
     await fixture.settle()
 
     #expect(fixture.tabbed.tabsNode.calculatedFrame?.origin.y == 200)
-    #expect(fixture.tabbed.pager.calculatedFrame?.height == 640 - 44)
+    // Literals, not arithmetic: `#expect` types `640 - 44` apart from the `Double` side.
+    #expect(fixture.tabbed.pager.calculatedFrame?.height == 596)  // 640 − tabs 44
     // Header + one viewport: the largest outer offset is the pin offset.
     #expect(fixture.tabbed.scrollNode.state.contentSize.height == 840)
     #expect(!fixture.tabbed.isPinned)
@@ -239,7 +240,7 @@ func test_tabbed_thePinLineFollowsTheCoveredSafeAreaAndPagesSeeNoTopSafeArea() a
     )
     await fixture.settle()
 
-    #expect(fixture.tabbed.pager.calculatedFrame?.height == 640 - 30 - 44)
+    #expect(fixture.tabbed.pager.calculatedFrame?.height == 566)  // 640 − pin 30 − tabs 44
     fixture.outer.drag(to: 170, phase: .idle)
     #expect(fixture.tabbed.isPinned)
     let list = fixture.list("a")
@@ -257,7 +258,8 @@ func test_tabbed_insideARootThatFoldedTheSafeAreaThereIsNothingToCover() async {
 
     // The root's padding already keeps the composition clear of the safe area.
     #expect(fixture.tabbed.calculatedFrame?.origin.y == 30)
-    #expect(fixture.tabbed.pager.calculatedFrame?.height == 640 - 30 - 20 - 44)
+    // 640 − root padding 30 and 20 − tabs 44; the pin line stays at the viewport's top.
+    #expect(fixture.tabbed.pager.calculatedFrame?.height == 546)
     fixture.outer.drag(to: 200, phase: .idle)
     #expect(fixture.tabbed.isPinned)
     #expect(fixture.list("a")?.scrollNode.environment.safeAreaInsets.bottom == 0)
@@ -440,7 +442,7 @@ func test_tabbed_inlineTabsScrollAwayAndThePagesStopAtThePinLine() async {
     await fixture.settle()
 
     #expect(fixture.tabbed.pager.calculatedFrame?.height == 640)
-    #expect(fixture.tabbed.scrollNode.state.contentSize.height == 200 + 44 + 640)
+    #expect(fixture.tabbed.scrollNode.state.contentSize.height == 884)  // 200 + 44 + 640
     fixture.outer.drag(to: 200, phase: .idle)
     #expect(!fixture.tabbed.isPinned)
     fixture.outer.drag(to: 244, phase: .idle)
