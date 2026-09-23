@@ -1,6 +1,6 @@
 # R14 — Collapsing header и интеграция профиля (этап 1)
 
-Статус на 2026-09-23: **этап 1 собирается, полный `swift test` и формат чистые; API, matrix и Playground не проверены.** Код написан
+Статус на 2026-09-23: **этап 1 собирается, полный `swift test`, формат и API baseline в порядке; matrix и Playground не проверены.** Код написан
 в облачной сессии на Linux без Swift и Xcode (`download.swift.org` закрыт сетевой политикой
 окружения); сборка и тесты — на Mac пользователя по списку в разделе «Проверки». Карточка не
 закрыта; этап 2 (передача инерции) не начат.
@@ -21,6 +21,10 @@
   Tests` — чисто. Playground (без `--strict`, как и вне `verify_bootstrap.py`): два
   `LineLength` в `Playground/macOS/PlaygroundApp.swift:292,298` — файл не менялся с загрузки,
   к R14 не относится.
+- API baseline: `check_api.py --tvos` до обновления — только добавления, `changed`/`removed`
+  пусты (TrellisCore +36, из них два синтезированных `!=`; TrellisRender +1); совпадает с разделом
+  API ADR 0037. Обновлено `check_api.py --update --review-note docs/adr/0037-…` (коммит `d0fcb0b`);
+  TrellisAppKit/TrellisUIKit/TrellisFlux и tvOS-поверхность UIKit без изменений.
 
 Решение: [ADR 0037](../adr/0037-tabbed-scroll-coordination.md) (вариант Telegram), разбор
 референса — [telegram-peerinfo-analysis.md](../telegram-peerinfo-analysis.md).
@@ -67,7 +71,7 @@
 
 ## Проверки (выполнить на Mac)
 
-Выполнены пункты 1–4 (см. статус выше); остальное не запускалось.
+Выполнены пункты 1–5 (см. статус выше); matrix и Playground не запускались.
 
 1. `swift build --build-tests -Xswiftc -warnings-as-errors`
 2. `swift test --filter test_tabbed_` и `swift test --filter r14_`, затем полный `swift test`
@@ -95,9 +99,8 @@
 
 ## Не закрыто (явно)
 
-- Этап 1 собирается, полный `swift test` и формат чистые; API baseline, matrix и Playground не проверены.
+- Этап 1: сборка, полный `swift test`, формат и API baseline в порядке; matrix и Playground не проверены.
 - Этап 2 (передача инерции, ADR 0037 §5) не начат.
 - AX scroll и tvOS focus на заблокированной странице — не проверены, маршрут не специфицирован.
 - Refresh внешнего scroll не подключён.
 - XCUITest для S39 не написан; эталон скриншота S39 не добавлен (gate сломан, #83).
-- `api/*.json` не обновлён.
