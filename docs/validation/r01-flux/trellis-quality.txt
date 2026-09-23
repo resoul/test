@@ -1,0 +1,21 @@
+2026-09-14 — R01 Trellis quality gate
+Command (Trellis root):
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk python3 Scripts/check_all.py
+
+First run: exit 1, M12 timing failure (#60); trellis-initial-failure.log preserves excerpt.
+Second run, unchanged Sources/Tests: exit 0.
+PASS policy 2.0.0 (0 diagnostics)
+PASS 20 policy fixture tests
+PASS 3 verifier tests
+PASS pinned toolchain, swift-format, manifest, library build
+PASS 702 Swift tests
+PASS external consumer
+PASS TrellisCore API (1046 symbols)
+PASS TrellisRender API (232 symbols)
+PASS TrellisAppKit API (46 symbols)
+PASS TrellisUIKit API (50 symbols)
+PASS tvOS surface matches iOS baseline
+PASS 62 macOS scenario screenshots
+PASS TRELLIS_LOG environment behavior
+
+Separate R01 audit: results.json, baseline.log (138 tests), audit.log (11 tests).

@@ -1,0 +1,269 @@
+{
+  "configuration": "release",
+  "date": "2026-09-11T03:12:54Z",
+  "fixtures": [
+    {
+      "counters": {
+        "coalesced": 0,
+        "committed": 21,
+        "layers": 272,
+        "requested": 21
+      },
+      "memoryMiB": {},
+      "name": "deep-local-edit",
+      "notes": [],
+      "parameters": {
+        "depth": 30,
+        "nodes": 272,
+        "siblings": 8
+      },
+      "timingsMs": {
+        "attach-to-first-commit": {
+          "count": 1,
+          "max": 10.886,
+          "p50": 10.886,
+          "p95": 10.886
+        },
+        "phase-apply-frames": {
+          "count": 20,
+          "max": 0.074,
+          "p50": 0.048,
+          "p95": 0.066
+        },
+        "phase-snapshot": {
+          "count": 20,
+          "max": 0.859,
+          "p50": 0.483,
+          "p95": 0.791
+        },
+        "phase-solve": {
+          "count": 20,
+          "max": 5.79,
+          "p50": 3.527,
+          "p95": 4.932
+        },
+        "single-leaf-edit-to-commit": {
+          "count": 20,
+          "max": 4.623,
+          "p50": 4.41,
+          "p95": 4.514
+        }
+      }
+    },
+    {
+      "counters": {
+        "coalesced": 20,
+        "committed": 42,
+        "layers": 101,
+        "requested": 42,
+        "resize-burst-requests": 1,
+        "stale": 0
+      },
+      "memoryMiB": {
+        "resident-before": 15.703,
+        "resident-detached": 16.063,
+        "resident-mounted": 16.063
+      },
+      "name": "wide-100",
+      "notes": [],
+      "parameters": {
+        "nodes": 101
+      },
+      "timingsMs": {
+        "attach-to-first-commit": {
+          "count": 1,
+          "max": 0.687,
+          "p50": 0.687,
+          "p95": 0.687
+        },
+        "geometry-all-nodes-to-commit": {
+          "count": 20,
+          "max": 0.562,
+          "p50": 0.473,
+          "p95": 0.547
+        },
+        "paint-only-all-nodes": {
+          "count": 20,
+          "max": 0.294,
+          "p50": 0.28,
+          "p95": 0.292
+        },
+        "resize-burst-60-to-commit": {
+          "count": 1,
+          "max": 0.443,
+          "p50": 0.443,
+          "p95": 0.443
+        },
+        "resize-to-commit": {
+          "count": 20,
+          "max": 0.498,
+          "p50": 0.434,
+          "p95": 0.492
+        }
+      }
+    },
+    {
+      "counters": {
+        "coalesced": 20,
+        "committed": 42,
+        "layers": 1001,
+        "requested": 42,
+        "resize-burst-requests": 1,
+        "stale": 0
+      },
+      "memoryMiB": {
+        "resident-before": 17.672,
+        "resident-detached": 19.016,
+        "resident-mounted": 18.969
+      },
+      "name": "wide-1000",
+      "notes": [],
+      "parameters": {
+        "nodes": 1001
+      },
+      "timingsMs": {
+        "attach-to-first-commit": {
+          "count": 1,
+          "max": 8.474,
+          "p50": 8.474,
+          "p95": 8.474
+        },
+        "geometry-all-nodes-to-commit": {
+          "count": 20,
+          "max": 7.981,
+          "p50": 7.711,
+          "p95": 7.877
+        },
+        "paint-only-all-nodes": {
+          "count": 20,
+          "max": 1.698,
+          "p50": 1.477,
+          "p95": 1.63
+        },
+        "resize-burst-60-to-commit": {
+          "count": 1,
+          "max": 7.604,
+          "p50": 7.604,
+          "p95": 7.604
+        },
+        "resize-to-commit": {
+          "count": 20,
+          "max": 8.03,
+          "p50": 7.485,
+          "p95": 7.656
+        }
+      }
+    },
+    {
+      "counters": {
+        "layers-after": 0,
+        "live-root-after-release": 0
+      },
+      "memoryMiB": {
+        "peak": 51.375,
+        "resident-after": 51.375,
+        "resident-before": 19.016
+      },
+      "name": "attach-detach",
+      "notes": [],
+      "parameters": {
+        "cycles": 20,
+        "nodes": 1001
+      },
+      "timingsMs": {
+        "attach-commit-detach": {
+          "count": 20,
+          "max": 9.092,
+          "p50": 8.909,
+          "p95": 9.01
+        }
+      }
+    },
+    {
+      "counters": {
+        "committed": 21,
+        "requested": 22,
+        "updates-delivered": 20,
+        "updates-expected": 20
+      },
+      "memoryMiB": {},
+      "name": "state-burst",
+      "notes": [],
+      "parameters": {
+        "nodes": 1001,
+        "sends": 1000
+      },
+      "timingsMs": {
+        "burst-to-commit": {
+          "count": 20,
+          "max": 8.543,
+          "p50": 7.999,
+          "p95": 8.274
+        }
+      }
+    },
+    {
+      "counters": {
+        "a-committed": 21,
+        "a-stale": 0,
+        "b-committed": 21,
+        "b-stale": 0
+      },
+      "memoryMiB": {},
+      "name": "two-hosts",
+      "notes": [],
+      "parameters": {
+        "nodes-per-host": 501
+      },
+      "timingsMs": {
+        "both-hosts-update-to-commit": {
+          "count": 20,
+          "max": 3.969,
+          "p50": 3.806,
+          "p95": 3.941
+        }
+      }
+    },
+    {
+      "counters": {},
+      "memoryMiB": {},
+      "name": "cancel-latency",
+      "notes": [],
+      "parameters": {
+        "deep-depth": 200,
+        "deep-nodes": 1002,
+        "wide-items": 5000
+      },
+      "timingsMs": {
+        "deep-cancel-to-worker-exit": {
+          "count": 5,
+          "max": 0.132,
+          "p50": 0.094,
+          "p95": 0.132
+        },
+        "deep-solve-uncancelled": {
+          "count": 5,
+          "max": 99.87,
+          "p50": 88.884,
+          "p95": 99.87
+        },
+        "wide-single-line-cancel-to-worker-exit": {
+          "count": 5,
+          "max": 0.136,
+          "p50": 0.084,
+          "p95": 0.136
+        },
+        "wide-single-line-solve-uncancelled": {
+          "count": 5,
+          "max": 122.436,
+          "p50": 116.305,
+          "p95": 122.436
+        }
+      }
+    }
+  ],
+  "host": "resoul\u2019s MacBook Air",
+  "iterations": 20,
+  "logMode": "off",
+  "os": "Version 26.4.1 (Build 25E253)"
+}

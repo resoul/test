@@ -1,0 +1,49 @@
+{
+  "configuration": "release",
+  "date": "2026-09-14T07:23:48Z",
+  "fixtures": [
+    {
+      "counters": {
+        "layers-after-detach": 0,
+        "layers-during-open-session": 5
+      },
+      "memoryMiB": {
+        "resident-after-detach-cleanup": 17.859,
+        "resident-after-drain": 17.391,
+        "resident-before": 11.031,
+        "resident-during-open-session": 17.813
+      },
+      "name": "transition-open-close",
+      "notes": [
+        "measures synchronous prepare/arm/cleanup cost only, via public API (presentTransition/closeTransition/detach); real animation-completion wall-clock (prepare-to-.presented) could not be measured headlessly on this toolchain \u2014 see docs/validation/m14-close-result-b.md"
+      ],
+      "parameters": {
+        "cycles": 20
+      },
+      "timingsMs": {
+        "attach-to-first-commit": {
+          "count": 1,
+          "max": 35.798,
+          "p50": 35.798,
+          "p95": 35.798
+        },
+        "close-arm": {
+          "count": 20,
+          "max": 0,
+          "p50": 0,
+          "p95": 0
+        },
+        "present-prepare-and-arm": {
+          "count": 20,
+          "max": 0.755,
+          "p50": 0.409,
+          "p95": 0.599
+        }
+      }
+    }
+  ],
+  "host": "resoul\u2019s MacBook Air",
+  "iterations": 20,
+  "logMode": "off",
+  "os": "Version 26.4.1 (Build 25E253)"
+}

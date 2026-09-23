@@ -1,0 +1,2936 @@
+{
+  "module": "TrellisRender",
+  "platform": "arm64-apple-macosx14.0",
+  "schemaVersion": 1,
+  "symbols": [
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "struct HostRenderStatistics",
+      "identifier": "s:13TrellisRender04HostB10StatisticsV",
+      "kind": "swift.struct",
+      "pathComponents": [
+        "HostRenderStatistics"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let stale: Int",
+      "identifier": "s:13TrellisRender04HostB10StatisticsV5staleSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "HostRenderStatistics",
+        "stale"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let retries: Int",
+      "identifier": "s:13TrellisRender04HostB10StatisticsV7retriesSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "HostRenderStatistics",
+        "retries"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let cancelled: Int",
+      "identifier": "s:13TrellisRender04HostB10StatisticsV9cancelledSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "HostRenderStatistics",
+        "cancelled"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let coalesced: Int",
+      "identifier": "s:13TrellisRender04HostB10StatisticsV9coalescedSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "HostRenderStatistics",
+        "coalesced"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let committed: Int",
+      "identifier": "s:13TrellisRender04HostB10StatisticsV9committedSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "HostRenderStatistics",
+        "committed"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "init(requested: Int, coalesced: Int, stale: Int, committed: Int, retries: Int, cancelled: Int)",
+      "identifier": "s:13TrellisRender04HostB10StatisticsV9requested9coalesced5stale9committed7retries9cancelledACSi_S5itcfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "HostRenderStatistics",
+        "init(requested:coalesced:stale:committed:retries:cancelled:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let requested: Int",
+      "identifier": "s:13TrellisRender04HostB10StatisticsV9requestedSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "HostRenderStatistics",
+        "requested"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "struct HostRenderRequest",
+      "identifier": "s:13TrellisRender04HostB7RequestV",
+      "kind": "swift.struct",
+      "pathComponents": [
+        "HostRenderRequest"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let generation: UInt64",
+      "identifier": "s:13TrellisRender04HostB7RequestV10generations6UInt64Vvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "HostRenderRequest",
+        "generation"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let treeIdentity: NodeID",
+      "identifier": "s:13TrellisRender04HostB7RequestV12treeIdentity0A4Core6NodeIDVvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "HostRenderRequest",
+        "treeIdentity"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let contentRevision: UInt64",
+      "identifier": "s:13TrellisRender04HostB7RequestV15contentRevisions6UInt64Vvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "HostRenderRequest",
+        "contentRevision"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let environmentRevision: UInt64",
+      "identifier": "s:13TrellisRender04HostB7RequestV19environmentRevisions6UInt64Vvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "HostRenderRequest",
+        "environmentRevision"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let scale: Double",
+      "identifier": "s:13TrellisRender04HostB7RequestV5scaleSdvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "HostRenderRequest",
+        "scale"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let bounds: LayoutFrame",
+      "identifier": "s:13TrellisRender04HostB7RequestV6bounds0A4Core11LayoutFrameVvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "HostRenderRequest",
+        "bounds"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "init(hostID: UInt64, generation: UInt64, treeIdentity: NodeID, contentRevision: UInt64, environmentRevision: UInt64, bounds: LayoutFrame, scale: Double, direction: LayoutDirection)",
+      "identifier": "s:13TrellisRender04HostB7RequestV6hostID10generation12treeIdentity15contentRevision011environmentK06bounds5scale9directionACs6UInt64V_AM0A4Core04NodeF0VA2mN11LayoutFrameVSdAN0S9DirectionOtcfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "HostRenderRequest",
+        "init(hostID:generation:treeIdentity:contentRevision:environmentRevision:bounds:scale:direction:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let hostID: UInt64",
+      "identifier": "s:13TrellisRender04HostB7RequestV6hostIDs6UInt64Vvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "HostRenderRequest",
+        "hostID"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let direction: LayoutDirection",
+      "identifier": "s:13TrellisRender04HostB7RequestV9direction0A4Core15LayoutDirectionOvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "HostRenderRequest",
+        "direction"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor final class RenderCoordinator",
+      "identifier": "s:13TrellisRender0B11CoordinatorC",
+      "kind": "swift.class",
+      "pathComponents": [
+        "RenderCoordinator"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func invalidate(root: Node, bounds: LayoutFrame, scale: Double)",
+      "identifier": "s:13TrellisRender0B11CoordinatorC10invalidate4root6bounds5scaley0A4Core4NodeC_AH11LayoutFrameVSdtF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "RenderCoordinator",
+        "invalidate(root:bounds:scale:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var onPaintOnly: (@MainActor @Sendable (HostRenderRequest) -> Void)?",
+      "identifier": "s:13TrellisRender0B11CoordinatorC11onPaintOnlyyAA04HostB7RequestVYbScMYccSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "RenderCoordinator",
+        "onPaintOnly"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func replaceRoot(newRoot: Node)",
+      "identifier": "s:13TrellisRender0B11CoordinatorC11replaceRoot03newE0y0A4Core4NodeC_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "RenderCoordinator",
+        "replaceRoot(newRoot:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var onPostCommit: (@MainActor @Sendable (HostRenderRequest) -> Void)?",
+      "identifier": "s:13TrellisRender0B11CoordinatorC12onPostCommityAA04HostB7RequestVYbScMYccSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "RenderCoordinator",
+        "onPostCommit"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var onDisplayOnly: (@MainActor @Sendable (HostRenderRequest) -> Void)?",
+      "identifier": "s:13TrellisRender0B11CoordinatorC13onDisplayOnlyyAA04HostB7RequestVYbScMYccSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "RenderCoordinator",
+        "onDisplayOnly"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var onSemanticsOnly: (@MainActor @Sendable (HostRenderRequest) -> Void)?",
+      "identifier": "s:13TrellisRender0B11CoordinatorC15onSemanticsOnlyyAA04HostB7RequestVYbScMYccSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "RenderCoordinator",
+        "onSemanticsOnly"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var onCommitGeometry: (@MainActor @Sendable (LayoutResult, HostRenderRequest) -> Void)?",
+      "identifier": "s:13TrellisRender0B11CoordinatorC16onCommitGeometryy0A4Core12LayoutResultV_AA04HostB7RequestVtYbScMYccSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "RenderCoordinator",
+        "onCommitGeometry"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func mount(root: Node)",
+      "identifier": "s:13TrellisRender0B11CoordinatorC5mount4rooty0A4Core4NodeC_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "RenderCoordinator",
+        "mount(root:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor init(hostID: UInt64)",
+      "identifier": "s:13TrellisRender0B11CoordinatorC6hostIDACs6UInt64V_tcfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "RenderCoordinator",
+        "init(hostID:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor let hostID: UInt64",
+      "identifier": "s:13TrellisRender0B11CoordinatorC6hostIDs6UInt64Vvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "RenderCoordinator",
+        "hostID"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func resume()",
+      "identifier": "s:13TrellisRender0B11CoordinatorC6resumeyyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "RenderCoordinator",
+        "resume()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func dispose()",
+      "identifier": "s:13TrellisRender0B11CoordinatorC7disposeyyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "RenderCoordinator",
+        "dispose()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func suspend()",
+      "identifier": "s:13TrellisRender0B11CoordinatorC7suspendyyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "RenderCoordinator",
+        "suspend()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func unmount()",
+      "identifier": "s:13TrellisRender0B11CoordinatorC7unmountyyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "RenderCoordinator",
+        "unmount()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "struct DisplayKey",
+      "identifier": "s:13TrellisRender10DisplayKeyV",
+      "kind": "swift.struct",
+      "pathComponents": [
+        "DisplayKey"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "init(contentRevision: UInt64, displayRevision: UInt64, environmentRevision: UInt64, size: MeasuredSize, scale: Double)",
+      "identifier": "s:13TrellisRender10DisplayKeyV15contentRevision07displayF0011environmentF04size5scaleACs6UInt64V_A2J0A4Core12MeasuredSizeVSdtcfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "DisplayKey",
+        "init(contentRevision:displayRevision:environmentRevision:size:scale:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let contentRevision: UInt64",
+      "identifier": "s:13TrellisRender10DisplayKeyV15contentRevisions6UInt64Vvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DisplayKey",
+        "contentRevision"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let displayRevision: UInt64",
+      "identifier": "s:13TrellisRender10DisplayKeyV15displayRevisions6UInt64Vvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DisplayKey",
+        "displayRevision"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "func hasEqualContent(to other: DisplayKey) -> Bool",
+      "identifier": "s:13TrellisRender10DisplayKeyV15hasEqualContent2toSbAC_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "DisplayKey",
+        "hasEqualContent(to:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let environmentRevision: UInt64",
+      "identifier": "s:13TrellisRender10DisplayKeyV19environmentRevisions6UInt64Vvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DisplayKey",
+        "environmentRevision"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let size: MeasuredSize",
+      "identifier": "s:13TrellisRender10DisplayKeyV4size0A4Core12MeasuredSizeVvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DisplayKey",
+        "size"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let scale: Double",
+      "identifier": "s:13TrellisRender10DisplayKeyV5scaleSdvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DisplayKey",
+        "scale"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor final class StateBinding",
+      "identifier": "s:13TrellisRender12StateBindingC",
+      "kind": "swift.class",
+      "pathComponents": [
+        "StateBinding"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func cancel()",
+      "identifier": "s:13TrellisRender12StateBindingC6cancelyyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "StateBinding",
+        "cancel()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var isActive: Bool { get }",
+      "identifier": "s:13TrellisRender12StateBindingC8isActiveSbvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "StateBinding",
+        "isActive"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor final class LayerRegistry",
+      "identifier": "s:13TrellisRender13LayerRegistryC",
+      "kind": "swift.class",
+      "pathComponents": [
+        "LayerRegistry"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var identities: Set<NodeID> { get }",
+      "identifier": "s:13TrellisRender13LayerRegistryC10identitiesShy0A4Core6NodeIDVGvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "LayerRegistry",
+        "identities"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@discardableResult @MainActor func set(_ layer: CALayer, for identity: NodeID) -> CALayer?",
+      "identifier": "s:13TrellisRender13LayerRegistryC3set_3forSo7CALayerCSgAG_0A4Core6NodeIDVtF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "LayerRegistry",
+        "set(_:for:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var count: Int { get }",
+      "identifier": "s:13TrellisRender13LayerRegistryC5countSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "LayerRegistry",
+        "count"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func layer(for identity: NodeID) -> CALayer?",
+      "identifier": "s:13TrellisRender13LayerRegistryC5layer3forSo7CALayerCSg0A4Core6NodeIDV_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "LayerRegistry",
+        "layer(for:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@discardableResult @MainActor func remove(_ identity: NodeID) -> CALayer?",
+      "identifier": "s:13TrellisRender13LayerRegistryC6removeySo7CALayerCSg0A4Core6NodeIDVF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "LayerRegistry",
+        "remove(_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@discardableResult @MainActor func removeAll() -> [CALayer]",
+      "identifier": "s:13TrellisRender13LayerRegistryC9removeAllSaySo7CALayerCGyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "LayerRegistry",
+        "removeAll()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor init()",
+      "identifier": "s:13TrellisRender13LayerRegistryCACycfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "LayerRegistry",
+        "init()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor final class LayerRenderer",
+      "identifier": "s:13TrellisRender13LayerRendererC",
+      "kind": "swift.class",
+      "pathComponents": [
+        "LayerRenderer"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func rasterLayer(for identity: NodeID) -> CALayer?",
+      "identifier": "s:13TrellisRender13LayerRendererC06rasterC03forSo7CALayerCSg0A4Core6NodeIDV_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "LayerRenderer",
+        "rasterLayer(for:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var createdLayerTotal: Int { get }",
+      "identifier": "s:13TrellisRender13LayerRendererC07createdC5TotalSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "LayerRenderer",
+        "createdLayerTotal"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var layerCount: Int { get }",
+      "identifier": "s:13TrellisRender13LayerRendererC10layerCountSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "LayerRenderer",
+        "layerCount"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var onNodeRemoved: (@MainActor @Sendable (NodeID) -> Void)?",
+      "identifier": "s:13TrellisRender13LayerRendererC13onNodeRemovedy0A4Core0F2IDVYbScMYccSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "LayerRenderer",
+        "onNodeRemoved"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func applyCommitted(root: Node, on hostLayer: CALayer, request: HostRenderRequest)",
+      "identifier": "s:13TrellisRender13LayerRendererC14applyCommitted4root2on7requesty0A4Core4NodeC_So7CALayerCAA04HostB7RequestVtF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "LayerRenderer",
+        "applyCommitted(root:on:request:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func applyAppearance(of node: Node)",
+      "identifier": "s:13TrellisRender13LayerRendererC15applyAppearance2ofy0A4Core4NodeC_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "LayerRenderer",
+        "applyAppearance(of:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func applyAppearance(root: Node)",
+      "identifier": "s:13TrellisRender13LayerRendererC15applyAppearance4rooty0A4Core4NodeC_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "LayerRenderer",
+        "applyAppearance(root:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func clearDisplayContent(for nodeID: NodeID)",
+      "identifier": "s:13TrellisRender13LayerRendererC19clearDisplayContent3fory0A4Core6NodeIDV_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "LayerRenderer",
+        "clearDisplayContent(for:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func applyDisplayArtifact(_ artifact: DisplayArtifact, for nodeID: NodeID)",
+      "identifier": "s:13TrellisRender13LayerRendererC20applyDisplayArtifact_3foryAA0fG0V_0A4Core6NodeIDVtF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "LayerRenderer",
+        "applyDisplayArtifact(_:for:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var skipsLayoutOnlyWrappers: Bool",
+      "identifier": "s:13TrellisRender13LayerRendererC23skipsLayoutOnlyWrappersSbvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "LayerRenderer",
+        "skipsLayoutOnlyWrappers"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func layer(for identity: NodeID) -> CALayer?",
+      "identifier": "s:13TrellisRender13LayerRendererC5layer3forSo7CALayerCSg0A4Core6NodeIDV_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "LayerRenderer",
+        "layer(for:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func unmount()",
+      "identifier": "s:13TrellisRender13LayerRendererC7unmountyyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "LayerRenderer",
+        "unmount()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor init()",
+      "identifier": "s:13TrellisRender13LayerRendererCACycfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "LayerRenderer",
+        "init()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor final class NodeHostBridge",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC",
+      "kind": "swift.class",
+      "pathComponents": [
+        "NodeHostBridge"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var mountEpoch: UInt64 { get }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC10mountEpochs6UInt64Vvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "mountEpoch"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var statistics: HostRenderStatistics { get }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC10statisticsAA0dB10StatisticsVvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "statistics"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var bindingCount: Int { get }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC12bindingCountSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "bindingCount"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var focusScopeID: NodeID? { get }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC12focusScopeID0A4Core0cH0VSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "focusScopeID"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func updateBounds(_ bounds: LayoutFrame, scale: Double)",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC12updateBounds_5scaley0A4Core11LayoutFrameV_SdtF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "updateBounds(_:scale:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var onFocusChange: (@MainActor @Sendable (FocusChange) -> Void)? { get set }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC13onFocusChangey0A4Core0gH0VYbScMYccSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "onFocusChange"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func scrollBacking(for node: NodeID, didChangeOffset offset: LayoutPoint, phase: ScrollPhase)",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC13scrollBacking3for15didChangeOffset5phasey0A4Core0C2IDV_AH11LayoutPointVAH11ScrollPhaseOtF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "scrollBacking(for:didChangeOffset:phase:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func setFocusScope(_ id: NodeID?)",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC13setFocusScopeyy0A4Core0C2IDVSgF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "setFocusScope(_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "struct SceneReadiness",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC14SceneReadinessV",
+      "kind": "swift.struct",
+      "pathComponents": [
+        "NodeHostBridge",
+        "SceneReadiness"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "init(layoutReady: Bool, displayReady: Bool, animationReady: Bool)",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC14SceneReadinessV11layoutReady07displayI009animationI0AESb_S2btcfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "NodeHostBridge",
+        "SceneReadiness",
+        "init(layoutReady:displayReady:animationReady:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let layoutReady: Bool",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC14SceneReadinessV11layoutReadySbvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "SceneReadiness",
+        "layoutReady"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let displayReady: Bool",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC14SceneReadinessV12displayReadySbvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "SceneReadiness",
+        "displayReady"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let animationReady: Bool",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC14SceneReadinessV14animationReadySbvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "SceneReadiness",
+        "animationReady"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "var isReady: Bool { get }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC14SceneReadinessV7isReadySbvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "SceneReadiness",
+        "isReady"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func cancelKeyPress()",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC14cancelKeyPressyyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "cancelKeyPress()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var lastFocusTrace: FocusTrace? { get }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC14lastFocusTrace0A4Core0gH0VSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "lastFocusTrace"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var sceneReadiness: NodeHostBridge.SceneReadiness? { get }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC14sceneReadinessAC05SceneG0VSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "sceneReadiness"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func updateSafeArea(_ insets: DirectionalEdgeInsets)",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC14updateSafeAreayy0A4Core21DirectionalEdgeInsetsVF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "updateSafeArea(_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@discardableResult @MainActor func closeTransition() -> Bool",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC15closeTransitionSbyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "closeTransition()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func displayArtifact(for id: NodeID) -> DisplayArtifact?",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC15displayArtifact3forAA07DisplayG0VSg0A4Core0C2IDV_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "displayArtifact(for:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var hitTestSnapshot: HitTestSnapshot? { get }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC15hitTestSnapshot0A4Core03HitgH0VSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "hitTestSnapshot"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func scrollContainer(_ node: ScrollNode, _ command: ScrollCommand, completion: @escaping @MainActor @Sendable (ScrollCommandOutcome) -> Void)",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC15scrollContainer__10completiony0A4Core06ScrollC0C_AF0J7CommandOyAF0jK7OutcomeOYbScMYcctF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "scrollContainer(_:_:completion:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var semanticSnapshot: SemanticSnapshot? { get }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC16semanticSnapshot0A4Core08SemanticG0VSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "semanticSnapshot"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "struct TransitionRequest",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC17TransitionRequestV",
+      "kind": "swift.struct",
+      "pathComponents": [
+        "NodeHostBridge",
+        "TransitionRequest"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let gesturePreset: TransitionGesturePreset",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC17TransitionRequestV13gesturePresetAA0f7GestureI0Vvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "TransitionRequest",
+        "gesturePreset"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let destinationRoot: NodeID",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC17TransitionRequestV15destinationRoot0A4Core0C2IDVvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "TransitionRequest",
+        "destinationRoot"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let roles: [NodeHostBridge.TransitionRoleMapping]",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC17TransitionRequestV5rolesSayAC0F11RoleMappingVGvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "TransitionRequest",
+        "roles"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let source: NodeID",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC17TransitionRequestV6source0A4Core0C2IDVvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "TransitionRequest",
+        "source"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "init(source: NodeID, destinationRoot: NodeID, roles: [NodeHostBridge.TransitionRoleMapping], duration: Duration = .milliseconds(320), gesturePreset: TransitionGesturePreset = .default)",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC17TransitionRequestV6source15destinationRoot5roles8duration13gesturePresetAE0A4Core0C2IDV_AMSayAC0F11RoleMappingVGs8DurationVAA0f7GestureN0Vtcfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "NodeHostBridge",
+        "TransitionRequest",
+        "init(source:destinationRoot:roles:duration:gesturePreset:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let duration: Duration",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC17TransitionRequestV8durations8DurationVvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "TransitionRequest",
+        "duration"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var accessibilityTree: AccessibilityTree? { get }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC17accessibilityTree0A4Core013AccessibilityG0VSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "accessibilityTree"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func cancelAllBindings()",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC17cancelAllBindingsyyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "cancelAllBindings()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var createdLayerTotal: Int { get }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC17createdLayerTotalSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "createdLayerTotal"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var displayStatistics: DisplayStatistics { get }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC17displayStatisticsAA07DisplayG0Vvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "displayStatistics"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@discardableResult @MainActor func presentTransition(_ request: NodeHostBridge.TransitionRequest) -> Bool",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC17presentTransitionySbAC0G7RequestVF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "presentTransition(_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var transitionSession: TransitionSession? { get }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC17transitionSessionAA010TransitionG0VSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "transitionSession"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func adjustScrollOffset(of node: ScrollNode, by delta: LayoutPoint, applied: @escaping @MainActor @Sendable () -> Void)",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC18adjustScrollOffset2of2by7appliedy0A4Core0gC0C_AH11LayoutPointVyyYbScMYcctF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "adjustScrollOffset(of:by:applied:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func bindContainerState<Value>(_ subject: StateSubject<Value>, update: @escaping @MainActor @Sendable (Value) -> Void) -> any ContainerBinding where Value : Equatable, Value : Sendable",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC18bindContainerState_6update0A4Core0G7Binding_pAF0H7SubjectCyxG_yxYbScMYcctSQRzs8SendableRzlF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "bindContainerState(_:update:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func updateReduceMotion(_ isEnabled: Bool)",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC18updateReduceMotionyySbF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "updateReduceMotion(_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "enum SceneReadinessError",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC19SceneReadinessErrorO",
+      "kind": "swift.enum",
+      "pathComponents": [
+        "NodeHostBridge",
+        "SceneReadinessError"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "case timeout",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC19SceneReadinessErrorO7timeoutyA2EmF",
+      "kind": "swift.enum.case",
+      "pathComponents": [
+        "NodeHostBridge",
+        "SceneReadinessError",
+        "timeout"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@discardableResult @MainActor func waitUntilSceneReady(timeout: Duration = .seconds(2)) async throws -> NodeHostBridge.SceneReadiness",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC19waitUntilSceneReady7timeoutAC0H9ReadinessVs8DurationV_tYaKF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "waitUntilSceneReady(timeout:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@discardableResult @MainActor func endTransitionGesture(velocity: Double, preset: TransitionGesturePreset? = nil) -> Bool",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC20endTransitionGesture8velocity6presetSbSd_AA0gH6PresetVSgtF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "endTransitionGesture(velocity:preset:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var onSemanticsPublished: (@MainActor @Sendable (SemanticSnapshot) -> Void)?",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC20onSemanticsPublishedy0A4Core16SemanticSnapshotVYbScMYccSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "onSemanticsPublished"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var semanticPublishCount: Int { get }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC20semanticPublishCountSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "semanticPublishCount"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "struct TransitionRoleMapping",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC21TransitionRoleMappingV",
+      "kind": "swift.struct",
+      "pathComponents": [
+        "NodeHostBridge",
+        "TransitionRoleMapping"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let destination: NodeID?",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC21TransitionRoleMappingV11destination0A4Core0C2IDVSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "TransitionRoleMapping",
+        "destination"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let role: Role",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC21TransitionRoleMappingV4role0A4Core0G0Vvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "TransitionRoleMapping",
+        "role"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "init(role: Role, source: NodeID?, destination: NodeID?, interval: ClosedRange<Double>? = nil)",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC21TransitionRoleMappingV4role6source11destination8intervalAE0A4Core0G0V_AJ0C2IDVSgAOSNySdGSgtcfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "NodeHostBridge",
+        "TransitionRoleMapping",
+        "init(role:source:destination:interval:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let source: NodeID?",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC21TransitionRoleMappingV6source0A4Core0C2IDVSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "TransitionRoleMapping",
+        "source"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let interval: ClosedRange<Double>?",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC21TransitionRoleMappingV8intervalSNySdGSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "TransitionRoleMapping",
+        "interval"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var isDebugOverlayEnabled: Bool { get set }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC21isDebugOverlayEnabledSbvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "isDebugOverlayEnabled"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var materializationBudget: MaterializationBudget { get }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC21materializationBudget0A4Core015MaterializationG0Cvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "materializationBudget"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func presentedScrollOffset(of node: ScrollNode) -> LayoutPoint?",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC21presentedScrollOffset2of0A4Core11LayoutPointVSgAF0gC0C_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "presentedScrollOffset(of:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func updateLayoutDirection(_ direction: LayoutDirection)",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC21updateLayoutDirectionyy0A4Core0gH0OF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "updateLayoutDirection(_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@discardableResult @MainActor func beginTransitionGesture(at point: LayoutPoint, initialDelta: LayoutPoint) -> Bool",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC22beginTransitionGesture2at12initialDeltaSb0A4Core11LayoutPointV_AItF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "beginTransitionGesture(at:initialDelta:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@discardableResult @MainActor func beginTransitionGesture() -> Bool",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC22beginTransitionGestureSbyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "beginTransitionGesture()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var debugOverlayLabelStyle: DebugOverlayLabelStyle { get set }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC22debugOverlayLabelStyleAA05DebugghI0Ovp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "debugOverlayLabelStyle"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var materializedLayerCount: Int { get }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC22materializedLayerCountSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "materializedLayerCount"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func updateLocaleIdentifier(_ identifier: String)",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC22updateLocaleIdentifieryySSF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "updateLocaleIdentifier(_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var skipsLayoutOnlyWrappers: Bool { get set }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC23skipsLayoutOnlyWrappersSbvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "skipsLayoutOnlyWrappers"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func updateTransitionGesture(deltaProgress: Double)",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC23updateTransitionGesture13deltaProgressySd_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "updateTransitionGesture(deltaProgress:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var metadataOnlyPublishCount: Int { get }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC24metadataOnlyPublishCountSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "metadataOnlyPublishCount"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var activePointerSessionCount: Int { get }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC25activePointerSessionCountSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "activePointerSessionCount"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var onAccessibilityTreeChanged: (@MainActor @Sendable (AccessibilityTree) -> Void)?",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC26onAccessibilityTreeChangedy0A4Core0gH0VYbScMYccSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "onAccessibilityTreeChanged"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@discardableResult @MainActor func performAccessibilityAction(_ action: AccessibilityAction, on id: NodeID) -> Bool",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC26performAccessibilityAction_2onSb0A4Core0gH0O_AF0C2IDVtF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "performAccessibilityAction(_:on:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@discardableResult @MainActor func cancelTransitionGestureSystemInterrupted() -> Bool",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC40cancelTransitionGestureSystemInterruptedSbyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "cancelTransitionGestureSystemInterrupted()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@discardableResult @MainActor func send(_ type: EventType, key data: KeyData) -> KeyOutcome",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC4send_3key0A4Core10KeyOutcomeOAF9EventTypeO_AF0I4DataVtF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "send(_:key:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@discardableResult @MainActor func send(_ type: EventType, _ data: PointerData) -> PointerOutcome",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC4sendy0A4Core14PointerOutcomeOAE9EventTypeO_AE0H4DataVtF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "send(_:_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@discardableResult @MainActor func focus(_ id: NodeID?, reason: FocusChangeReason = .request) -> FocusMoveResult",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC5focus_6reason0A4Core15FocusMoveResultOAF0C2IDVSg_AF0I12ChangeReasonOtF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "focus(_:reason:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@discardableResult @MainActor func attach(root newRoot: Node, bounds: LayoutFrame, scale: Double, safeAreaInsets: DirectionalEdgeInsets = DirectionalEdgeInsets(), layoutDirection: LayoutDirection = .leftToRight, textRenderer: (any TextRenderer)? = nil, localeIdentifier: String? = nil, reduceMotion: Bool? = nil, scrollBackingFactory: NativeScrollBackingFactory? = nil) -> Bool",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC6attach4root6bounds5scale14safeAreaInsets15layoutDirection12textRenderer16localeIdentifier12reduceMotion20scrollBackingFactorySb0A4Core0C0C_AN11LayoutFrameVSdAN015DirectionalEdgeL0VAN0yN0OAN04TextP0_pSgSSSgSbSgAA012NativeScrollV0_pAN0C2IDV_AA012NativeScrollV8Delegate_ptYbScMYccSgtF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "attach(root:bounds:scale:safeAreaInsets:layoutDirection:textRenderer:localeIdentifier:reduceMotion:scrollBackingFactory:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func detach()",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC6detachyyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "detach()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor let hostID: UInt64",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC6hostIDs6UInt64Vvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "hostID"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func resume()",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC6resumeyyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "resume()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@discardableResult @MainActor func scroll(_ command: ScrollCommand, on node: ScrollNode, completion: (@MainActor @Sendable (ScrollCommandOutcome) -> Void)?) -> ScrollCommandToken",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC6scroll_2on10completion0A4Core18ScrollCommandTokenVAG0jK0O_AG0jC0CyAG0jK7OutcomeOYbScMYccSgtF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "scroll(_:on:completion:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func hitTest(_ point: LayoutPoint) -> NodeID?",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC7hitTesty0A4Core0C2IDVSgAE11LayoutPointVF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "hitTest(_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func suspend()",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC7suspendyyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "suspend()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@discardableResult @MainActor func bindState<Value>(_ subject: StateSubject<Value>, update: @escaping @MainActor @Sendable (Value) -> Void) -> StateBinding where Value : Equatable, Value : Sendable",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC9bindState_6updateAA0G7BindingC0A4Core0G7SubjectCyxG_yxYbScMYcctSQRzs8SendableRzlF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "bindState(_:update:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var focusedID: NodeID? { get }",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC9focusedID0A4Core0cG0VSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "focusedID"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor init(hostLayer: CALayer)",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC9hostLayerACSo7CALayerC_tcfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "NodeHostBridge",
+        "init(hostLayer:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@discardableResult @MainActor func moveFocus(_ direction: FocusDirection) -> FocusMoveResult",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC9moveFocusy0A4Core0G10MoveResultOAE0G9DirectionOF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "moveFocus(_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "protocol TextRasterizer : Sendable",
+      "identifier": "s:13TrellisRender14TextRasterizerP",
+      "kind": "swift.protocol",
+      "pathComponents": [
+        "TextRasterizer"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "func rasterize(_ request: TextDisplayRequest, context: LayoutContext) throws -> DisplayArtifact",
+      "identifier": "s:13TrellisRender14TextRasterizerP9rasterize_7contextAA15DisplayArtifactVAA0cG7RequestV_0A4Core13LayoutContextVtKF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "TextRasterizer",
+        "rasterize(_:context:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "struct DisplayArtifact",
+      "identifier": "s:13TrellisRender15DisplayArtifactV",
+      "kind": "swift.struct",
+      "pathComponents": [
+        "DisplayArtifact"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let pixelWidth: Int",
+      "identifier": "s:13TrellisRender15DisplayArtifactV10pixelWidthSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DisplayArtifact",
+        "pixelWidth"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let pixelHeight: Int",
+      "identifier": "s:13TrellisRender15DisplayArtifactV11pixelHeightSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DisplayArtifact",
+        "pixelHeight"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "init(image: CGImage, pixelWidth: Int, pixelHeight: Int, scale: Double)",
+      "identifier": "s:13TrellisRender15DisplayArtifactV5image10pixelWidth0F6Height5scaleACSo10CGImageRefa_S2iSdtcfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "DisplayArtifact",
+        "init(image:pixelWidth:pixelHeight:scale:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let image: CGImage",
+      "identifier": "s:13TrellisRender15DisplayArtifactV5imageSo10CGImageRefavp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DisplayArtifact",
+        "image"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let scale: Double",
+      "identifier": "s:13TrellisRender15DisplayArtifactV5scaleSdvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DisplayArtifact",
+        "scale"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "enum DisplayPriority",
+      "identifier": "s:13TrellisRender15DisplayPriorityO",
+      "kind": "swift.enum",
+      "pathComponents": [
+        "DisplayPriority"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "case high",
+      "identifier": "s:13TrellisRender15DisplayPriorityO4highyA2CmF",
+      "kind": "swift.enum.case",
+      "pathComponents": [
+        "DisplayPriority",
+        "high"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "case normal",
+      "identifier": "s:13TrellisRender15DisplayPriorityO6normalyA2CmF",
+      "kind": "swift.enum.case",
+      "pathComponents": [
+        "DisplayPriority",
+        "normal"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "struct CoreTextRenderer",
+      "identifier": "s:13TrellisRender16CoreTextRendererV",
+      "kind": "swift.struct",
+      "pathComponents": [
+        "CoreTextRenderer"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "func measure(_ input: TextLayoutInput, constraint: SizeConstraint, context: LayoutContext) throws -> TextMetrics",
+      "identifier": "s:13TrellisRender16CoreTextRendererV7measure_10constraint7context0aC00D7MetricsVAG0D11LayoutInputV_AG14SizeConstraintVAG0J7ContextVtKF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "CoreTextRenderer",
+        "measure(_:constraint:context:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "func rasterize(_ request: TextDisplayRequest, context: LayoutContext) throws -> DisplayArtifact",
+      "identifier": "s:13TrellisRender16CoreTextRendererV9rasterize_7contextAA15DisplayArtifactVAA0dH7RequestV_0aC013LayoutContextVtKF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "CoreTextRenderer",
+        "rasterize(_:context:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "init()",
+      "identifier": "s:13TrellisRender16CoreTextRendererVACycfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "CoreTextRenderer",
+        "init()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor final class DisplayScheduler",
+      "identifier": "s:13TrellisRender16DisplaySchedulerC",
+      "kind": "swift.class",
+      "pathComponents": [
+        "DisplayScheduler"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor init(rasterizer: any TextRasterizer = CoreTextRenderer(), maxConcurrency: Int = 4)",
+      "identifier": "s:13TrellisRender16DisplaySchedulerC10rasterizer14maxConcurrencyAcA14TextRasterizer_p_Sitcfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "DisplayScheduler",
+        "init(rasterizer:maxConcurrency:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var statistics: DisplayStatistics { get }",
+      "identifier": "s:13TrellisRender16DisplaySchedulerC10statisticsAA0C10StatisticsVvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DisplayScheduler",
+        "statistics"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func committedKey(for nodeID: NodeID) -> DisplayKey?",
+      "identifier": "s:13TrellisRender16DisplaySchedulerC12committedKey3forAA0cF0VSg0A4Core6NodeIDV_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "DisplayScheduler",
+        "committedKey(for:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var activeJobCount: Int { get }",
+      "identifier": "s:13TrellisRender16DisplaySchedulerC14activeJobCountSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DisplayScheduler",
+        "activeJobCount"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var pendingJobCount: Int { get }",
+      "identifier": "s:13TrellisRender16DisplaySchedulerC15pendingJobCountSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DisplayScheduler",
+        "pendingJobCount"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var onArtifactCommitted: (@MainActor @Sendable (NodeID, DisplayArtifact) -> Void)?",
+      "identifier": "s:13TrellisRender16DisplaySchedulerC19onArtifactCommittedy0A4Core6NodeIDV_AA0cF0VtYbScMYccSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DisplayScheduler",
+        "onArtifactCommitted"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func cancel(nodeID: NodeID)",
+      "identifier": "s:13TrellisRender16DisplaySchedulerC6cancel6nodeIDy0A4Core04NodeG0V_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "DisplayScheduler",
+        "cancel(nodeID:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func dispose()",
+      "identifier": "s:13TrellisRender16DisplaySchedulerC7disposeyyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "DisplayScheduler",
+        "dispose()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func artifact(for nodeID: NodeID) -> DisplayArtifact?",
+      "identifier": "s:13TrellisRender16DisplaySchedulerC8artifact3forAA0C8ArtifactVSg0A4Core6NodeIDV_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "DisplayScheduler",
+        "artifact(for:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func schedule(nodeID: NodeID, key: DisplayKey, request: TextDisplayRequest, priority: DisplayPriority = .normal)",
+      "identifier": "s:13TrellisRender16DisplaySchedulerC8schedule6nodeID3key7request8priorityy0A4Core04NodeG0V_AA0C3KeyVAA04TextC7RequestVAA0C8PriorityOtF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "DisplayScheduler",
+        "schedule(nodeID:key:request:priority:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func applyVisualStyle(_ appearance: VisualStyle, to layer: CALayer, theme: Theme = .defaultValue)",
+      "identifier": "s:13TrellisRender16applyVisualStyle_2to5themey0A4Core0dE0V_So7CALayerCAE5ThemeVtF",
+      "kind": "swift.func",
+      "pathComponents": [
+        "applyVisualStyle(_:to:theme:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "struct DisplayStatistics",
+      "identifier": "s:13TrellisRender17DisplayStatisticsV",
+      "kind": "swift.struct",
+      "pathComponents": [
+        "DisplayStatistics"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let stale: Int",
+      "identifier": "s:13TrellisRender17DisplayStatisticsV5staleSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DisplayStatistics",
+        "stale"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let dropped: Int",
+      "identifier": "s:13TrellisRender17DisplayStatisticsV7droppedSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DisplayStatistics",
+        "dropped"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let started: Int",
+      "identifier": "s:13TrellisRender17DisplayStatisticsV7startedSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DisplayStatistics",
+        "started"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let cancelled: Int",
+      "identifier": "s:13TrellisRender17DisplayStatisticsV9cancelledSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DisplayStatistics",
+        "cancelled"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let completed: Int",
+      "identifier": "s:13TrellisRender17DisplayStatisticsV9completedSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DisplayStatistics",
+        "completed"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "init(scheduled: Int, started: Int, completed: Int, cancelled: Int, dropped: Int, stale: Int)",
+      "identifier": "s:13TrellisRender17DisplayStatisticsV9scheduled7started9completed9cancelled7dropped5staleACSi_S5itcfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "DisplayStatistics",
+        "init(scheduled:started:completed:cancelled:dropped:stale:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let scheduled: Int",
+      "identifier": "s:13TrellisRender17DisplayStatisticsV9scheduledSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DisplayStatistics",
+        "scheduled"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor struct TransitionSession",
+      "identifier": "s:13TrellisRender17TransitionSessionV",
+      "kind": "swift.struct",
+      "pathComponents": [
+        "TransitionSession"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor let overlayLayer: CALayer",
+      "identifier": "s:13TrellisRender17TransitionSessionV12overlayLayerSo7CALayerCvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TransitionSession",
+        "overlayLayer"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor let sourceNodeID: NodeID",
+      "identifier": "s:13TrellisRender17TransitionSessionV12sourceNodeID0A4Core0fG0Vvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TransitionSession",
+        "sourceNodeID"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor let destinationRootID: NodeID",
+      "identifier": "s:13TrellisRender17TransitionSessionV17destinationRootID0A4Core04NodeG0Vvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TransitionSession",
+        "destinationRootID"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var roles: [Role : TransitionRoleEndpoints] { get }",
+      "identifier": "s:13TrellisRender17TransitionSessionV5rolesSDy0A4Core4RoleVAA0cG9EndpointsVGvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TransitionSession",
+        "roles"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var state: TransitionSessionState { get }",
+      "identifier": "s:13TrellisRender17TransitionSessionV5stateAA0cD5StateOvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TransitionSession",
+        "state"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var token: UInt64 { get }",
+      "identifier": "s:13TrellisRender17TransitionSessionV5tokens6UInt64Vvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TransitionSession",
+        "token"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var progress: Double { get }",
+      "identifier": "s:13TrellisRender17TransitionSessionV8progressSdvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TransitionSession",
+        "progress"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "func resolveThemeColor(_ role: ThemeColorRole, in theme: Theme) -> ThemeColor",
+      "identifier": "s:13TrellisRender17resolveThemeColor_2in0A4Core0dE0VAD0dE4RoleO_AD0D0VtF",
+      "kind": "swift.func",
+      "pathComponents": [
+        "resolveThemeColor(_:in:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "struct TextDisplayRequest",
+      "identifier": "s:13TrellisRender18TextDisplayRequestV",
+      "kind": "swift.struct",
+      "pathComponents": [
+        "TextDisplayRequest"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let resolvedColor: ThemeColor",
+      "identifier": "s:13TrellisRender18TextDisplayRequestV13resolvedColor0A4Core05ThemeG0Vvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TextDisplayRequest",
+        "resolvedColor"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let size: MeasuredSize",
+      "identifier": "s:13TrellisRender18TextDisplayRequestV4size0A4Core12MeasuredSizeVvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TextDisplayRequest",
+        "size"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let input: TextLayoutInput",
+      "identifier": "s:13TrellisRender18TextDisplayRequestV5input0A4Core0C11LayoutInputVvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TextDisplayRequest",
+        "input"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "init(input: TextLayoutInput, size: MeasuredSize, resolvedColor: ThemeColor, scale: Double)",
+      "identifier": "s:13TrellisRender18TextDisplayRequestV5input4size13resolvedColor5scaleAC0A4Core0C11LayoutInputV_AH12MeasuredSizeVAH05ThemeI0VSdtcfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "TextDisplayRequest",
+        "init(input:size:resolvedColor:scale:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let scale: Double",
+      "identifier": "s:13TrellisRender18TextDisplayRequestV5scaleSdvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TextDisplayRequest",
+        "scale"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor protocol NativeScrollBacking : AnyObject",
+      "identifier": "s:13TrellisRender19NativeScrollBackingP",
+      "kind": "swift.protocol",
+      "pathComponents": [
+        "NativeScrollBacking"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func makeChildBacking(nodeID: NodeID) -> (any NativeScrollBacking)?",
+      "identifier": "s:13TrellisRender19NativeScrollBackingP09makeChildE06nodeIDAaB_pSg0A4Core04NodeI0V_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NativeScrollBacking",
+        "makeChildBacking(nodeID:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var viewportSize: MeasuredSize { get }",
+      "identifier": "s:13TrellisRender19NativeScrollBackingP12viewportSize0A4Core08MeasuredG0Vvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NativeScrollBacking",
+        "viewportSize"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var contentOffset: LayoutPoint { get set }",
+      "identifier": "s:13TrellisRender19NativeScrollBackingP13contentOffset0A4Core11LayoutPointVvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NativeScrollBacking",
+        "contentOffset"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var containerLayer: CALayer { get }",
+      "identifier": "s:13TrellisRender19NativeScrollBackingP14containerLayerSo7CALayerCvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NativeScrollBacking",
+        "containerLayer"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func setContentSize(_ size: MeasuredSize)",
+      "identifier": "s:13TrellisRender19NativeScrollBackingP14setContentSizeyy0A4Core08MeasuredH0VF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NativeScrollBacking",
+        "setContentSize(_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func removeContentLayer()",
+      "identifier": "s:13TrellisRender19NativeScrollBackingP18removeContentLayeryyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NativeScrollBacking",
+        "removeContentLayer()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var contentOriginInHost: LayoutPoint { get }",
+      "identifier": "s:13TrellisRender19NativeScrollBackingP19contentOriginInHost0A4Core11LayoutPointVvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NativeScrollBacking",
+        "contentOriginInHost"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func installContentLayer(_ layer: CALayer)",
+      "identifier": "s:13TrellisRender19NativeScrollBackingP19installContentLayeryySo7CALayerCF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NativeScrollBacking",
+        "installContentLayer(_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var presentedContentOffset: LayoutPoint { get }",
+      "identifier": "s:13TrellisRender19NativeScrollBackingP22presentedContentOffset0A4Core11LayoutPointVvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NativeScrollBacking",
+        "presentedContentOffset"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func apply(configuration: ScrollConfiguration)",
+      "identifier": "s:13TrellisRender19NativeScrollBackingP5apply13configurationy0A4Core0D13ConfigurationV_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NativeScrollBacking",
+        "apply(configuration:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func scroll(to offset: LayoutPoint, animated: Bool, completion: @escaping @MainActor @Sendable (Bool) -> Void)",
+      "identifier": "s:13TrellisRender19NativeScrollBackingP6scroll2to8animated10completiony0A4Core11LayoutPointV_SbySbYbScMYcctF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NativeScrollBacking",
+        "scroll(to:animated:completion:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func scroll(to offset: LayoutPoint, animation: Animation, completion: @escaping @MainActor @Sendable (Bool) -> Void)",
+      "identifier": "s:13TrellisRender19NativeScrollBackingP6scroll2to9animation10completiony0A4Core11LayoutPointV_AH9AnimationVySbYbScMYcctF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NativeScrollBacking",
+        "scroll(to:animation:completion:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func dispose()",
+      "identifier": "s:13TrellisRender19NativeScrollBackingP7disposeyyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NativeScrollBacking",
+        "dispose()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func setFrame(_ frame: LayoutFrame, relativeTo parentContentOrigin: LayoutPoint?)",
+      "identifier": "s:13TrellisRender19NativeScrollBackingP8setFrame_10relativeToy0A4Core06LayoutG0V_AF0K5PointVSgtF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NativeScrollBacking",
+        "setFrame(_:relativeTo:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func setInsets(_ insets: DirectionalEdgeInsets)",
+      "identifier": "s:13TrellisRender19NativeScrollBackingP9setInsetsyy0A4Core015DirectionalEdgeG0VF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NativeScrollBacking",
+        "setInsets(_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func makeChildBacking(nodeID: NodeID) -> (any NativeScrollBacking)?",
+      "identifier": "s:13TrellisRender19NativeScrollBackingPAAE09makeChildE06nodeIDAaB_pSg0A4Core04NodeI0V_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NativeScrollBacking",
+        "makeChildBacking(nodeID:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var presentedContentOffset: LayoutPoint { get }",
+      "identifier": "s:13TrellisRender19NativeScrollBackingPAAE22presentedContentOffset0A4Core11LayoutPointVvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NativeScrollBacking",
+        "presentedContentOffset"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func scroll(to offset: LayoutPoint, animation: Animation, completion: @escaping @MainActor @Sendable (Bool) -> Void)",
+      "identifier": "s:13TrellisRender19NativeScrollBackingPAAE6scroll2to9animation10completiony0A4Core11LayoutPointV_AH9AnimationVySbYbScMYcctF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NativeScrollBacking",
+        "scroll(to:animation:completion:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor final class DebugOverlayRenderer",
+      "identifier": "s:13TrellisRender20DebugOverlayRendererC",
+      "kind": "swift.class",
+      "pathComponents": [
+        "DebugOverlayRenderer"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var labelStyle: DebugOverlayLabelStyle",
+      "identifier": "s:13TrellisRender20DebugOverlayRendererC10labelStyleAA0cd5LabelG0Ovp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DebugOverlayRenderer",
+        "labelStyle"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var outlinedCount: Int { get }",
+      "identifier": "s:13TrellisRender20DebugOverlayRendererC13outlinedCountSivp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DebugOverlayRenderer",
+        "outlinedCount"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var mountedContainer: CALayer? { get }",
+      "identifier": "s:13TrellisRender20DebugOverlayRendererC16mountedContainerSo7CALayerCSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "DebugOverlayRenderer",
+        "mountedContainer"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func apply(root: Node, on hostLayer: CALayer, request: HostRenderRequest)",
+      "identifier": "s:13TrellisRender20DebugOverlayRendererC5apply4root2on7requesty0A4Core4NodeC_So7CALayerCAA04HostB7RequestVtF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "DebugOverlayRenderer",
+        "apply(root:on:request:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func unmount()",
+      "identifier": "s:13TrellisRender20DebugOverlayRendererC7unmountyyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "DebugOverlayRenderer",
+        "unmount()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor init()",
+      "identifier": "s:13TrellisRender20DebugOverlayRendererCACycfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "DebugOverlayRenderer",
+        "init()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor protocol ScrollCommandIssuing : AnyObject",
+      "identifier": "s:13TrellisRender20ScrollCommandIssuingP",
+      "kind": "swift.protocol",
+      "pathComponents": [
+        "ScrollCommandIssuing"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@discardableResult @MainActor func scroll(_ command: ScrollCommand, on node: ScrollNode, completion: (@MainActor @Sendable (ScrollCommandOutcome) -> Void)?) -> ScrollCommandToken",
+      "identifier": "s:13TrellisRender20ScrollCommandIssuingP6scroll_2on10completion0A4Core0cD5TokenVAG0cD0O_AG0C4NodeCyAG0cD7OutcomeOYbScMYccSgtF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "ScrollCommandIssuing",
+        "scroll(_:on:completion:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "enum DebugOverlayLabelStyle",
+      "identifier": "s:13TrellisRender22DebugOverlayLabelStyleO",
+      "kind": "swift.enum",
+      "pathComponents": [
+        "DebugOverlayLabelStyle"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "case runtimeID",
+      "identifier": "s:13TrellisRender22DebugOverlayLabelStyleO9runtimeIDyA2CmF",
+      "kind": "swift.enum.case",
+      "pathComponents": [
+        "DebugOverlayLabelStyle",
+        "runtimeID"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "case treeOrder",
+      "identifier": "s:13TrellisRender22DebugOverlayLabelStyleO9treeOrderyA2CmF",
+      "kind": "swift.enum.case",
+      "pathComponents": [
+        "DebugOverlayLabelStyle",
+        "treeOrder"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "enum TransitionSessionState",
+      "identifier": "s:13TrellisRender22TransitionSessionStateO",
+      "kind": "swift.enum",
+      "pathComponents": [
+        "TransitionSessionState"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "case interactiveClosing",
+      "identifier": "s:13TrellisRender22TransitionSessionStateO18interactiveClosingyA2CmF",
+      "kind": "swift.enum.case",
+      "pathComponents": [
+        "TransitionSessionState",
+        "interactiveClosing"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "case opening",
+      "identifier": "s:13TrellisRender22TransitionSessionStateO7openingyA2CmF",
+      "kind": "swift.enum.case",
+      "pathComponents": [
+        "TransitionSessionState",
+        "opening"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "case settling(target: TransitionSettleTarget)",
+      "identifier": "s:13TrellisRender22TransitionSessionStateO8settlingyAcA0C12SettleTargetO_tcACmF",
+      "kind": "swift.enum.case",
+      "pathComponents": [
+        "TransitionSessionState",
+        "settling(target:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "case preparing",
+      "identifier": "s:13TrellisRender22TransitionSessionStateO9preparingyA2CmF",
+      "kind": "swift.enum.case",
+      "pathComponents": [
+        "TransitionSessionState",
+        "preparing"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "case presented",
+      "identifier": "s:13TrellisRender22TransitionSessionStateO9presentedyA2CmF",
+      "kind": "swift.enum.case",
+      "pathComponents": [
+        "TransitionSessionState",
+        "presented"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "enum TransitionSettleTarget",
+      "identifier": "s:13TrellisRender22TransitionSettleTargetO",
+      "kind": "swift.enum",
+      "pathComponents": [
+        "TransitionSettleTarget"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "case closed",
+      "identifier": "s:13TrellisRender22TransitionSettleTargetO6closedyA2CmF",
+      "kind": "swift.enum.case",
+      "pathComponents": [
+        "TransitionSettleTarget",
+        "closed"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "case presented",
+      "identifier": "s:13TrellisRender22TransitionSettleTargetO9presentedyA2CmF",
+      "kind": "swift.enum.case",
+      "pathComponents": [
+        "TransitionSettleTarget",
+        "presented"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "struct TransitionGesturePreset",
+      "identifier": "s:13TrellisRender23TransitionGesturePresetV",
+      "kind": "swift.struct",
+      "pathComponents": [
+        "TransitionGesturePreset"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "init(progressThreshold: Double, velocityThreshold: Double)",
+      "identifier": "s:13TrellisRender23TransitionGesturePresetV17progressThreshold08velocityG0ACSd_Sdtcfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "TransitionGesturePreset",
+        "init(progressThreshold:velocityThreshold:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let progressThreshold: Double",
+      "identifier": "s:13TrellisRender23TransitionGesturePresetV17progressThresholdSdvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TransitionGesturePreset",
+        "progressThreshold"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let velocityThreshold: Double",
+      "identifier": "s:13TrellisRender23TransitionGesturePresetV17velocityThresholdSdvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TransitionGesturePreset",
+        "velocityThreshold"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "static let `default`: TransitionGesturePreset",
+      "identifier": "s:13TrellisRender23TransitionGesturePresetV7defaultACvpZ",
+      "kind": "swift.type.property",
+      "pathComponents": [
+        "TransitionGesturePreset",
+        "default"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "struct TransitionRoleEndpoints",
+      "identifier": "s:13TrellisRender23TransitionRoleEndpointsV",
+      "kind": "swift.struct",
+      "pathComponents": [
+        "TransitionRoleEndpoints"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let destination: NodeID?",
+      "identifier": "s:13TrellisRender23TransitionRoleEndpointsV11destination0A4Core6NodeIDVSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TransitionRoleEndpoints",
+        "destination"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let source: NodeID?",
+      "identifier": "s:13TrellisRender23TransitionRoleEndpointsV6source0A4Core6NodeIDVSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TransitionRoleEndpoints",
+        "source"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "init(source: NodeID?, destination: NodeID?, interval: ClosedRange<Double>? = nil)",
+      "identifier": "s:13TrellisRender23TransitionRoleEndpointsV6source11destination8intervalAC0A4Core6NodeIDVSg_AJSNySdGSgtcfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "TransitionRoleEndpoints",
+        "init(source:destination:interval:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "let interval: ClosedRange<Double>?",
+      "identifier": "s:13TrellisRender23TransitionRoleEndpointsV8intervalSNySdGSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TransitionRoleEndpoints",
+        "interval"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "typealias NativeScrollBackingFactory = @MainActor @Sendable (NodeID, any NativeScrollBackingDelegate) -> any NativeScrollBacking",
+      "identifier": "s:13TrellisRender26NativeScrollBackingFactorya",
+      "kind": "swift.typealias",
+      "pathComponents": [
+        "NativeScrollBackingFactory"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor protocol NativeScrollBackingDelegate : AnyObject",
+      "identifier": "s:13TrellisRender27NativeScrollBackingDelegateP",
+      "kind": "swift.protocol",
+      "pathComponents": [
+        "NativeScrollBackingDelegate"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func scrollBacking(for node: NodeID, didChangeOffset offset: LayoutPoint, phase: ScrollPhase)",
+      "identifier": "s:13TrellisRender27NativeScrollBackingDelegateP06scrollE03for15didChangeOffset5phasey0A4Core6NodeIDV_AH11LayoutPointVAH0D5PhaseOtF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NativeScrollBackingDelegate",
+        "scrollBacking(for:didChangeOffset:phase:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "static func != (lhs: borrowing Self, rhs: borrowing Self) -> Bool",
+      "identifier": "s:SQsRi_zRi0_zrlE2neoiySbx_xtFZ::SYNTHESIZED::s:13TrellisRender04HostB10StatisticsV",
+      "kind": "swift.func.op",
+      "pathComponents": [
+        "HostRenderStatistics",
+        "!=(_:_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "static func != (lhs: borrowing Self, rhs: borrowing Self) -> Bool",
+      "identifier": "s:SQsRi_zRi0_zrlE2neoiySbx_xtFZ::SYNTHESIZED::s:13TrellisRender04HostB7RequestV",
+      "kind": "swift.func.op",
+      "pathComponents": [
+        "HostRenderRequest",
+        "!=(_:_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "static func != (lhs: borrowing Self, rhs: borrowing Self) -> Bool",
+      "identifier": "s:SQsRi_zRi0_zrlE2neoiySbx_xtFZ::SYNTHESIZED::s:13TrellisRender10DisplayKeyV",
+      "kind": "swift.func.op",
+      "pathComponents": [
+        "DisplayKey",
+        "!=(_:_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "static func != (lhs: borrowing Self, rhs: borrowing Self) -> Bool",
+      "identifier": "s:SQsRi_zRi0_zrlE2neoiySbx_xtFZ::SYNTHESIZED::s:13TrellisRender14NodeHostBridgeC14SceneReadinessV",
+      "kind": "swift.func.op",
+      "pathComponents": [
+        "NodeHostBridge",
+        "SceneReadiness",
+        "!=(_:_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "static func != (lhs: borrowing Self, rhs: borrowing Self) -> Bool",
+      "identifier": "s:SQsRi_zRi0_zrlE2neoiySbx_xtFZ::SYNTHESIZED::s:13TrellisRender14NodeHostBridgeC19SceneReadinessErrorO",
+      "kind": "swift.func.op",
+      "pathComponents": [
+        "NodeHostBridge",
+        "SceneReadinessError",
+        "!=(_:_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "static func != (lhs: borrowing Self, rhs: borrowing Self) -> Bool",
+      "identifier": "s:SQsRi_zRi0_zrlE2neoiySbx_xtFZ::SYNTHESIZED::s:13TrellisRender15DisplayPriorityO",
+      "kind": "swift.func.op",
+      "pathComponents": [
+        "DisplayPriority",
+        "!=(_:_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "static func != (lhs: borrowing Self, rhs: borrowing Self) -> Bool",
+      "identifier": "s:SQsRi_zRi0_zrlE2neoiySbx_xtFZ::SYNTHESIZED::s:13TrellisRender17DisplayStatisticsV",
+      "kind": "swift.func.op",
+      "pathComponents": [
+        "DisplayStatistics",
+        "!=(_:_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "static func != (lhs: borrowing Self, rhs: borrowing Self) -> Bool",
+      "identifier": "s:SQsRi_zRi0_zrlE2neoiySbx_xtFZ::SYNTHESIZED::s:13TrellisRender22DebugOverlayLabelStyleO",
+      "kind": "swift.func.op",
+      "pathComponents": [
+        "DebugOverlayLabelStyle",
+        "!=(_:_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "static func != (lhs: borrowing Self, rhs: borrowing Self) -> Bool",
+      "identifier": "s:SQsRi_zRi0_zrlE2neoiySbx_xtFZ::SYNTHESIZED::s:13TrellisRender22TransitionSessionStateO",
+      "kind": "swift.func.op",
+      "pathComponents": [
+        "TransitionSessionState",
+        "!=(_:_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "static func != (lhs: borrowing Self, rhs: borrowing Self) -> Bool",
+      "identifier": "s:SQsRi_zRi0_zrlE2neoiySbx_xtFZ::SYNTHESIZED::s:13TrellisRender22TransitionSettleTargetO",
+      "kind": "swift.func.op",
+      "pathComponents": [
+        "TransitionSettleTarget",
+        "!=(_:_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "static func != (lhs: borrowing Self, rhs: borrowing Self) -> Bool",
+      "identifier": "s:SQsRi_zRi0_zrlE2neoiySbx_xtFZ::SYNTHESIZED::s:13TrellisRender23TransitionGesturePresetV",
+      "kind": "swift.func.op",
+      "pathComponents": [
+        "TransitionGesturePreset",
+        "!=(_:_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "static func != (lhs: borrowing Self, rhs: borrowing Self) -> Bool",
+      "identifier": "s:SQsRi_zRi0_zrlE2neoiySbx_xtFZ::SYNTHESIZED::s:13TrellisRender23TransitionRoleEndpointsV",
+      "kind": "swift.func.op",
+      "pathComponents": [
+        "TransitionRoleEndpoints",
+        "!=(_:_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [
+        {
+          "domain": "iOS",
+          "introduced": {
+            "major": 8,
+            "minor": 0
+          }
+        },
+        {
+          "domain": "macOS",
+          "introduced": {
+            "major": 10,
+            "minor": 10
+          }
+        },
+        {
+          "domain": "tvOS",
+          "introduced": {
+            "major": 9,
+            "minor": 0
+          }
+        },
+        {
+          "domain": "watchOS",
+          "introduced": {
+            "major": 2,
+            "minor": 0
+          }
+        }
+      ],
+      "declaration": "var localizedDescription: String { get }",
+      "identifier": "s:s5ErrorP10FoundationE20localizedDescriptionSSvp::SYNTHESIZED::s:13TrellisRender14NodeHostBridgeC19SceneReadinessErrorO",
+      "kind": "swift.property",
+      "pathComponents": [
+        "NodeHostBridge",
+        "SceneReadinessError",
+        "localizedDescription"
+      ]
+    }
+  ],
+  "toolchain": {
+    "sdk": "27.0",
+    "swift": "6.4"
+  }
+}

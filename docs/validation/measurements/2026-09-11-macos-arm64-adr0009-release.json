@@ -1,0 +1,527 @@
+{
+  "configuration": "release",
+  "date": "2026-09-11T09:50:49Z",
+  "fixtures": [
+    {
+      "counters": {
+        "coalesced": 0,
+        "committed": 21,
+        "layers": 272,
+        "requested": 21
+      },
+      "memoryMiB": {},
+      "name": "deep-local-edit",
+      "notes": [],
+      "parameters": {
+        "depth": 30,
+        "nodes": 272,
+        "siblings": 8
+      },
+      "timingsMs": {
+        "attach-to-first-commit": {
+          "count": 1,
+          "max": 5.156,
+          "p50": 5.156,
+          "p95": 5.156
+        },
+        "phase-apply-frames": {
+          "count": 20,
+          "max": 0.046,
+          "p50": 0.039,
+          "p95": 0.043
+        },
+        "phase-snapshot": {
+          "count": 20,
+          "max": 0.531,
+          "p50": 0.437,
+          "p95": 0.465
+        },
+        "phase-solve": {
+          "count": 20,
+          "max": 0.347,
+          "p50": 0.293,
+          "p95": 0.327
+        },
+        "single-leaf-edit-to-commit": {
+          "count": 20,
+          "max": 1.731,
+          "p50": 1.561,
+          "p95": 1.722
+        }
+      }
+    },
+    {
+      "counters": {
+        "coalesced": 20,
+        "committed": 42,
+        "layers": 101,
+        "requested": 42,
+        "resize-burst-requests": 1,
+        "stale": 0
+      },
+      "memoryMiB": {
+        "resident-before": 13.094,
+        "resident-detached": 13.453,
+        "resident-mounted": 13.453
+      },
+      "name": "wide-100",
+      "notes": [],
+      "parameters": {
+        "nodes": 101
+      },
+      "timingsMs": {
+        "attach-to-first-commit": {
+          "count": 1,
+          "max": 1.142,
+          "p50": 1.142,
+          "p95": 1.142
+        },
+        "geometry-all-nodes-to-commit": {
+          "count": 20,
+          "max": 0.526,
+          "p50": 0.498,
+          "p95": 0.522
+        },
+        "paint-only-all-nodes": {
+          "count": 20,
+          "max": 0.273,
+          "p50": 0.265,
+          "p95": 0.272
+        },
+        "resize-burst-60-to-commit": {
+          "count": 1,
+          "max": 0.483,
+          "p50": 0.483,
+          "p95": 0.483
+        },
+        "resize-to-commit": {
+          "count": 20,
+          "max": 0.506,
+          "p50": 0.46,
+          "p95": 0.494
+        }
+      }
+    },
+    {
+      "counters": {
+        "coalesced": 20,
+        "committed": 42,
+        "layers": 1001,
+        "requested": 42,
+        "resize-burst-requests": 1,
+        "stale": 0
+      },
+      "memoryMiB": {
+        "resident-before": 15.078,
+        "resident-detached": 18.891,
+        "resident-mounted": 18.859
+      },
+      "name": "wide-1000",
+      "notes": [],
+      "parameters": {
+        "nodes": 1001
+      },
+      "timingsMs": {
+        "attach-to-first-commit": {
+          "count": 1,
+          "max": 8.486,
+          "p50": 8.486,
+          "p95": 8.486
+        },
+        "geometry-all-nodes-to-commit": {
+          "count": 20,
+          "max": 7.837,
+          "p50": 7.633,
+          "p95": 7.82
+        },
+        "paint-only-all-nodes": {
+          "count": 20,
+          "max": 1.887,
+          "p50": 1.549,
+          "p95": 1.82
+        },
+        "resize-burst-60-to-commit": {
+          "count": 1,
+          "max": 7.332,
+          "p50": 7.332,
+          "p95": 7.332
+        },
+        "resize-to-commit": {
+          "count": 20,
+          "max": 12.44,
+          "p50": 7.887,
+          "p95": 10.583
+        }
+      }
+    },
+    {
+      "counters": {
+        "layers-after": 0,
+        "live-root-after-release": 0
+      },
+      "memoryMiB": {
+        "peak": 51.25,
+        "resident-after": 51.219,
+        "resident-before": 18.891
+      },
+      "name": "attach-detach",
+      "notes": [],
+      "parameters": {
+        "cycles": 20,
+        "nodes": 1001
+      },
+      "timingsMs": {
+        "attach-commit-detach": {
+          "count": 20,
+          "max": 9.252,
+          "p50": 8.895,
+          "p95": 9.238
+        }
+      }
+    },
+    {
+      "counters": {
+        "committed": 21,
+        "requested": 22,
+        "updates-delivered": 20,
+        "updates-expected": 20
+      },
+      "memoryMiB": {},
+      "name": "state-burst",
+      "notes": [],
+      "parameters": {
+        "nodes": 1001,
+        "sends": 1000
+      },
+      "timingsMs": {
+        "burst-to-commit": {
+          "count": 20,
+          "max": 7.9,
+          "p50": 7.77,
+          "p95": 7.848
+        }
+      }
+    },
+    {
+      "counters": {
+        "a-committed": 21,
+        "a-stale": 0,
+        "b-committed": 21,
+        "b-stale": 0
+      },
+      "memoryMiB": {},
+      "name": "two-hosts",
+      "notes": [],
+      "parameters": {
+        "nodes-per-host": 501
+      },
+      "timingsMs": {
+        "both-hosts-update-to-commit": {
+          "count": 20,
+          "max": 3.749,
+          "p50": 3.672,
+          "p95": 3.731
+        }
+      }
+    },
+    {
+      "counters": {},
+      "memoryMiB": {},
+      "name": "cancel-latency",
+      "notes": [],
+      "parameters": {
+        "deep-depth": 1500,
+        "deep-nodes": 7502,
+        "wide-items": 5000
+      },
+      "timingsMs": {
+        "deep-cancel-to-worker-exit": {
+          "count": 5,
+          "max": 2.703,
+          "p50": 2.261,
+          "p95": 2.703
+        },
+        "deep-solve-uncancelled": {
+          "count": 5,
+          "max": 15.179,
+          "p50": 13.981,
+          "p95": 15.179
+        },
+        "wide-single-line-cancel-to-worker-exit": {
+          "count": 5,
+          "max": 1.54,
+          "p50": 1.442,
+          "p95": 1.54
+        },
+        "wide-single-line-solve-uncancelled": {
+          "count": 5,
+          "max": 160.438,
+          "p50": 120.091,
+          "p95": 160.438
+        }
+      }
+    },
+    {
+      "counters": {
+        "fits-d12-hits": 12,
+        "fits-d12-lookups": 123,
+        "fits-d12-max-per-node": 2,
+        "fits-d12-nodes": 62,
+        "fits-d12-states": 111,
+        "fits-d16-hits": 16,
+        "fits-d16-lookups": 163,
+        "fits-d16-max-per-node": 2,
+        "fits-d16-nodes": 82,
+        "fits-d16-states": 147,
+        "fits-d20-hits": 20,
+        "fits-d20-lookups": 203,
+        "fits-d20-max-per-node": 2,
+        "fits-d20-nodes": 102,
+        "fits-d20-states": 183,
+        "fits-d8-hits": 8,
+        "fits-d8-lookups": 83,
+        "fits-d8-max-per-node": 2,
+        "fits-d8-nodes": 42,
+        "fits-d8-states": 75,
+        "grow-d12-hits": 135,
+        "grow-d12-lookups": 270,
+        "grow-d12-max-per-node": 3,
+        "grow-d12-nodes": 62,
+        "grow-d12-states": 135,
+        "grow-d16-hits": 183,
+        "grow-d16-lookups": 362,
+        "grow-d16-max-per-node": 3,
+        "grow-d16-nodes": 82,
+        "grow-d16-states": 179,
+        "grow-d20-hits": 231,
+        "grow-d20-lookups": 454,
+        "grow-d20-max-per-node": 3,
+        "grow-d20-nodes": 102,
+        "grow-d20-states": 223,
+        "grow-d8-hits": 87,
+        "grow-d8-lookups": 178,
+        "grow-d8-max-per-node": 3,
+        "grow-d8-nodes": 42,
+        "grow-d8-states": 91,
+        "shrink-d12-hits": 180,
+        "shrink-d12-lookups": 364,
+        "shrink-d12-max-per-node": 3,
+        "shrink-d12-nodes": 62,
+        "shrink-d12-states": 184,
+        "shrink-d16-hits": 244,
+        "shrink-d16-lookups": 488,
+        "shrink-d16-max-per-node": 3,
+        "shrink-d16-nodes": 82,
+        "shrink-d16-states": 244,
+        "shrink-d20-hits": 308,
+        "shrink-d20-lookups": 612,
+        "shrink-d20-max-per-node": 3,
+        "shrink-d20-nodes": 102,
+        "shrink-d20-states": 304,
+        "shrink-d8-hits": 116,
+        "shrink-d8-lookups": 240,
+        "shrink-d8-max-per-node": 3,
+        "shrink-d8-nodes": 42,
+        "shrink-d8-states": 124,
+        "shrinkAlternating-d12-hits": 73,
+        "shrinkAlternating-d12-lookups": 262,
+        "shrinkAlternating-d12-max-per-node": 5,
+        "shrinkAlternating-d12-nodes": 62,
+        "shrinkAlternating-d12-states": 189,
+        "shrinkAlternating-d16-hits": 95,
+        "shrinkAlternating-d16-lookups": 342,
+        "shrinkAlternating-d16-max-per-node": 5,
+        "shrinkAlternating-d16-nodes": 82,
+        "shrinkAlternating-d16-states": 247,
+        "shrinkAlternating-d20-hits": 117,
+        "shrinkAlternating-d20-lookups": 422,
+        "shrinkAlternating-d20-max-per-node": 5,
+        "shrinkAlternating-d20-nodes": 102,
+        "shrinkAlternating-d20-states": 305,
+        "shrinkAlternating-d8-hits": 41,
+        "shrinkAlternating-d8-lookups": 161,
+        "shrinkAlternating-d8-max-per-node": 3,
+        "shrinkAlternating-d8-nodes": 42,
+        "shrinkAlternating-d8-states": 120
+      },
+      "memoryMiB": {},
+      "name": "overflow-chain",
+      "notes": [],
+      "parameters": {
+        "siblings": 4
+      },
+      "timingsMs": {
+        "fits-d12-solve": {
+          "count": 1,
+          "max": 0.075,
+          "p50": 0.075,
+          "p95": 0.075
+        },
+        "fits-d16-solve": {
+          "count": 1,
+          "max": 0.093,
+          "p50": 0.093,
+          "p95": 0.093
+        },
+        "fits-d20-solve": {
+          "count": 1,
+          "max": 0.111,
+          "p50": 0.111,
+          "p95": 0.111
+        },
+        "fits-d8-solve": {
+          "count": 1,
+          "max": 0.055,
+          "p50": 0.055,
+          "p95": 0.055
+        },
+        "grow-d12-solve": {
+          "count": 1,
+          "max": 0.129,
+          "p50": 0.129,
+          "p95": 0.129
+        },
+        "grow-d16-solve": {
+          "count": 1,
+          "max": 0.168,
+          "p50": 0.168,
+          "p95": 0.168
+        },
+        "grow-d20-solve": {
+          "count": 1,
+          "max": 0.219,
+          "p50": 0.219,
+          "p95": 0.219
+        },
+        "grow-d8-solve": {
+          "count": 1,
+          "max": 0.085,
+          "p50": 0.085,
+          "p95": 0.085
+        },
+        "shrink-d12-solve": {
+          "count": 1,
+          "max": 0.155,
+          "p50": 0.155,
+          "p95": 0.155
+        },
+        "shrink-d16-solve": {
+          "count": 1,
+          "max": 0.226,
+          "p50": 0.226,
+          "p95": 0.226
+        },
+        "shrink-d20-solve": {
+          "count": 1,
+          "max": 0.266,
+          "p50": 0.266,
+          "p95": 0.266
+        },
+        "shrink-d8-solve": {
+          "count": 1,
+          "max": 0.115,
+          "p50": 0.115,
+          "p95": 0.115
+        },
+        "shrinkAlternating-d12-solve": {
+          "count": 1,
+          "max": 0.132,
+          "p50": 0.132,
+          "p95": 0.132
+        },
+        "shrinkAlternating-d16-solve": {
+          "count": 1,
+          "max": 0.179,
+          "p50": 0.179,
+          "p95": 0.179
+        },
+        "shrinkAlternating-d20-solve": {
+          "count": 1,
+          "max": 0.216,
+          "p50": 0.216,
+          "p95": 0.216
+        },
+        "shrinkAlternating-d8-solve": {
+          "count": 1,
+          "max": 0.087,
+          "p50": 0.087,
+          "p95": 0.087
+        }
+      }
+    },
+    {
+      "counters": {
+        "layers": 2401,
+        "nodes": 2401
+      },
+      "memoryMiB": {
+        "resident-before": 95.859,
+        "resident-mounted": 101.109
+      },
+      "name": "wrappers-with-layers",
+      "notes": [],
+      "parameters": {
+        "cards": 300
+      },
+      "timingsMs": {
+        "attach-to-first-commit": {
+          "count": 1,
+          "max": 17.157,
+          "p50": 17.157,
+          "p95": 17.157
+        },
+        "geometry-all-cards-to-commit": {
+          "count": 20,
+          "max": 11.305,
+          "p50": 10.999,
+          "p95": 11.279
+        },
+        "renderer-apply-committed": {
+          "count": 20,
+          "max": 4.04,
+          "p50": 3.914,
+          "p95": 4.016
+        }
+      }
+    },
+    {
+      "counters": {
+        "layers": 1501,
+        "nodes": 2401
+      },
+      "memoryMiB": {
+        "resident-before": 103.641,
+        "resident-mounted": 92.203
+      },
+      "name": "wrappers-without-layers",
+      "notes": [],
+      "parameters": {
+        "cards": 300
+      },
+      "timingsMs": {
+        "attach-to-first-commit": {
+          "count": 1,
+          "max": 17.047,
+          "p50": 17.047,
+          "p95": 17.047
+        },
+        "geometry-all-cards-to-commit": {
+          "count": 20,
+          "max": 53.174,
+          "p50": 9.983,
+          "p95": 35.21
+        },
+        "renderer-apply-committed": {
+          "count": 20,
+          "max": 3.56,
+          "p50": 2.834,
+          "p95": 3.098
+        }
+      }
+    }
+  ],
+  "host": "resoul\u2019s MacBook Air",
+  "iterations": 20,
+  "logMode": "off",
+  "os": "Version 26.4.1 (Build 25E253)"
+}

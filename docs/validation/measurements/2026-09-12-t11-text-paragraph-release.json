@@ -1,0 +1,39 @@
+{
+  "configuration": "release",
+  "date": "2026-09-12T17:32:51Z",
+  "fixtures": [
+    {
+      "counters": {
+        "estimated-raster-bytes-rgba": 10712320,
+        "measured-height-points": 4184,
+        "raster-pixel-height": 8369,
+        "raster-pixel-width": 320
+      },
+      "memoryMiB": {},
+      "name": "text-paragraph-narrow",
+      "notes": [],
+      "parameters": {
+        "characters": 5000,
+        "columnWidth": 160
+      },
+      "timingsMs": {
+        "attach-to-first-commit": {
+          "count": 1,
+          "max": 17.239,
+          "p50": 17.239,
+          "p95": 17.239
+        },
+        "time-to-artifact": {
+          "count": 1,
+          "max": 14.532,
+          "p50": 14.532,
+          "p95": 14.532
+        }
+      }
+    }
+  ],
+  "host": "resoul\u2019s MacBook Air",
+  "iterations": 20,
+  "logMode": "off",
+  "os": "Version 26.4.1 (Build 25E253)"
+}

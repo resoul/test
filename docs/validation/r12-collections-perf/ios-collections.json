@@ -1,0 +1,248 @@
+{
+  "environment" : {
+    "configuration" : "release",
+    "date" : "2026-09-23T15:22:47Z",
+    "deviceModel" : "Mac14,2",
+    "os" : "Version 27.0 (Build 24A434)",
+    "refreshRateHz" : 60,
+    "sourceRevision" : "r12-uncommitted"
+  },
+  "fixtures" : [
+    {
+      "counters" : {
+        "bindings-after-close" : 0,
+        "items-made" : 1736,
+        "live-items-after-close" : 0,
+        "max-live-items" : 44,
+        "open-close-cycles" : 100,
+        "peak-resident-mib" : 198,
+        "resident-mib-after-cycles" : 114,
+        "resident-mib-before-cycles" : 142
+      },
+      "name" : "app-collections-list-10000",
+      "notes" : [
+
+      ],
+      "parameters" : {
+        "items" : 10000,
+        "seed" : 7,
+        "viewportHeight" : 874,
+        "viewportWidth" : 402
+      },
+      "timingsMs" : {
+        "cold-open-to-visible" : {
+          "count" : 1,
+          "dropped" : 0,
+          "max" : 452.664,
+          "min" : 452.664,
+          "p50" : 452.664,
+          "p95" : 452.664,
+          "p99" : 452.664
+        },
+        "cold-reversal-step-to-commit" : {
+          "count" : 20,
+          "dropped" : 0,
+          "max" : 37.965,
+          "min" : 13.801,
+          "p50" : 20.216,
+          "p95" : 25.927,
+          "p99" : 37.965
+        },
+        "cold-scroll-step-to-commit" : {
+          "count" : 40,
+          "dropped" : 0,
+          "max" : 155.441,
+          "min" : 16.392,
+          "p50" : 28.702,
+          "p95" : 86.889,
+          "p99" : 155.441
+        },
+        "warm-open-to-visible" : {
+          "count" : 100,
+          "dropped" : 0,
+          "max" : 222.287,
+          "min" : 25.324,
+          "p50" : 35.476,
+          "p95" : 62.177,
+          "p99" : 89.967
+        },
+        "warm-reversal-step-to-commit" : {
+          "count" : 20,
+          "dropped" : 0,
+          "max" : 47.272,
+          "min" : 19.924,
+          "p50" : 32.407,
+          "p95" : 44.046,
+          "p99" : 47.272
+        },
+        "warm-scroll-step-to-commit" : {
+          "count" : 40,
+          "dropped" : 0,
+          "max" : 168.775,
+          "min" : 15.042,
+          "p50" : 19.806,
+          "p95" : 92.316,
+          "p99" : 168.775
+        }
+      }
+    },
+    {
+      "counters" : {
+        "bindings-after-close" : 0,
+        "items-made" : 1666,
+        "live-items-after-close" : 0,
+        "max-live-items" : 42,
+        "open-close-cycles" : 100,
+        "peak-resident-mib" : 198,
+        "resident-mib-after-cycles" : 95,
+        "resident-mib-before-cycles" : 99
+      },
+      "name" : "app-collections-grid-10000",
+      "notes" : [
+
+      ],
+      "parameters" : {
+        "items" : 10000,
+        "seed" : 7,
+        "viewportHeight" : 874,
+        "viewportWidth" : 402
+      },
+      "timingsMs" : {
+        "cold-open-to-visible" : {
+          "count" : 1,
+          "dropped" : 0,
+          "max" : 76.653,
+          "min" : 76.653,
+          "p50" : 76.653,
+          "p95" : 76.653,
+          "p99" : 76.653
+        },
+        "cold-reversal-step-to-commit" : {
+          "count" : 20,
+          "dropped" : 0,
+          "max" : 18.711,
+          "min" : 8.87,
+          "p50" : 11.809,
+          "p95" : 15.59,
+          "p99" : 18.711
+        },
+        "cold-scroll-step-to-commit" : {
+          "count" : 40,
+          "dropped" : 0,
+          "max" : 31.667,
+          "min" : 14.858,
+          "p50" : 18.134,
+          "p95" : 25.344,
+          "p99" : 31.667
+        },
+        "warm-open-to-visible" : {
+          "count" : 100,
+          "dropped" : 0,
+          "max" : 108.046,
+          "min" : 31.655,
+          "p50" : 38.7,
+          "p95" : 66.302,
+          "p99" : 104.932
+        },
+        "warm-reversal-step-to-commit" : {
+          "count" : 20,
+          "dropped" : 0,
+          "max" : 53.461,
+          "min" : 11.916,
+          "p50" : 18.383,
+          "p95" : 33.894,
+          "p99" : 53.461
+        },
+        "warm-scroll-step-to-commit" : {
+          "count" : 40,
+          "dropped" : 0,
+          "max" : 19.945,
+          "min" : 7.885,
+          "p50" : 12.758,
+          "p95" : 18.592,
+          "p99" : 19.945
+        }
+      }
+    },
+    {
+      "counters" : {
+        "bindings-after-close" : 0,
+        "items-made" : 1705,
+        "live-items-after-close" : 0,
+        "max-live-items" : 44,
+        "open-close-cycles" : 100,
+        "peak-resident-mib" : 198,
+        "resident-mib-after-cycles" : 92,
+        "resident-mib-before-cycles" : 102
+      },
+      "name" : "app-collections-table-10000",
+      "notes" : [
+
+      ],
+      "parameters" : {
+        "items" : 10000,
+        "seed" : 7,
+        "viewportHeight" : 874,
+        "viewportWidth" : 402
+      },
+      "timingsMs" : {
+        "cold-open-to-visible" : {
+          "count" : 1,
+          "dropped" : 0,
+          "max" : 61.007,
+          "min" : 61.007,
+          "p50" : 61.007,
+          "p95" : 61.007,
+          "p99" : 61.007
+        },
+        "cold-reversal-step-to-commit" : {
+          "count" : 20,
+          "dropped" : 0,
+          "max" : 25.27,
+          "min" : 21.047,
+          "p50" : 23.1,
+          "p95" : 24.755,
+          "p99" : 25.27
+        },
+        "cold-scroll-step-to-commit" : {
+          "count" : 40,
+          "dropped" : 0,
+          "max" : 38.958,
+          "min" : 22.8,
+          "p50" : 25.585,
+          "p95" : 29.651,
+          "p99" : 38.958
+        },
+        "warm-open-to-visible" : {
+          "count" : 100,
+          "dropped" : 0,
+          "max" : 109.907,
+          "min" : 34.417,
+          "p50" : 38.141,
+          "p95" : 68.409,
+          "p99" : 102.123
+        },
+        "warm-reversal-step-to-commit" : {
+          "count" : 20,
+          "dropped" : 0,
+          "max" : 39.695,
+          "min" : 18.731,
+          "p50" : 20.88,
+          "p95" : 35.691,
+          "p99" : 39.695
+        },
+        "warm-scroll-step-to-commit" : {
+          "count" : 40,
+          "dropped" : 0,
+          "max" : 43.581,
+          "min" : 14.798,
+          "p50" : 20.581,
+          "p95" : 28.984,
+          "p99" : 43.581
+        }
+      }
+    }
+  ],
+  "repeatIterations" : 20,
+  "warmupIterations" : 0
+}

@@ -1,0 +1,21 @@
+[trellis.place] frame host=none gen=none #824 parent=#none frame=(0.0,0.0,350.0x80.0)
+[trellis.measure] miss host=none gen=none #824 parent=#none size=350.0x80.0
+[trellis.schedule] worker-exit host=31 gen=3 #none parent=#none
+✘ Test m12_gestureGrabbingAnInFlightOpenContinuesProgressWithoutResettingOrJumping() recorded an issue at M12TransitionGestureTests.swift:152:5: Expectation failed: (session.progress > 0 → true) && (session.progress < 1 → false)
+↳ D72: progress continues from wherever automatic opening had gotten to, not reset to 0
+[trellis.commit] paint-only host=25 gen=1 #773 parent=#none
+[trellis.layer] animate-snap host=25 gen=1 #776 parent=#none property=cornerRadius
+[trellis.layer] animate-snap host=25 gen=1 #776 parent=#none property=cornerRadius
+[trellis.layer] visual host=none gen=none #773 parent=#none paint-only=true scope=tree
+[trellis.commit] semantics-only host=25 gen=1 #773 parent=#none
+✘ Test m12_gestureGrabbingAnInFlightOpenContinuesProgressWithoutResettingOrJumping() failed after 6.851 seconds with 1 issue.
+[trellis.semantics] published host=25 gen=1 #773 parent=#none revision=2 count=5 metadataOnly=true
+[trellis.schedule] request host=36 gen=3 #1985 parent=#none frame=300.0x300.0
+[trellis.style] changed host=none gen=none #2016 parent=#none kind=style
+✔ Test a12_appKitElementsAreBoundedByTheTreeNotByCommitsAndReleaseOnDetach() passed after 24.973 seconds.
+✔ Test m13_closedDestinationStaysHiddenThroughAnUnrelatedLaterPaintOnlyCommit() passed after 24.984 seconds.
+✔ Test m13_presentedSourceStaysHiddenThroughAnUnrelatedLaterPaintOnlyCommit() passed after 24.996 seconds.
+✘ Test run with 702 tests in 0 suites failed after 24.999 seconds with 1 issue.
+[0/1] Planning build
+Building for debugging...
+[0/6] Write sources

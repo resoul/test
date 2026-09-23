@@ -1,0 +1,15 @@
+{
+  "originHash" : "c1951c8516b7b6c041cb1d3790b74209a98488ab2bcb1ed6b846144eef99ff04",
+  "pins" : [
+    {
+      "identity" : "flux",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/resoul/flux.git",
+      "state" : {
+        "revision" : "e99f664b53d1e667a7c107cf388c6db7b9a78477",
+        "version" : "1.2.1"
+      }
+    }
+  ],
+  "version" : 3
+}

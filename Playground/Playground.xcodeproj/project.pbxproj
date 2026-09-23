@@ -1,0 +1,850 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 71;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		89DE05EF305D355E00A9DDF8 /* Shared/Scenario.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000020 /* Shared/Scenario.swift */; };
+		89DE05F0305D355E00A9DDF8 /* Shared/Scenarios/S01_SingleNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000021 /* Shared/Scenarios/S01_SingleNode.swift */; };
+		89DE05F1305D355E00A9DDF8 /* Shared/Scenarios/S02_RowOfThree.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000022 /* Shared/Scenarios/S02_RowOfThree.swift */; };
+		89DE05F2305D355E00A9DDF8 /* Shared/Scenarios/S03_Column.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000023 /* Shared/Scenarios/S03_Column.swift */; };
+		89DE05F3305D355E00A9DDF8 /* Shared/Scenarios/S04_Justify.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000024 /* Shared/Scenarios/S04_Justify.swift */; };
+		89DE05F4305D355E00A9DDF8 /* Shared/Scenarios/S05_Align.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000025 /* Shared/Scenarios/S05_Align.swift */; };
+		89DE05F5305D355E00A9DDF8 /* Shared/Scenarios/S06_Gap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000026 /* Shared/Scenarios/S06_Gap.swift */; };
+		89DE05F6305D355E00A9DDF8 /* Shared/Scenarios/S07_PaddingMargin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000027 /* Shared/Scenarios/S07_PaddingMargin.swift */; };
+		89DE05F7305D355E00A9DDF8 /* Shared/Scenarios/S08_Grow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000028 /* Shared/Scenarios/S08_Grow.swift */; };
+		89DE05F8305D355E00A9DDF8 /* Shared/Scenarios/S09_Sizes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000029 /* Shared/Scenarios/S09_Sizes.swift */; };
+		89DE05F9305D355E00A9DDF8 /* Shared/Scenarios/S10_Nesting.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000030 /* Shared/Scenarios/S10_Nesting.swift */; };
+		89DE05FA305D355E00A9DDF8 /* Shared/Scenarios/S11_Absolute.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000031 /* Shared/Scenarios/S11_Absolute.swift */; };
+		89DE05FB305D355E00A9DDF8 /* Shared/Scenarios/S12_Wrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000032 /* Shared/Scenarios/S12_Wrap.swift */; };
+		89DE05FC305D355E00A9DDF8 /* Shared/Scenarios/S13_RTL.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000033 /* Shared/Scenarios/S13_RTL.swift */; };
+		89DE05FD305D355E00A9DDF8 /* Shared/Scenarios/S14_SafeArea.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000034 /* Shared/Scenarios/S14_SafeArea.swift */; };
+		89DE05FE305D355E00A9DDF8 /* Shared/Scenarios/S15_DynamicMutation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000035 /* Shared/Scenarios/S15_DynamicMutation.swift */; };
+		89DE05FF305D355E00A9DDF8 /* Shared/Scenarios/S16_ProfileCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000036 /* Shared/Scenarios/S16_ProfileCard.swift */; };
+		89DE0600305D355E00A9DDF8 /* Shared/Scenarios/S17_AnalyticsDashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000037 /* Shared/Scenarios/S17_AnalyticsDashboard.swift */; };
+		89DE0601305D355E00A9DDF8 /* Shared/Scenarios/S18_ChatFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000038 /* Shared/Scenarios/S18_ChatFeed.swift */; };
+		89DE0602305D355E00A9DDF8 /* Shared/Scenarios/S19_MediaPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000039 /* Shared/Scenarios/S19_MediaPlayer.swift */; };
+		89DE0603305D355E00A9DDF8 /* Shared/Scenarios/S20_ReactiveUpdates.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000050 /* Shared/Scenarios/S20_ReactiveUpdates.swift */; };
+		89DE0604305D355E00A9DDF8 /* Shared/Scenarios/S21_TapCounter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000051 /* Shared/Scenarios/S21_TapCounter.swift */; };
+		89DE0605305D355E00A9DDF8 /* Shared/Scenarios/S22_FocusGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000052 /* Shared/Scenarios/S22_FocusGrid.swift */; };
+		89DE0606305D355E00A9DDF8 /* Shared/Scenarios/S23_Semantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000053 /* Shared/Scenarios/S23_Semantics.swift */; };
+		89DE0607305D355E00A9DDF8 /* Shared/AccessibilityDump.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000054 /* Shared/AccessibilityDump.swift */; };
+		89DE0608305D355E00A9DDF8 /* Shared/Scenarios/S24_Typography.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000055 /* Shared/Scenarios/S24_Typography.swift */; };
+		89DE0609305D355E00A9DDF8 /* Shared/Scenarios/S25_TextList.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000056 /* Shared/Scenarios/S25_TextList.swift */; };
+		89DE060A305D355E00A9DDF8 /* Shared/Scenarios/S26_LabeledSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000057 /* Shared/Scenarios/S26_LabeledSemantics.swift */; };
+		89DE060B305D355E00A9DDF8 /* Shared/Scenarios/S27_Disclosure.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000058 /* Shared/Scenarios/S27_Disclosure.swift */; };
+		89DE060C305D355E00A9DDF8 /* Shared/Scenarios/S28_AnimationScopesAndReduceMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000059 /* Shared/Scenarios/S28_AnimationScopesAndReduceMotion.swift */; };
+		89DE060D305D355E00A9DDF8 /* Shared/Scenarios/S29_ExpandTransitionPlatforms.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000060 /* Shared/Scenarios/S29_ExpandTransitionPlatforms.swift */; };
+		89DE060E305D355E00A9DDF8 /* Shared/Scenarios/S30_EditorialCardToArticle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000061 /* Shared/Scenarios/S30_EditorialCardToArticle.swift */; };
+		89DE060F305D355E00A9DDF8 /* Shared/Scenarios/S31_ProfileCardToProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000062 /* Shared/Scenarios/S31_ProfileCardToProfile.swift */; };
+		89DE0610305D355E00A9DDF8 /* Shared/Scenarios/S32_FluxFilterFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000070 /* Shared/Scenarios/S32_FluxFilterFeed.swift */; };
+		89DE0611305D355E00A9DDF8 /* Shared/PerfRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000071 /* Shared/PerfRecorder.swift */; };
+		89DE0612305D355E00A9DDF8 /* Shared/PerfHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000072 /* Shared/PerfHarness.swift */; };
+		89DE0613305D355E00A9DDF8 /* Shared/Scenarios/S33_ScrollNodeInteraction.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000073 /* Shared/Scenarios/S33_ScrollNodeInteraction.swift */; };
+		89DE0701305D355E00A9DDF8 /* Shared/Scenarios/S34_NestedScrollArticle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000074 /* Shared/Scenarios/S34_NestedScrollArticle.swift */; };
+		89DE0801305D355E00A9DDF8 /* Shared/Scenarios/S35_ListNodeFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000075 /* Shared/Scenarios/S35_ListNodeFeed.swift */; };
+		89DE0901305D355E00A9DDF8 /* Shared/Scenarios/S36_GridNodeMedia.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000076 /* Shared/Scenarios/S36_GridNodeMedia.swift */; };
+		89DE0A01305D355E00A9DDF8 /* Shared/Scenarios/S37_TableNodeInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000077 /* Shared/Scenarios/S37_TableNodeInbox.swift */; };
+		89DE0B01305D355E00A9DDF8 /* Shared/Scenarios/S38_PagerTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000078 /* Shared/Scenarios/S38_PagerTabs.swift */; };
+		89DE0702305D355E00A9DDF8 /* Shared/Scenarios/S34_NestedScrollArticle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000074 /* Shared/Scenarios/S34_NestedScrollArticle.swift */; };
+		89DE0802305D355E00A9DDF8 /* Shared/Scenarios/S35_ListNodeFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000075 /* Shared/Scenarios/S35_ListNodeFeed.swift */; };
+		89DE0902305D355E00A9DDF8 /* Shared/Scenarios/S36_GridNodeMedia.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000076 /* Shared/Scenarios/S36_GridNodeMedia.swift */; };
+		89DE0A02305D355E00A9DDF8 /* Shared/Scenarios/S37_TableNodeInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000077 /* Shared/Scenarios/S37_TableNodeInbox.swift */; };
+		89DE0B02305D355E00A9DDF8 /* Shared/Scenarios/S38_PagerTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000078 /* Shared/Scenarios/S38_PagerTabs.swift */; };
+		89DE0703305D355E00A9DDF8 /* Shared/Scenarios/S34_NestedScrollArticle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000074 /* Shared/Scenarios/S34_NestedScrollArticle.swift */; };
+		89DE0803305D355E00A9DDF8 /* Shared/Scenarios/S35_ListNodeFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000075 /* Shared/Scenarios/S35_ListNodeFeed.swift */; };
+		89DE0903305D355E00A9DDF8 /* Shared/Scenarios/S36_GridNodeMedia.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000076 /* Shared/Scenarios/S36_GridNodeMedia.swift */; };
+		89DE0A03305D355E00A9DDF8 /* Shared/Scenarios/S37_TableNodeInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000077 /* Shared/Scenarios/S37_TableNodeInbox.swift */; };
+		89DE0B03305D355E00A9DDF8 /* Shared/Scenarios/S38_PagerTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000078 /* Shared/Scenarios/S38_PagerTabs.swift */; };
+		89DE0614305D355E00A9DDF8 /* Shared/Scenario.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000020 /* Shared/Scenario.swift */; };
+		89DE0615305D355E00A9DDF8 /* Shared/Scenarios/S01_SingleNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000021 /* Shared/Scenarios/S01_SingleNode.swift */; };
+		89DE0616305D355E00A9DDF8 /* Shared/Scenarios/S02_RowOfThree.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000022 /* Shared/Scenarios/S02_RowOfThree.swift */; };
+		89DE0617305D355E00A9DDF8 /* Shared/Scenarios/S03_Column.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000023 /* Shared/Scenarios/S03_Column.swift */; };
+		89DE0618305D355E00A9DDF8 /* Shared/Scenarios/S04_Justify.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000024 /* Shared/Scenarios/S04_Justify.swift */; };
+		89DE0619305D355E00A9DDF8 /* Shared/Scenarios/S05_Align.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000025 /* Shared/Scenarios/S05_Align.swift */; };
+		89DE061A305D355E00A9DDF8 /* Shared/Scenarios/S06_Gap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000026 /* Shared/Scenarios/S06_Gap.swift */; };
+		89DE061B305D355E00A9DDF8 /* Shared/Scenarios/S07_PaddingMargin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000027 /* Shared/Scenarios/S07_PaddingMargin.swift */; };
+		89DE061C305D355E00A9DDF8 /* Shared/Scenarios/S08_Grow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000028 /* Shared/Scenarios/S08_Grow.swift */; };
+		89DE061D305D355E00A9DDF8 /* Shared/Scenarios/S09_Sizes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000029 /* Shared/Scenarios/S09_Sizes.swift */; };
+		89DE061E305D355E00A9DDF8 /* Shared/Scenarios/S10_Nesting.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000030 /* Shared/Scenarios/S10_Nesting.swift */; };
+		89DE061F305D355E00A9DDF8 /* Shared/Scenarios/S11_Absolute.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000031 /* Shared/Scenarios/S11_Absolute.swift */; };
+		89DE0620305D355E00A9DDF8 /* Shared/Scenarios/S12_Wrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000032 /* Shared/Scenarios/S12_Wrap.swift */; };
+		89DE0621305D355E00A9DDF8 /* Shared/Scenarios/S13_RTL.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000033 /* Shared/Scenarios/S13_RTL.swift */; };
+		89DE0622305D355E00A9DDF8 /* Shared/Scenarios/S14_SafeArea.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000034 /* Shared/Scenarios/S14_SafeArea.swift */; };
+		89DE0623305D355E00A9DDF8 /* Shared/Scenarios/S15_DynamicMutation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000035 /* Shared/Scenarios/S15_DynamicMutation.swift */; };
+		89DE0624305D355E00A9DDF8 /* Shared/Scenarios/S16_ProfileCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000036 /* Shared/Scenarios/S16_ProfileCard.swift */; };
+		89DE0625305D355E00A9DDF8 /* Shared/Scenarios/S17_AnalyticsDashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000037 /* Shared/Scenarios/S17_AnalyticsDashboard.swift */; };
+		89DE0626305D355E00A9DDF8 /* Shared/Scenarios/S18_ChatFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000038 /* Shared/Scenarios/S18_ChatFeed.swift */; };
+		89DE0627305D355E00A9DDF8 /* Shared/Scenarios/S19_MediaPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000039 /* Shared/Scenarios/S19_MediaPlayer.swift */; };
+		89DE0628305D355E00A9DDF8 /* Shared/Scenarios/S20_ReactiveUpdates.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000050 /* Shared/Scenarios/S20_ReactiveUpdates.swift */; };
+		89DE0629305D355E00A9DDF8 /* Shared/Scenarios/S21_TapCounter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000051 /* Shared/Scenarios/S21_TapCounter.swift */; };
+		89DE062A305D355E00A9DDF8 /* Shared/Scenarios/S22_FocusGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000052 /* Shared/Scenarios/S22_FocusGrid.swift */; };
+		89DE062B305D355E00A9DDF8 /* Shared/Scenarios/S23_Semantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000053 /* Shared/Scenarios/S23_Semantics.swift */; };
+		89DE062C305D355E00A9DDF8 /* Shared/AccessibilityDump.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000054 /* Shared/AccessibilityDump.swift */; };
+		89DE062D305D355E00A9DDF8 /* Shared/Scenarios/S24_Typography.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000055 /* Shared/Scenarios/S24_Typography.swift */; };
+		89DE062E305D355E00A9DDF8 /* Shared/Scenarios/S25_TextList.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000056 /* Shared/Scenarios/S25_TextList.swift */; };
+		89DE062F305D355E00A9DDF8 /* Shared/Scenarios/S26_LabeledSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000057 /* Shared/Scenarios/S26_LabeledSemantics.swift */; };
+		89DE0630305D355E00A9DDF8 /* Shared/Scenarios/S27_Disclosure.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000058 /* Shared/Scenarios/S27_Disclosure.swift */; };
+		89DE0631305D355E00A9DDF8 /* Shared/Scenarios/S28_AnimationScopesAndReduceMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000059 /* Shared/Scenarios/S28_AnimationScopesAndReduceMotion.swift */; };
+		89DE0632305D355E00A9DDF8 /* Shared/Scenarios/S29_ExpandTransitionPlatforms.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000060 /* Shared/Scenarios/S29_ExpandTransitionPlatforms.swift */; };
+		89DE0633305D355E00A9DDF8 /* Shared/Scenarios/S30_EditorialCardToArticle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000061 /* Shared/Scenarios/S30_EditorialCardToArticle.swift */; };
+		89DE0634305D355E00A9DDF8 /* Shared/Scenarios/S31_ProfileCardToProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000062 /* Shared/Scenarios/S31_ProfileCardToProfile.swift */; };
+		89DE0635305D355E00A9DDF8 /* Shared/Scenarios/S32_FluxFilterFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000070 /* Shared/Scenarios/S32_FluxFilterFeed.swift */; };
+		89DE0636305D355E00A9DDF8 /* Shared/PerfRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000071 /* Shared/PerfRecorder.swift */; };
+		89DE0637305D355E00A9DDF8 /* Shared/PerfHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000072 /* Shared/PerfHarness.swift */; };
+		89DE0638305D355E00A9DDF8 /* Shared/Scenarios/S33_ScrollNodeInteraction.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000073 /* Shared/Scenarios/S33_ScrollNodeInteraction.swift */; };
+		A10000000000000000000001 /* TrellisUIKit in Frameworks */ = {isa = PBXBuildFile; productRef = A20000000000000000000001 /* TrellisUIKit */; };
+		A10000000000000000000002 /* TrellisUIKit in Frameworks */ = {isa = PBXBuildFile; productRef = A20000000000000000000002 /* TrellisUIKit */; };
+		A10000000000000000000003 /* TrellisAppKit in Frameworks */ = {isa = PBXBuildFile; productRef = A20000000000000000000003 /* TrellisAppKit */; };
+		A10000000000000000000010 /* iOS/PlaygroundApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000010 /* iOS/PlaygroundApp.swift */; };
+		A10000000000000000000011 /* tvOS/PlaygroundApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000011 /* tvOS/PlaygroundApp.swift */; };
+		A10000000000000000000012 /* macOS/PlaygroundApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000012 /* macOS/PlaygroundApp.swift */; };
+		A10000000000000000000020 /* Shared/Scenario.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000020 /* Shared/Scenario.swift */; };
+		A10000000000000000000021 /* Shared/Scenarios/S01_SingleNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000021 /* Shared/Scenarios/S01_SingleNode.swift */; };
+		A10000000000000000000022 /* Shared/Scenarios/S02_RowOfThree.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000022 /* Shared/Scenarios/S02_RowOfThree.swift */; };
+		A10000000000000000000023 /* Shared/Scenarios/S03_Column.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000023 /* Shared/Scenarios/S03_Column.swift */; };
+		A10000000000000000000024 /* Shared/Scenarios/S04_Justify.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000024 /* Shared/Scenarios/S04_Justify.swift */; };
+		A10000000000000000000025 /* Shared/Scenarios/S05_Align.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000025 /* Shared/Scenarios/S05_Align.swift */; };
+		A10000000000000000000026 /* Shared/Scenarios/S06_Gap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000026 /* Shared/Scenarios/S06_Gap.swift */; };
+		A10000000000000000000027 /* Shared/Scenarios/S07_PaddingMargin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000027 /* Shared/Scenarios/S07_PaddingMargin.swift */; };
+		A10000000000000000000028 /* Shared/Scenarios/S08_Grow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000028 /* Shared/Scenarios/S08_Grow.swift */; };
+		A10000000000000000000029 /* Shared/Scenarios/S09_Sizes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000029 /* Shared/Scenarios/S09_Sizes.swift */; };
+		A10000000000000000000030 /* Shared/Scenarios/S10_Nesting.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000030 /* Shared/Scenarios/S10_Nesting.swift */; };
+		A10000000000000000000031 /* Shared/Scenarios/S11_Absolute.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000031 /* Shared/Scenarios/S11_Absolute.swift */; };
+		A10000000000000000000032 /* Shared/Scenarios/S12_Wrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000032 /* Shared/Scenarios/S12_Wrap.swift */; };
+		A10000000000000000000033 /* Shared/Scenarios/S13_RTL.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000033 /* Shared/Scenarios/S13_RTL.swift */; };
+		A10000000000000000000034 /* Shared/Scenarios/S14_SafeArea.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000034 /* Shared/Scenarios/S14_SafeArea.swift */; };
+		A10000000000000000000035 /* Shared/Scenarios/S15_DynamicMutation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000035 /* Shared/Scenarios/S15_DynamicMutation.swift */; };
+		A10000000000000000000036 /* Shared/Scenarios/S16_ProfileCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000036 /* Shared/Scenarios/S16_ProfileCard.swift */; };
+		A10000000000000000000037 /* Shared/Scenarios/S17_AnalyticsDashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000037 /* Shared/Scenarios/S17_AnalyticsDashboard.swift */; };
+		A10000000000000000000038 /* Shared/Scenarios/S18_ChatFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000038 /* Shared/Scenarios/S18_ChatFeed.swift */; };
+		A10000000000000000000039 /* Shared/Scenarios/S19_MediaPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000039 /* Shared/Scenarios/S19_MediaPlayer.swift */; };
+		A10000000000000000000040 /* Shared/Scenarios/S20_ReactiveUpdates.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000050 /* Shared/Scenarios/S20_ReactiveUpdates.swift */; };
+		A10000000000000000000041 /* Shared/Scenarios/S21_TapCounter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000051 /* Shared/Scenarios/S21_TapCounter.swift */; };
+		A10000000000000000000042 /* Shared/Scenarios/S22_FocusGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000052 /* Shared/Scenarios/S22_FocusGrid.swift */; };
+		A10000000000000000000043 /* Shared/Scenarios/S23_Semantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000053 /* Shared/Scenarios/S23_Semantics.swift */; };
+		A10000000000000000000044 /* Shared/AccessibilityDump.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000054 /* Shared/AccessibilityDump.swift */; };
+		A10000000000000000000045 /* Shared/Scenarios/S24_Typography.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000055 /* Shared/Scenarios/S24_Typography.swift */; };
+		A10000000000000000000046 /* Shared/Scenarios/S25_TextList.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000056 /* Shared/Scenarios/S25_TextList.swift */; };
+		A10000000000000000000047 /* Shared/Scenarios/S26_LabeledSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000057 /* Shared/Scenarios/S26_LabeledSemantics.swift */; };
+		A10000000000000000000048 /* Shared/Scenarios/S27_Disclosure.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000058 /* Shared/Scenarios/S27_Disclosure.swift */; };
+		A10000000000000000000049 /* Shared/Scenarios/S28_AnimationScopesAndReduceMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000059 /* Shared/Scenarios/S28_AnimationScopesAndReduceMotion.swift */; };
+		A10000000000000000000050 /* Shared/Scenarios/S29_ExpandTransitionPlatforms.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000060 /* Shared/Scenarios/S29_ExpandTransitionPlatforms.swift */; };
+		A10000000000000000000051 /* Shared/Scenarios/S30_EditorialCardToArticle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000061 /* Shared/Scenarios/S30_EditorialCardToArticle.swift */; };
+		A10000000000000000000052 /* Shared/Scenarios/S31_ProfileCardToProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000062 /* Shared/Scenarios/S31_ProfileCardToProfile.swift */; };
+		A10000000000000000000053 /* TrellisFlux in Frameworks */ = {isa = PBXBuildFile; productRef = A20000000000000000000004 /* TrellisFlux */; };
+		A10000000000000000000054 /* TrellisFlux in Frameworks */ = {isa = PBXBuildFile; productRef = A20000000000000000000005 /* TrellisFlux */; };
+		A10000000000000000000055 /* TrellisFlux in Frameworks */ = {isa = PBXBuildFile; productRef = A20000000000000000000006 /* TrellisFlux */; };
+		A10000000000000000000056 /* Shared/Scenarios/S32_FluxFilterFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000070 /* Shared/Scenarios/S32_FluxFilterFeed.swift */; };
+		A10000000000000000000057 /* Shared/PerfRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000071 /* Shared/PerfRecorder.swift */; };
+		A10000000000000000000058 /* Shared/PerfHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000072 /* Shared/PerfHarness.swift */; };
+		A10000000000000000000059 /* Shared/Scenarios/S33_ScrollNodeInteraction.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000073 /* Shared/Scenarios/S33_ScrollNodeInteraction.swift */; };
+		B80100000000000000000004 = {isa = PBXBuildFile; fileRef = B80100000000000000000002; };
+		B80200000000000000000004 = {isa = PBXBuildFile; fileRef = B80200000000000000000002; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A30000000000000000000010 /* iOS/PlaygroundApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOS/PlaygroundApp.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000011 /* tvOS/PlaygroundApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = tvOS/PlaygroundApp.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000012 /* macOS/PlaygroundApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = macOS/PlaygroundApp.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000020 /* Shared/Scenario.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenario.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000021 /* Shared/Scenarios/S01_SingleNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S01_SingleNode.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000022 /* Shared/Scenarios/S02_RowOfThree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S02_RowOfThree.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000023 /* Shared/Scenarios/S03_Column.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S03_Column.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000024 /* Shared/Scenarios/S04_Justify.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S04_Justify.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000025 /* Shared/Scenarios/S05_Align.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S05_Align.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000026 /* Shared/Scenarios/S06_Gap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S06_Gap.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000027 /* Shared/Scenarios/S07_PaddingMargin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S07_PaddingMargin.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000028 /* Shared/Scenarios/S08_Grow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S08_Grow.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000029 /* Shared/Scenarios/S09_Sizes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S09_Sizes.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000030 /* Shared/Scenarios/S10_Nesting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S10_Nesting.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000031 /* Shared/Scenarios/S11_Absolute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S11_Absolute.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000032 /* Shared/Scenarios/S12_Wrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S12_Wrap.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000033 /* Shared/Scenarios/S13_RTL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S13_RTL.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000034 /* Shared/Scenarios/S14_SafeArea.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S14_SafeArea.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000035 /* Shared/Scenarios/S15_DynamicMutation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S15_DynamicMutation.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000036 /* Shared/Scenarios/S16_ProfileCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S16_ProfileCard.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000037 /* Shared/Scenarios/S17_AnalyticsDashboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S17_AnalyticsDashboard.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000038 /* Shared/Scenarios/S18_ChatFeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S18_ChatFeed.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000039 /* Shared/Scenarios/S19_MediaPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S19_MediaPlayer.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000040 /* Playground-iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = "Playground-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A30000000000000000000041 /* Playground-tvOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = "Playground-tvOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A30000000000000000000042 /* Playground-macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = "Playground-macOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A30000000000000000000050 /* Shared/Scenarios/S20_ReactiveUpdates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S20_ReactiveUpdates.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000051 /* Shared/Scenarios/S21_TapCounter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S21_TapCounter.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000052 /* Shared/Scenarios/S22_FocusGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S22_FocusGrid.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000053 /* Shared/Scenarios/S23_Semantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S23_Semantics.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000054 /* Shared/AccessibilityDump.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/AccessibilityDump.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000055 /* Shared/Scenarios/S24_Typography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S24_Typography.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000056 /* Shared/Scenarios/S25_TextList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S25_TextList.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000057 /* Shared/Scenarios/S26_LabeledSemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S26_LabeledSemantics.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000058 /* Shared/Scenarios/S27_Disclosure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S27_Disclosure.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000059 /* Shared/Scenarios/S28_AnimationScopesAndReduceMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S28_AnimationScopesAndReduceMotion.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000060 /* Shared/Scenarios/S29_ExpandTransitionPlatforms.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S29_ExpandTransitionPlatforms.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000061 /* Shared/Scenarios/S30_EditorialCardToArticle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S30_EditorialCardToArticle.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000062 /* Shared/Scenarios/S31_ProfileCardToProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S31_ProfileCardToProfile.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000070 /* Shared/Scenarios/S32_FluxFilterFeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S32_FluxFilterFeed.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000071 /* Shared/PerfRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/PerfRecorder.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000072 /* Shared/PerfHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/PerfHarness.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000073 /* Shared/Scenarios/S33_ScrollNodeInteraction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S33_ScrollNodeInteraction.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000074 /* Shared/Scenarios/S34_NestedScrollArticle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S34_NestedScrollArticle.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000075 /* Shared/Scenarios/S35_ListNodeFeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S35_ListNodeFeed.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000076 /* Shared/Scenarios/S36_GridNodeMedia.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S36_GridNodeMedia.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000077 /* Shared/Scenarios/S37_TableNodeInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S37_TableNodeInbox.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000078 /* Shared/Scenarios/S38_PagerTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S38_PagerTabs.swift; sourceTree = SOURCE_ROOT; };
+		B80100000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UITests/iOSScrollTests.swift"; sourceTree = "<group>"; };
+		B80100000000000000000003 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = "R08-iOS-UITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		B80200000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UITests/tvOSScrollTests.swift"; sourceTree = "<group>"; };
+		B80200000000000000000003 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = "R08-tvOS-UITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A40000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000001 /* TrellisUIKit in Frameworks */,
+				A10000000000000000000053 /* TrellisFlux in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A40000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000002 /* TrellisUIKit in Frameworks */,
+				A10000000000000000000054 /* TrellisFlux in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A40000000000000000000003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000003 /* TrellisAppKit in Frameworks */,
+				A10000000000000000000055 /* TrellisFlux in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A50000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				B80100000000000000000002,
+				B80200000000000000000002,
+				A50000000000000000000002 /* Sources */,
+				A50000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A50000000000000000000002 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				A30000000000000000000010 /* iOS/PlaygroundApp.swift */,
+				A30000000000000000000011 /* tvOS/PlaygroundApp.swift */,
+				A30000000000000000000012 /* macOS/PlaygroundApp.swift */,
+				A30000000000000000000020 /* Shared/Scenario.swift */,
+				A30000000000000000000021 /* Shared/Scenarios/S01_SingleNode.swift */,
+				A30000000000000000000022 /* Shared/Scenarios/S02_RowOfThree.swift */,
+				A30000000000000000000023 /* Shared/Scenarios/S03_Column.swift */,
+				A30000000000000000000024 /* Shared/Scenarios/S04_Justify.swift */,
+				A30000000000000000000025 /* Shared/Scenarios/S05_Align.swift */,
+				A30000000000000000000026 /* Shared/Scenarios/S06_Gap.swift */,
+				A30000000000000000000027 /* Shared/Scenarios/S07_PaddingMargin.swift */,
+				A30000000000000000000028 /* Shared/Scenarios/S08_Grow.swift */,
+				A30000000000000000000029 /* Shared/Scenarios/S09_Sizes.swift */,
+				A30000000000000000000030 /* Shared/Scenarios/S10_Nesting.swift */,
+				A30000000000000000000031 /* Shared/Scenarios/S11_Absolute.swift */,
+				A30000000000000000000032 /* Shared/Scenarios/S12_Wrap.swift */,
+				A30000000000000000000033 /* Shared/Scenarios/S13_RTL.swift */,
+				A30000000000000000000034 /* Shared/Scenarios/S14_SafeArea.swift */,
+				A30000000000000000000035 /* Shared/Scenarios/S15_DynamicMutation.swift */,
+				A30000000000000000000036 /* Shared/Scenarios/S16_ProfileCard.swift */,
+				A30000000000000000000037 /* Shared/Scenarios/S17_AnalyticsDashboard.swift */,
+				A30000000000000000000038 /* Shared/Scenarios/S18_ChatFeed.swift */,
+				A30000000000000000000039 /* Shared/Scenarios/S19_MediaPlayer.swift */,
+				A30000000000000000000050 /* Shared/Scenarios/S20_ReactiveUpdates.swift */,
+				A30000000000000000000051 /* Shared/Scenarios/S21_TapCounter.swift */,
+				A30000000000000000000052 /* Shared/Scenarios/S22_FocusGrid.swift */,
+				A30000000000000000000053 /* Shared/Scenarios/S23_Semantics.swift */,
+				A30000000000000000000054 /* Shared/AccessibilityDump.swift */,
+				A30000000000000000000055 /* Shared/Scenarios/S24_Typography.swift */,
+				A30000000000000000000056 /* Shared/Scenarios/S25_TextList.swift */,
+				A30000000000000000000057 /* Shared/Scenarios/S26_LabeledSemantics.swift */,
+				A30000000000000000000058 /* Shared/Scenarios/S27_Disclosure.swift */,
+				A30000000000000000000059 /* Shared/Scenarios/S28_AnimationScopesAndReduceMotion.swift */,
+				A30000000000000000000060 /* Shared/Scenarios/S29_ExpandTransitionPlatforms.swift */,
+				A30000000000000000000061 /* Shared/Scenarios/S30_EditorialCardToArticle.swift */,
+				A30000000000000000000062 /* Shared/Scenarios/S31_ProfileCardToProfile.swift */,
+				A30000000000000000000070 /* Shared/Scenarios/S32_FluxFilterFeed.swift */,
+				A30000000000000000000071 /* Shared/PerfRecorder.swift */,
+				A30000000000000000000072 /* Shared/PerfHarness.swift */,
+				A30000000000000000000073 /* Shared/Scenarios/S33_ScrollNodeInteraction.swift */,
+				A30000000000000000000074 /* Shared/Scenarios/S34_NestedScrollArticle.swift */,
+				A30000000000000000000075 /* Shared/Scenarios/S35_ListNodeFeed.swift */,
+				A30000000000000000000076 /* Shared/Scenarios/S36_GridNodeMedia.swift */,
+				A30000000000000000000077 /* Shared/Scenarios/S37_TableNodeInbox.swift */,
+				A30000000000000000000078 /* Shared/Scenarios/S38_PagerTabs.swift */,
+			);
+			name = Sources;
+			sourceTree = "<group>";
+		};
+		A50000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B80100000000000000000003,
+				B80200000000000000000003,
+				A30000000000000000000040 /* Playground-iOS.app */,
+				A30000000000000000000041 /* Playground-tvOS.app */,
+				A30000000000000000000042 /* Playground-macOS.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A60000000000000000000001 /* Playground-iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A70000000000000000000001 /* Build configuration list for PBXNativeTarget "Playground-iOS" */;
+			buildPhases = (
+				A40000000000000000000001 /* Frameworks */,
+				A80000000000000000000001 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "Playground-iOS";
+			packageProductDependencies = (
+				A20000000000000000000001 /* TrellisUIKit */,
+				A20000000000000000000004 /* TrellisFlux */,
+			);
+			productName = "Playground-iOS";
+			productReference = A30000000000000000000040 /* Playground-iOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A60000000000000000000002 /* Playground-tvOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A70000000000000000000002 /* Build configuration list for PBXNativeTarget "Playground-tvOS" */;
+			buildPhases = (
+				A40000000000000000000002 /* Frameworks */,
+				A80000000000000000000002 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "Playground-tvOS";
+			packageProductDependencies = (
+				A20000000000000000000002 /* TrellisUIKit */,
+				A20000000000000000000005 /* TrellisFlux */,
+			);
+			productName = "Playground-tvOS";
+			productReference = A30000000000000000000041 /* Playground-tvOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A60000000000000000000003 /* Playground-macOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A70000000000000000000003 /* Build configuration list for PBXNativeTarget "Playground-macOS" */;
+			buildPhases = (
+				A40000000000000000000003 /* Frameworks */,
+				A80000000000000000000003 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "Playground-macOS";
+			packageProductDependencies = (
+				A20000000000000000000003 /* TrellisAppKit */,
+				A20000000000000000000006 /* TrellisFlux */,
+			);
+			productName = "Playground-macOS";
+			productReference = A30000000000000000000042 /* Playground-macOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		B80100000000000000000001 = {isa = PBXNativeTarget; buildConfigurationList = B80100000000000000000006; buildPhases = (B80100000000000000000005,); buildRules = (); dependencies = (B80100000000000000000009,); name = "R08-iOS-UITests"; productName = "R08-iOS-UITests"; productReference = B80100000000000000000003; productType = "com.apple.product-type.bundle.ui-testing"; };
+		B80200000000000000000001 = {isa = PBXNativeTarget; buildConfigurationList = B80200000000000000000006; buildPhases = (B80200000000000000000005,); buildRules = (); dependencies = (B80200000000000000000009,); name = "R08-tvOS-UITests"; productName = "R08-tvOS-UITests"; productReference = B80200000000000000000003; productType = "com.apple.product-type.bundle.ui-testing"; };
+/* End PBXNativeTarget section */
+
+/* Begin PBXTargetDependency section */
+		B80100000000000000000009 = {isa = PBXTargetDependency; target = A60000000000000000000001; };
+		B80200000000000000000009 = {isa = PBXTargetDependency; target = A60000000000000000000002; };
+/* End PBXTargetDependency section */
+
+/* Begin PBXProject section */
+		A90000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					A60000000000000000000001 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					A60000000000000000000002 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					A60000000000000000000003 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+				};
+			};
+			buildConfigurationList = A70000000000000000000004 /* Build configuration list for PBXProject "Playground" */;
+			compatibilityVersion = "Xcode 16.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A50000000000000000000001;
+			packageReferences = (
+				AA00000000000000000000001 /* XCLocalSwiftPackageReference ".." */,
+			);
+			productRefGroup = A50000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B80200000000000000000001,
+				B80100000000000000000001,
+				A60000000000000000000001 /* Playground-iOS */,
+				A60000000000000000000002 /* Playground-tvOS */,
+				A60000000000000000000003 /* Playground-macOS */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A80000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000010 /* iOS/PlaygroundApp.swift in Sources */,
+				A10000000000000000000020 /* Shared/Scenario.swift in Sources */,
+				A10000000000000000000021 /* Shared/Scenarios/S01_SingleNode.swift in Sources */,
+				A10000000000000000000022 /* Shared/Scenarios/S02_RowOfThree.swift in Sources */,
+				A10000000000000000000023 /* Shared/Scenarios/S03_Column.swift in Sources */,
+				A10000000000000000000024 /* Shared/Scenarios/S04_Justify.swift in Sources */,
+				A10000000000000000000025 /* Shared/Scenarios/S05_Align.swift in Sources */,
+				A10000000000000000000026 /* Shared/Scenarios/S06_Gap.swift in Sources */,
+				A10000000000000000000027 /* Shared/Scenarios/S07_PaddingMargin.swift in Sources */,
+				A10000000000000000000028 /* Shared/Scenarios/S08_Grow.swift in Sources */,
+				A10000000000000000000029 /* Shared/Scenarios/S09_Sizes.swift in Sources */,
+				A10000000000000000000030 /* Shared/Scenarios/S10_Nesting.swift in Sources */,
+				A10000000000000000000031 /* Shared/Scenarios/S11_Absolute.swift in Sources */,
+				A10000000000000000000032 /* Shared/Scenarios/S12_Wrap.swift in Sources */,
+				A10000000000000000000033 /* Shared/Scenarios/S13_RTL.swift in Sources */,
+				A10000000000000000000034 /* Shared/Scenarios/S14_SafeArea.swift in Sources */,
+				A10000000000000000000035 /* Shared/Scenarios/S15_DynamicMutation.swift in Sources */,
+				A10000000000000000000036 /* Shared/Scenarios/S16_ProfileCard.swift in Sources */,
+				A10000000000000000000037 /* Shared/Scenarios/S17_AnalyticsDashboard.swift in Sources */,
+				A10000000000000000000038 /* Shared/Scenarios/S18_ChatFeed.swift in Sources */,
+				A10000000000000000000039 /* Shared/Scenarios/S19_MediaPlayer.swift in Sources */,
+				A10000000000000000000040 /* Shared/Scenarios/S20_ReactiveUpdates.swift in Sources */,
+				A10000000000000000000041 /* Shared/Scenarios/S21_TapCounter.swift in Sources */,
+				A10000000000000000000042 /* Shared/Scenarios/S22_FocusGrid.swift in Sources */,
+				A10000000000000000000043 /* Shared/Scenarios/S23_Semantics.swift in Sources */,
+				A10000000000000000000044 /* Shared/AccessibilityDump.swift in Sources */,
+				A10000000000000000000045 /* Shared/Scenarios/S24_Typography.swift in Sources */,
+				A10000000000000000000046 /* Shared/Scenarios/S25_TextList.swift in Sources */,
+				A10000000000000000000047 /* Shared/Scenarios/S26_LabeledSemantics.swift in Sources */,
+				A10000000000000000000048 /* Shared/Scenarios/S27_Disclosure.swift in Sources */,
+				A10000000000000000000049 /* Shared/Scenarios/S28_AnimationScopesAndReduceMotion.swift in Sources */,
+				A10000000000000000000050 /* Shared/Scenarios/S29_ExpandTransitionPlatforms.swift in Sources */,
+				A10000000000000000000051 /* Shared/Scenarios/S30_EditorialCardToArticle.swift in Sources */,
+				A10000000000000000000052 /* Shared/Scenarios/S31_ProfileCardToProfile.swift in Sources */,
+				A10000000000000000000056 /* Shared/Scenarios/S32_FluxFilterFeed.swift in Sources */,
+				A10000000000000000000057 /* Shared/PerfRecorder.swift in Sources */,
+				A10000000000000000000058 /* Shared/PerfHarness.swift in Sources */,
+				A10000000000000000000059 /* Shared/Scenarios/S33_ScrollNodeInteraction.swift in Sources */,
+				89DE0701305D355E00A9DDF8 /* Shared/Scenarios/S34_NestedScrollArticle.swift in Sources */,
+				89DE0801305D355E00A9DDF8 /* Shared/Scenarios/S35_ListNodeFeed.swift in Sources */,
+				89DE0901305D355E00A9DDF8 /* Shared/Scenarios/S36_GridNodeMedia.swift in Sources */,
+				89DE0A01305D355E00A9DDF8 /* Shared/Scenarios/S37_TableNodeInbox.swift in Sources */,
+				89DE0B01305D355E00A9DDF8 /* Shared/Scenarios/S38_PagerTabs.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A80000000000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000011 /* tvOS/PlaygroundApp.swift in Sources */,
+				89DE05EF305D355E00A9DDF8 /* Shared/Scenario.swift in Sources */,
+				89DE05F0305D355E00A9DDF8 /* Shared/Scenarios/S01_SingleNode.swift in Sources */,
+				89DE05F1305D355E00A9DDF8 /* Shared/Scenarios/S02_RowOfThree.swift in Sources */,
+				89DE05F2305D355E00A9DDF8 /* Shared/Scenarios/S03_Column.swift in Sources */,
+				89DE05F3305D355E00A9DDF8 /* Shared/Scenarios/S04_Justify.swift in Sources */,
+				89DE05F4305D355E00A9DDF8 /* Shared/Scenarios/S05_Align.swift in Sources */,
+				89DE05F5305D355E00A9DDF8 /* Shared/Scenarios/S06_Gap.swift in Sources */,
+				89DE05F6305D355E00A9DDF8 /* Shared/Scenarios/S07_PaddingMargin.swift in Sources */,
+				89DE05F7305D355E00A9DDF8 /* Shared/Scenarios/S08_Grow.swift in Sources */,
+				89DE05F8305D355E00A9DDF8 /* Shared/Scenarios/S09_Sizes.swift in Sources */,
+				89DE05F9305D355E00A9DDF8 /* Shared/Scenarios/S10_Nesting.swift in Sources */,
+				89DE05FA305D355E00A9DDF8 /* Shared/Scenarios/S11_Absolute.swift in Sources */,
+				89DE05FB305D355E00A9DDF8 /* Shared/Scenarios/S12_Wrap.swift in Sources */,
+				89DE05FC305D355E00A9DDF8 /* Shared/Scenarios/S13_RTL.swift in Sources */,
+				89DE05FD305D355E00A9DDF8 /* Shared/Scenarios/S14_SafeArea.swift in Sources */,
+				89DE05FE305D355E00A9DDF8 /* Shared/Scenarios/S15_DynamicMutation.swift in Sources */,
+				89DE05FF305D355E00A9DDF8 /* Shared/Scenarios/S16_ProfileCard.swift in Sources */,
+				89DE0600305D355E00A9DDF8 /* Shared/Scenarios/S17_AnalyticsDashboard.swift in Sources */,
+				89DE0601305D355E00A9DDF8 /* Shared/Scenarios/S18_ChatFeed.swift in Sources */,
+				89DE0602305D355E00A9DDF8 /* Shared/Scenarios/S19_MediaPlayer.swift in Sources */,
+				89DE0603305D355E00A9DDF8 /* Shared/Scenarios/S20_ReactiveUpdates.swift in Sources */,
+				89DE0604305D355E00A9DDF8 /* Shared/Scenarios/S21_TapCounter.swift in Sources */,
+				89DE0605305D355E00A9DDF8 /* Shared/Scenarios/S22_FocusGrid.swift in Sources */,
+				89DE0606305D355E00A9DDF8 /* Shared/Scenarios/S23_Semantics.swift in Sources */,
+				89DE0607305D355E00A9DDF8 /* Shared/AccessibilityDump.swift in Sources */,
+				89DE0608305D355E00A9DDF8 /* Shared/Scenarios/S24_Typography.swift in Sources */,
+				89DE0609305D355E00A9DDF8 /* Shared/Scenarios/S25_TextList.swift in Sources */,
+				89DE060A305D355E00A9DDF8 /* Shared/Scenarios/S26_LabeledSemantics.swift in Sources */,
+				89DE060B305D355E00A9DDF8 /* Shared/Scenarios/S27_Disclosure.swift in Sources */,
+				89DE060C305D355E00A9DDF8 /* Shared/Scenarios/S28_AnimationScopesAndReduceMotion.swift in Sources */,
+				89DE060D305D355E00A9DDF8 /* Shared/Scenarios/S29_ExpandTransitionPlatforms.swift in Sources */,
+				89DE060E305D355E00A9DDF8 /* Shared/Scenarios/S30_EditorialCardToArticle.swift in Sources */,
+				89DE060F305D355E00A9DDF8 /* Shared/Scenarios/S31_ProfileCardToProfile.swift in Sources */,
+				89DE0610305D355E00A9DDF8 /* Shared/Scenarios/S32_FluxFilterFeed.swift in Sources */,
+				89DE0611305D355E00A9DDF8 /* Shared/PerfRecorder.swift in Sources */,
+				89DE0612305D355E00A9DDF8 /* Shared/PerfHarness.swift in Sources */,
+				89DE0613305D355E00A9DDF8 /* Shared/Scenarios/S33_ScrollNodeInteraction.swift in Sources */,
+				89DE0702305D355E00A9DDF8 /* Shared/Scenarios/S34_NestedScrollArticle.swift in Sources */,
+				89DE0802305D355E00A9DDF8 /* Shared/Scenarios/S35_ListNodeFeed.swift in Sources */,
+				89DE0902305D355E00A9DDF8 /* Shared/Scenarios/S36_GridNodeMedia.swift in Sources */,
+				89DE0A02305D355E00A9DDF8 /* Shared/Scenarios/S37_TableNodeInbox.swift in Sources */,
+				89DE0B02305D355E00A9DDF8 /* Shared/Scenarios/S38_PagerTabs.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A80000000000000000000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000012 /* macOS/PlaygroundApp.swift in Sources */,
+				89DE0614305D355E00A9DDF8 /* Shared/Scenario.swift in Sources */,
+				89DE0615305D355E00A9DDF8 /* Shared/Scenarios/S01_SingleNode.swift in Sources */,
+				89DE0616305D355E00A9DDF8 /* Shared/Scenarios/S02_RowOfThree.swift in Sources */,
+				89DE0617305D355E00A9DDF8 /* Shared/Scenarios/S03_Column.swift in Sources */,
+				89DE0618305D355E00A9DDF8 /* Shared/Scenarios/S04_Justify.swift in Sources */,
+				89DE0619305D355E00A9DDF8 /* Shared/Scenarios/S05_Align.swift in Sources */,
+				89DE061A305D355E00A9DDF8 /* Shared/Scenarios/S06_Gap.swift in Sources */,
+				89DE061B305D355E00A9DDF8 /* Shared/Scenarios/S07_PaddingMargin.swift in Sources */,
+				89DE061C305D355E00A9DDF8 /* Shared/Scenarios/S08_Grow.swift in Sources */,
+				89DE061D305D355E00A9DDF8 /* Shared/Scenarios/S09_Sizes.swift in Sources */,
+				89DE061E305D355E00A9DDF8 /* Shared/Scenarios/S10_Nesting.swift in Sources */,
+				89DE061F305D355E00A9DDF8 /* Shared/Scenarios/S11_Absolute.swift in Sources */,
+				89DE0620305D355E00A9DDF8 /* Shared/Scenarios/S12_Wrap.swift in Sources */,
+				89DE0621305D355E00A9DDF8 /* Shared/Scenarios/S13_RTL.swift in Sources */,
+				89DE0622305D355E00A9DDF8 /* Shared/Scenarios/S14_SafeArea.swift in Sources */,
+				89DE0623305D355E00A9DDF8 /* Shared/Scenarios/S15_DynamicMutation.swift in Sources */,
+				89DE0624305D355E00A9DDF8 /* Shared/Scenarios/S16_ProfileCard.swift in Sources */,
+				89DE0625305D355E00A9DDF8 /* Shared/Scenarios/S17_AnalyticsDashboard.swift in Sources */,
+				89DE0626305D355E00A9DDF8 /* Shared/Scenarios/S18_ChatFeed.swift in Sources */,
+				89DE0627305D355E00A9DDF8 /* Shared/Scenarios/S19_MediaPlayer.swift in Sources */,
+				89DE0628305D355E00A9DDF8 /* Shared/Scenarios/S20_ReactiveUpdates.swift in Sources */,
+				89DE0629305D355E00A9DDF8 /* Shared/Scenarios/S21_TapCounter.swift in Sources */,
+				89DE062A305D355E00A9DDF8 /* Shared/Scenarios/S22_FocusGrid.swift in Sources */,
+				89DE062B305D355E00A9DDF8 /* Shared/Scenarios/S23_Semantics.swift in Sources */,
+				89DE062C305D355E00A9DDF8 /* Shared/AccessibilityDump.swift in Sources */,
+				89DE062D305D355E00A9DDF8 /* Shared/Scenarios/S24_Typography.swift in Sources */,
+				89DE062E305D355E00A9DDF8 /* Shared/Scenarios/S25_TextList.swift in Sources */,
+				89DE062F305D355E00A9DDF8 /* Shared/Scenarios/S26_LabeledSemantics.swift in Sources */,
+				89DE0630305D355E00A9DDF8 /* Shared/Scenarios/S27_Disclosure.swift in Sources */,
+				89DE0631305D355E00A9DDF8 /* Shared/Scenarios/S28_AnimationScopesAndReduceMotion.swift in Sources */,
+				89DE0632305D355E00A9DDF8 /* Shared/Scenarios/S29_ExpandTransitionPlatforms.swift in Sources */,
+				89DE0633305D355E00A9DDF8 /* Shared/Scenarios/S30_EditorialCardToArticle.swift in Sources */,
+				89DE0634305D355E00A9DDF8 /* Shared/Scenarios/S31_ProfileCardToProfile.swift in Sources */,
+				89DE0635305D355E00A9DDF8 /* Shared/Scenarios/S32_FluxFilterFeed.swift in Sources */,
+				89DE0636305D355E00A9DDF8 /* Shared/PerfRecorder.swift in Sources */,
+				89DE0637305D355E00A9DDF8 /* Shared/PerfHarness.swift in Sources */,
+				89DE0638305D355E00A9DDF8 /* Shared/Scenarios/S33_ScrollNodeInteraction.swift in Sources */,
+				89DE0703305D355E00A9DDF8 /* Shared/Scenarios/S34_NestedScrollArticle.swift in Sources */,
+				89DE0803305D355E00A9DDF8 /* Shared/Scenarios/S35_ListNodeFeed.swift in Sources */,
+				89DE0903305D355E00A9DDF8 /* Shared/Scenarios/S36_GridNodeMedia.swift in Sources */,
+				89DE0A03305D355E00A9DDF8 /* Shared/Scenarios/S37_TableNodeInbox.swift in Sources */,
+				89DE0B03305D355E00A9DDF8 /* Shared/Scenarios/S38_PagerTabs.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B80100000000000000000005 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B80100000000000000000004,); runOnlyForDeploymentPostprocessing = 0; };
+		B80200000000000000000005 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B80200000000000000000004,); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		AB0000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		AB0000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		AB0000000000000000000011 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET)";
+				PRODUCT_BUNDLE_IDENTIFIER = org.trellis.playground.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AB0000000000000000000012 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET)";
+				PRODUCT_BUNDLE_IDENTIFIER = org.trellis.playground.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		AB0000000000000000000021 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = org.trellis.playground.tvos;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_TVOS_DEPLOYMENT_TARGET)";
+			};
+			name = Debug;
+		};
+		AB0000000000000000000022 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = org.trellis.playground.tvos;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_TVOS_DEPLOYMENT_TARGET)";
+			};
+			name = Release;
+		};
+		AB0000000000000000000031 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.trellis.playground.macos;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		AB0000000000000000000032 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.trellis.playground.macos;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		B80100000000000000000007 = {isa = XCBuildConfiguration; buildSettings = { GENERATE_INFOPLIST_FILE = YES; CODE_SIGNING_ALLOWED = NO; PRODUCT_BUNDLE_IDENTIFIER = "org.trellis.r08.ios.uitests"; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_VERSION = 6.0; TARGETED_DEVICE_FAMILY = "1,2"; TEST_TARGET_NAME = "Playground-iOS"; }; name = Debug; };
+		B80100000000000000000008 = {isa = XCBuildConfiguration; buildSettings = { GENERATE_INFOPLIST_FILE = YES; CODE_SIGNING_ALLOWED = NO; PRODUCT_BUNDLE_IDENTIFIER = "org.trellis.r08.ios.uitests"; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_VERSION = 6.0; TARGETED_DEVICE_FAMILY = "1,2"; TEST_TARGET_NAME = "Playground-iOS"; }; name = Release; };
+		B80200000000000000000007 = {isa = XCBuildConfiguration; buildSettings = { GENERATE_INFOPLIST_FILE = YES; CODE_SIGNING_ALLOWED = NO; PRODUCT_BUNDLE_IDENTIFIER = "org.trellis.r08.tvos.uitests"; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = appletvos; SWIFT_VERSION = 6.0; TARGETED_DEVICE_FAMILY = "3"; TEST_TARGET_NAME = "Playground-tvOS"; }; name = Debug; };
+		B80200000000000000000008 = {isa = XCBuildConfiguration; buildSettings = { GENERATE_INFOPLIST_FILE = YES; CODE_SIGNING_ALLOWED = NO; PRODUCT_BUNDLE_IDENTIFIER = "org.trellis.r08.tvos.uitests"; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = appletvos; SWIFT_VERSION = 6.0; TARGETED_DEVICE_FAMILY = "3"; TEST_TARGET_NAME = "Playground-tvOS"; }; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A70000000000000000000001 /* Build configuration list for PBXNativeTarget "Playground-iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AB0000000000000000000011 /* Debug */,
+				AB0000000000000000000012 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A70000000000000000000002 /* Build configuration list for PBXNativeTarget "Playground-tvOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AB0000000000000000000021 /* Debug */,
+				AB0000000000000000000022 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A70000000000000000000003 /* Build configuration list for PBXNativeTarget "Playground-macOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AB0000000000000000000031 /* Debug */,
+				AB0000000000000000000032 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A70000000000000000000004 /* Build configuration list for PBXProject "Playground" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AB0000000000000000000001 /* Debug */,
+				AB0000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B80100000000000000000006 = {isa = XCConfigurationList; buildConfigurations = (B80100000000000000000007, B80100000000000000000008,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		B80200000000000000000006 = {isa = XCConfigurationList; buildConfigurations = (B80200000000000000000007, B80200000000000000000008,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		AA00000000000000000000001 /* XCLocalSwiftPackageReference ".." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A20000000000000000000001 /* TrellisUIKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA00000000000000000000001 /* XCLocalSwiftPackageReference ".." */;
+			productName = TrellisUIKit;
+		};
+		A20000000000000000000002 /* TrellisUIKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA00000000000000000000001 /* XCLocalSwiftPackageReference ".." */;
+			productName = TrellisUIKit;
+		};
+		A20000000000000000000003 /* TrellisAppKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA00000000000000000000001 /* XCLocalSwiftPackageReference ".." */;
+			productName = TrellisAppKit;
+		};
+		A20000000000000000000004 /* TrellisFlux */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA00000000000000000000001 /* XCLocalSwiftPackageReference ".." */;
+			productName = TrellisFlux;
+		};
+		A20000000000000000000005 /* TrellisFlux */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA00000000000000000000001 /* XCLocalSwiftPackageReference ".." */;
+			productName = TrellisFlux;
+		};
+		A20000000000000000000006 /* TrellisFlux */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA00000000000000000000001 /* XCLocalSwiftPackageReference ".." */;
+			productName = TrellisFlux;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = A90000000000000000000001 /* Project object */;
+}

@@ -1,0 +1,33 @@
+{
+  "configuration": "release",
+  "date": "2026-09-12T17:32:57Z",
+  "fixtures": [
+    {
+      "counters": {
+        "display-completed": 1200,
+        "display-dropped": 0,
+        "display-scheduled": 1200,
+        "raw-edits": 3000
+      },
+      "memoryMiB": {},
+      "name": "text-burst-edits",
+      "notes": [],
+      "parameters": {
+        "edits-per-row": 3,
+        "rows": 200
+      },
+      "timingsMs": {
+        "burst-to-fully-drained": {
+          "count": 5,
+          "max": 27.748,
+          "p50": 27.512,
+          "p95": 27.748
+        }
+      }
+    }
+  ],
+  "host": "resoul\u2019s MacBook Air",
+  "iterations": 20,
+  "logMode": "off",
+  "os": "Version 26.4.1 (Build 25E253)"
+}

@@ -1,0 +1,176 @@
+{
+  "module": "TrellisFlux",
+  "platform": "arm64-apple-macosx14.0",
+  "schemaVersion": 1,
+  "symbols": [
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor final class FluxStateBinding<Value> where Value : Equatable, Value : Sendable",
+      "identifier": "s:11TrellisFlux0B12StateBindingC",
+      "kind": "swift.class",
+      "pathComponents": [
+        "FluxStateBinding"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func cancel()",
+      "identifier": "s:11TrellisFlux0B12StateBindingC6cancelyyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "FluxStateBinding",
+        "cancel()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var isActive: Bool { get }",
+      "identifier": "s:11TrellisFlux0B12StateBindingC8isActiveSbvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "FluxStateBinding",
+        "isActive"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor final class EffectOwner<Key> where Key : Hashable, Key : Sendable",
+      "identifier": "s:11TrellisFlux11EffectOwnerC",
+      "kind": "swift.class",
+      "pathComponents": [
+        "EffectOwner"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@discardableResult @MainActor func run<Result>(_ key: Key, onConflict: EffectOwner<Key>.Conflict = .restart, operation: @escaping @Sendable () async -> Result, apply: @escaping @MainActor @Sendable (Result) -> Void) -> Bool where Result : Sendable",
+      "identifier": "s:11TrellisFlux11EffectOwnerC3run_10onConflict9operation5applySbx_AC0G0Oyx_Gqd__yYaYbcyqd__YbScMYccts8SendableRd__lF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "EffectOwner",
+        "run(_:onConflict:operation:apply:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func cancel(_ key: Key)",
+      "identifier": "s:11TrellisFlux11EffectOwnerC6cancelyyxF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "EffectOwner",
+        "cancel(_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "enum Conflict",
+      "identifier": "s:11TrellisFlux11EffectOwnerC8ConflictO",
+      "kind": "swift.enum",
+      "pathComponents": [
+        "EffectOwner",
+        "Conflict"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "case ignoreIfRunning",
+      "identifier": "s:11TrellisFlux11EffectOwnerC8ConflictO15ignoreIfRunningyAEyx_GAGmSHRzs8SendableRzlF",
+      "kind": "swift.enum.case",
+      "pathComponents": [
+        "EffectOwner",
+        "Conflict",
+        "ignoreIfRunning"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "case restart",
+      "identifier": "s:11TrellisFlux11EffectOwnerC8ConflictO7restartyAEyx_GAGmSHRzs8SendableRzlF",
+      "kind": "swift.enum.case",
+      "pathComponents": [
+        "EffectOwner",
+        "Conflict",
+        "restart"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func cancelAll()",
+      "identifier": "s:11TrellisFlux11EffectOwnerC9cancelAllyyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "EffectOwner",
+        "cancelAll()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func isRunning(_ key: Key) -> Bool",
+      "identifier": "s:11TrellisFlux11EffectOwnerC9isRunningySbxF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "EffectOwner",
+        "isRunning(_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor init()",
+      "identifier": "s:11TrellisFlux11EffectOwnerCACyxGycfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "EffectOwner",
+        "init()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "enum TrellisFlux",
+      "identifier": "s:11TrellisFluxAAO",
+      "kind": "swift.enum",
+      "pathComponents": [
+        "TrellisFlux"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "static let fluxVersion: String",
+      "identifier": "s:11TrellisFluxAAO11fluxVersionSSvpZ",
+      "kind": "swift.type.property",
+      "pathComponents": [
+        "TrellisFlux",
+        "fluxVersion"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "static func != (lhs: borrowing Self, rhs: borrowing Self) -> Bool",
+      "identifier": "s:SQsRi_zRi0_zrlE2neoiySbx_xtFZ::SYNTHESIZED::s:11TrellisFlux11EffectOwnerC8ConflictO",
+      "kind": "swift.func.op",
+      "pathComponents": [
+        "EffectOwner",
+        "Conflict",
+        "!=(_:_:)"
+      ]
+    }
+  ],
+  "toolchain": {
+    "sdk": "27.0",
+    "swift": "6.4"
+  }
+}

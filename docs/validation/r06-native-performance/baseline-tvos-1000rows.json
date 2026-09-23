@@ -1,0 +1,52 @@
+{
+  "environment" : {
+    "configuration" : "release",
+    "date" : "2026-09-15T09:38:07Z",
+    "deviceModel" : "Mac14,2",
+    "os" : "Version 26.5 (Build 23L470)",
+    "refreshRateHz" : 60,
+    "sourceRevision" : "d77ce64"
+  },
+  "fixtures" : [
+    {
+      "counters" : {
+        "nodes" : 1001,
+        "peak-resident-mib" : 177,
+        "resident-mib-after" : 115,
+        "resident-mib-before" : 99
+      },
+      "name" : "app-text-list-1000",
+      "notes" : [
+
+      ],
+      "parameters" : {
+        "rows" : 1000,
+        "seed" : 7,
+        "viewportHeight" : 1080,
+        "viewportWidth" : 1920
+      },
+      "timingsMs" : {
+        "attach-to-ready" : {
+          "count" : 1,
+          "dropped" : 0,
+          "max" : 10.435,
+          "min" : 10.435,
+          "p50" : 10.435,
+          "p95" : 10.435,
+          "p99" : 10.435
+        },
+        "resize-to-commit" : {
+          "count" : 20,
+          "dropped" : 0,
+          "max" : 907.242,
+          "min" : 803.093,
+          "p50" : 894.415,
+          "p95" : 906.017,
+          "p99" : 907.242
+        }
+      }
+    }
+  ],
+  "repeatIterations" : 20,
+  "warmupIterations" : 3
+}
