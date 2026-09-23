@@ -25,6 +25,11 @@
   пусты (TrellisCore +36, из них два синтезированных `!=`; TrellisRender +1); совпадает с разделом
   API ADR 0037. Обновлено `check_api.py --update --review-note docs/adr/0037-…` (коммит `d0fcb0b`);
   TrellisAppKit/TrellisUIKit/TrellisFlux и tvOS-поверхность UIKit без изменений.
+- `check_all.py --matrix`: policy, test_policy, test_verifier, format, manifest, library-build —
+  PASS; шаг `tests` (полный `swift test` внутри `verify_bootstrap.py`) упал на
+  `m12_gestureGrabbingAnInFlightOpenContinuesProgressWithoutResettingOrJumping` — дефект #60,
+  не R14. Причина найдена (тест полагался на реальное время, 2 s против нагрузки полного
+  прогона), тест исправлен: переход 60 s. Повтор matrix — ожидается; iOS/tvOS шаги не дошли.
 
 Решение: [ADR 0037](../adr/0037-tabbed-scroll-coordination.md) (вариант Telegram), разбор
 референса — [telegram-peerinfo-analysis.md](../telegram-peerinfo-analysis.md).
