@@ -302,7 +302,8 @@ D18), а вывод из §3–§4 для авторов P6.3/P6.4 при их �
 
 - Собственно чтение `PeerInfoPaneNode.swift`/`Panes/` (implementation-plan-6.md
   §1.1.1, заявлено как «следующие источники для проверки») — не выполнено
-  здесь; относится к R13/R14, не к базовому scroll-контракту.
+  здесь; относится к R13/R14, не к базовому scroll-контракту. Выполнено позже
+  отдельным документом: [telegram-peerinfo-analysis.md](telegram-peerinfo-analysis.md).
   `../old/Texture/Source/Details/ASLayoutRangeType.h` и `ASBatchFetching.mm`
   уже разобраны в плане §P6.8, не дублируются.
 - Numeric performance baseline (R06 §6.1 harness) — отдельный, ещё не

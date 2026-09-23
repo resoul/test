@@ -111,8 +111,10 @@ Telegram/Display как источник реализации. Просмотр�
   импортирует Display; panGesture вычисляет transitionFraction из горизонтального
   смещения, двигает panes и обновляет переключатель через updateTabSwitchFraction.
 - `../old/Telegram-iOS/submodules/TelegramUI/Components/PeerInfo/PeerInfoPaneNode/Sources/PeerInfoPaneNode.swift`
-  и каталог `Panes/` рядом с PeerInfoScreen — следующие источники для проверки
-  интерфейса страниц и их scroll-контрактов; подробный разбор ещё не выполнен.
+  и каталог `Panes/` рядом с PeerInfoScreen — интерфейс страниц и их
+  scroll-контракты. Разбор выполнен 2026-09-23 по upstream `6ad963e`:
+  [telegram-peerinfo-analysis.md](telegram-peerinfo-analysis.md) (владение
+  жестом, передача инерции, позиции страниц, расхождения с ADR 0029 и P6.5).
 
 Display — фундамент UI, а композиция профиля/pager находится в TelegramUI поверх
 него. R06/R13/R14 должны изучить оба слоя. Наличие похожего кадра не доказывает,
@@ -1254,6 +1256,11 @@ Simulator и пультом на Apple TV Simulator. Найдены #90, #91; #4
 Приёмка: одна модель выбранной страницы, нет отдельных несогласованных анимаций.
 
 ### R14 — Collapsing header и интеграция профиля
+
+До реализации — решение по модели вертикальной координации:
+[telegram-peerinfo-analysis.md](telegram-peerinfo-analysis.md) §7–§8. Вариант
+Telegram расходится с ADR 0029 (передача инерции второму scroll view) и P6.5
+(сброс позиций страниц при раскрытии шапки); без решения пользователя не начинать.
 
 - [ ] Реализовать TabbedScrollNode/Tab/TabsNode по P6.5, оба режима .pinned/.inline;
   automatic отключает row swipe внутри pager; проверить explicit policies
