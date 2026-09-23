@@ -147,12 +147,14 @@ def check_consumer(check):
     source.mkdir(parents=True, exist_ok=True)
     # JSON quoting is valid for this ordinary Swift path literal, not shell escaping.
     package_path = json.dumps(str(ROOT))
+    # `name:` pins the name `package: "Trellis"` resolves against; without it SwiftPM takes
+    # the checkout directory's name, and a clone not named Trellis fails (#94).
     (consumer / 'Package.swift').write_text('''// swift-tools-version: 6.0
 import PackageDescription
 let package = Package(
     name: "TrellisConsumer",
     platforms: [.macOS(.v14)],
-    dependencies: [.package(path: ''' + package_path + ''')],
+    dependencies: [.package(name: "Trellis", path: ''' + package_path + ''')],
     targets: [.executableTarget(name: "Smoke", dependencies: [
         .product(name: "TrellisCore", package: "Trellis"),
         .product(name: "TrellisRender", package: "Trellis"),

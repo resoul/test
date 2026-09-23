@@ -1,6 +1,6 @@
 # R14 — Collapsing header и интеграция профиля (этап 1)
 
-Статус на 2026-09-23: **этап 1 собирается, полный `swift test`, формат и API baseline в порядке; matrix и Playground не проверены.** Код написан
+Статус на 2026-09-23: **этап 1 собирается, полный `swift test`, формат и API baseline в порядке; matrix до iOS/tvOS не дошёл (#94), Playground S39 — первый запуск на iPhone Simulator, чек-лист не пройден.** Код написан
 в облачной сессии на Linux без Swift и Xcode (`download.swift.org` закрыт сетевой политикой
 окружения); сборка и тесты — на Mac пользователя по списку в разделе «Проверки». Карточка не
 закрыта; этап 2 (передача инерции) не начат.
@@ -29,7 +29,12 @@
   PASS; шаг `tests` (полный `swift test` внутри `verify_bootstrap.py`) упал на
   `m12_gestureGrabbingAnInFlightOpenContinuesProgressWithoutResettingOrJumping` — дефект #60,
   не R14. Причина найдена (тест полагался на реальное время, 2 s против нагрузки полного
-  прогона), тест исправлен: переход 60 s. Повтор matrix — ожидается; iOS/tvOS шаги не дошли.
+  прогона), тест исправлен: переход 60 s.
+- Повтор: `swift test --filter m12_` — 10/10; `check_all.py --matrix` — шаг `tests` PASS (#60
+  подтверждён исправленным), затем `FAIL consumer` — дефект #94, не R14: внешний consumer
+  ссылается на пакет по имени `Trellis`, а SwiftPM берёт имя из папки копии (`test`). Исправлено
+  во всех трёх consumer-манифестах; повтор matrix — ожидается, iOS/tvOS шаги снова не дошли.
+  (`FAIL failure` в выводе — нарочно проваленный шаг внутри `test_verifier.py`, не ошибка.)
 
 Решение: [ADR 0037](../adr/0037-tabbed-scroll-coordination.md) (вариант Telegram), разбор
 референса — [telegram-peerinfo-analysis.md](../telegram-peerinfo-analysis.md).
@@ -76,7 +81,8 @@
 
 ## Проверки (выполнить на Mac)
 
-Выполнены пункты 1–5 (см. статус выше); matrix и Playground не запускались.
+Выполнены пункты 1–5 (см. статус выше); matrix остановился на `consumer` (#94); S39 запущен
+на iPhone Simulator, пункты чек-листа не отмечены.
 
 1. `swift build --build-tests -Xswiftc -warnings-as-errors`
 2. `swift test --filter test_tabbed_` и `swift test --filter r14_`, затем полный `swift test`
@@ -104,7 +110,8 @@
 
 ## Не закрыто (явно)
 
-- Этап 1: сборка, полный `swift test`, формат и API baseline в порядке; matrix и Playground не проверены.
+- Этап 1: сборка, полный `swift test`, формат и API baseline в порядке; matrix не дошёл до
+  iOS/tvOS (UIKit-тесты не запускались); чек-лист Playground не пройден.
 - Этап 2 (передача инерции, ADR 0037 §5) не начат.
 - AX scroll и tvOS focus на заблокированной странице — не проверены, маршрут не специфицирован.
 - Refresh внешнего scroll не подключён.

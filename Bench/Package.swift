@@ -10,7 +10,8 @@ import PackageDescription
 let package = Package(
     name: "TrellisBench",
     platforms: [.macOS(.v14)],
-    dependencies: [.package(path: "..")],
+    // `name:`: `package: "Trellis"` must not depend on the checkout directory's name (#94).
+    dependencies: [.package(name: "Trellis", path: "..")],
     targets: [
         .executableTarget(
             name: "TrellisBench",
