@@ -1,6 +1,8 @@
 # ADR 0029 — scroll gesture ownership and transition close
 
-Date: 2026-09-23. Card: R09, plan 6.
+Date: 2026-09-23. Card: R09, plan 6. Amended by [ADR 0037](0037-tabbed-scroll-coordination.md)
+§5: one coordinator-driven momentum handoff from `TabbedScrollNode`'s outer scroll to the
+selected page at the pin line; every other rule below is unchanged.
 
 ## Context
 
