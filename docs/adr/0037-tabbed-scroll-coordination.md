@@ -32,8 +32,9 @@ survive header expansion except for the visible page.
 1. **Structure.** `TabbedScrollNode` is a `HostedContainer` that owns an outer vertical
    `ScrollNode`. Its content, top to bottom: the header (any Node with children, sized by
    layout), then the pager block — `TabsNode` and `PagerNode`. The pager block is exactly as
-   tall as the outer viewport below the **pin line** (the top edge of the outer viewport after
-   its content insets / safe area). Pages are never measured by their content. So the outer
+   tall as the outer viewport below the **pin line** (`pinInset` below the outer viewport's top;
+   by default the part of the host's top safe area the viewport covers, see API). Pages are
+   never measured by their content. So the outer
    content is `header + viewport − pin inset`, and its largest offset is the **pin offset**:
    the offset at which the pager block's top reaches the pin line. The 0.5H + 1H example of
    §1.1 holds literally.
@@ -81,6 +82,32 @@ survive header expansion except for the visible page.
 8. **Refresh and loading.** Refresh belongs to the outer scroll at its top edge — the one
    owner P6.5 asks for. Page loading (`onLoadMore`, prefetch) stays with each collection
    container. Pages keep `RowSwipeContextKey = false` (ADR 0036).
+
+## API (step 1, R14)
+
+New public API, the review note for the `api/*.json` baseline update:
+
+- TrellisCore: `TabbedScrollNode<ID>` (`header`, `pager`, `tabsNode`, `scrollNode`,
+  `tabsConfiguration`, `pinInset`, `collapseProgress`, `isPinned`,
+  `onCollapseProgressChange`, `pages`, `selection`, `select(_:animated:)`, `pinTabs(animated:)`,
+  `expandHeader(animated:)`, `HostedContainer` methods); `TabsPlacement`
+  (`.pinned`/`.inline`); `TabsConfiguration` (`placement`, `appearance`, `segmented(...)`);
+  `PageScrollProviding` (`pageScrollNode`) with conformances of `CollectionNode` and
+  `ScrollNode` (rule 4 — the exact names chosen here).
+- TrellisCore: `ContainerHost.applyScrollConfiguration(of:)` with a default no-op in a protocol
+  extension, so existing conformers keep compiling. An offset tick does not commit, and
+  `ScrollNode.configuration` otherwise reaches the native view only at the next commit (#93);
+  rule 3 needs it at once. `PagerNode` uses it for its drag freeze too.
+- TrellisRender: `NodeHostBridge.applyScrollConfiguration(of:)` pushes the node's configuration
+  to its backing.
+- Behavior, no API: an `NSScrollView` backing with `userInteractionEnabled == false` passes the
+  wheel up the responder chain instead of swallowing it, so a locked page leaves it to the outer
+  scroll (the "wheel events on macOS" consequence below).
+
+The pin line's default is the part of the host's safe area that the outer viewport covers,
+computed from committed frames: the environment carries the host's insets unchanged, and a root
+that folded them into its padding (the default) already keeps the viewport clear. The pages get
+that covered safe area without its top edge.
 
 ## Consequences
 

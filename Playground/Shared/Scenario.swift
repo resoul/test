@@ -79,6 +79,7 @@ enum ScenarioName: String, CaseIterable {
     case s36 = "S36_GridNodeMedia"
     case s37 = "S37_TableNodeInbox"
     case s38 = "S38_PagerTabs"
+    case s39 = "S39_TabbedProfile"
 
     @MainActor
     func make(mode: ScenarioMode) -> ScenarioInstance {
@@ -121,6 +122,7 @@ enum ScenarioName: String, CaseIterable {
         case .s36: S36.make(mode: mode)
         case .s37: S37.make(mode: mode)
         case .s38: S38.make(mode: mode)
+        case .s39: S39.make(mode: mode)
         }
     }
 }

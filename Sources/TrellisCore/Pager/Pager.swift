@@ -592,6 +592,8 @@ public final class PagerNode<ID: Hashable & Sendable>: Node, HostedContainer {
         }
         for scroll in frozenScrolls {
             scroll.configuration.userInteractionEnabled = false
+            // In effect now, not at the next commit: a drag tick does not commit (#93).
+            host?.applyScrollConfiguration(of: scroll)
         }
         Log.on(
             .event,
@@ -642,6 +644,7 @@ public final class PagerNode<ID: Hashable & Sendable>: Node, HostedContainer {
         drag = nil
         for scroll in frozenScrolls where !scroll.isDisposed {
             scroll.configuration.userInteractionEnabled = true
+            host?.applyScrollConfiguration(of: scroll)
         }
         frozenScrolls = []
     }

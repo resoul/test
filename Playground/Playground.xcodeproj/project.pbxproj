@@ -49,16 +49,19 @@
 		89DE0901305D355E00A9DDF8 /* Shared/Scenarios/S36_GridNodeMedia.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000076 /* Shared/Scenarios/S36_GridNodeMedia.swift */; };
 		89DE0A01305D355E00A9DDF8 /* Shared/Scenarios/S37_TableNodeInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000077 /* Shared/Scenarios/S37_TableNodeInbox.swift */; };
 		89DE0B01305D355E00A9DDF8 /* Shared/Scenarios/S38_PagerTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000078 /* Shared/Scenarios/S38_PagerTabs.swift */; };
+		89DE0B04305D355E00A9DDF8 /* Shared/Scenarios/S39_TabbedProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000079 /* Shared/Scenarios/S39_TabbedProfile.swift */; };
 		89DE0702305D355E00A9DDF8 /* Shared/Scenarios/S34_NestedScrollArticle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000074 /* Shared/Scenarios/S34_NestedScrollArticle.swift */; };
 		89DE0802305D355E00A9DDF8 /* Shared/Scenarios/S35_ListNodeFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000075 /* Shared/Scenarios/S35_ListNodeFeed.swift */; };
 		89DE0902305D355E00A9DDF8 /* Shared/Scenarios/S36_GridNodeMedia.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000076 /* Shared/Scenarios/S36_GridNodeMedia.swift */; };
 		89DE0A02305D355E00A9DDF8 /* Shared/Scenarios/S37_TableNodeInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000077 /* Shared/Scenarios/S37_TableNodeInbox.swift */; };
 		89DE0B02305D355E00A9DDF8 /* Shared/Scenarios/S38_PagerTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000078 /* Shared/Scenarios/S38_PagerTabs.swift */; };
+		89DE0B05305D355E00A9DDF8 /* Shared/Scenarios/S39_TabbedProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000079 /* Shared/Scenarios/S39_TabbedProfile.swift */; };
 		89DE0703305D355E00A9DDF8 /* Shared/Scenarios/S34_NestedScrollArticle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000074 /* Shared/Scenarios/S34_NestedScrollArticle.swift */; };
 		89DE0803305D355E00A9DDF8 /* Shared/Scenarios/S35_ListNodeFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000075 /* Shared/Scenarios/S35_ListNodeFeed.swift */; };
 		89DE0903305D355E00A9DDF8 /* Shared/Scenarios/S36_GridNodeMedia.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000076 /* Shared/Scenarios/S36_GridNodeMedia.swift */; };
 		89DE0A03305D355E00A9DDF8 /* Shared/Scenarios/S37_TableNodeInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000077 /* Shared/Scenarios/S37_TableNodeInbox.swift */; };
 		89DE0B03305D355E00A9DDF8 /* Shared/Scenarios/S38_PagerTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000078 /* Shared/Scenarios/S38_PagerTabs.swift */; };
+		89DE0B06305D355E00A9DDF8 /* Shared/Scenarios/S39_TabbedProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000079 /* Shared/Scenarios/S39_TabbedProfile.swift */; };
 		89DE0614305D355E00A9DDF8 /* Shared/Scenario.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000020 /* Shared/Scenario.swift */; };
 		89DE0615305D355E00A9DDF8 /* Shared/Scenarios/S01_SingleNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000021 /* Shared/Scenarios/S01_SingleNode.swift */; };
 		89DE0616305D355E00A9DDF8 /* Shared/Scenarios/S02_RowOfThree.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000022 /* Shared/Scenarios/S02_RowOfThree.swift */; };
@@ -195,6 +198,7 @@
 		A30000000000000000000076 /* Shared/Scenarios/S36_GridNodeMedia.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S36_GridNodeMedia.swift; sourceTree = SOURCE_ROOT; };
 		A30000000000000000000077 /* Shared/Scenarios/S37_TableNodeInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S37_TableNodeInbox.swift; sourceTree = SOURCE_ROOT; };
 		A30000000000000000000078 /* Shared/Scenarios/S38_PagerTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S38_PagerTabs.swift; sourceTree = SOURCE_ROOT; };
+		A30000000000000000000079 /* Shared/Scenarios/S39_TabbedProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Scenarios/S39_TabbedProfile.swift; sourceTree = SOURCE_ROOT; };
 		B80100000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UITests/iOSScrollTests.swift"; sourceTree = "<group>"; };
 		B80100000000000000000003 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = "R08-iOS-UITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		B80200000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UITests/tvOSScrollTests.swift"; sourceTree = "<group>"; };
@@ -290,6 +294,7 @@
 				A30000000000000000000076 /* Shared/Scenarios/S36_GridNodeMedia.swift */,
 				A30000000000000000000077 /* Shared/Scenarios/S37_TableNodeInbox.swift */,
 				A30000000000000000000078 /* Shared/Scenarios/S38_PagerTabs.swift */,
+				A30000000000000000000079 /* Shared/Scenarios/S39_TabbedProfile.swift */,
 			);
 			name = Sources;
 			sourceTree = "<group>";
@@ -470,6 +475,7 @@
 				89DE0901305D355E00A9DDF8 /* Shared/Scenarios/S36_GridNodeMedia.swift in Sources */,
 				89DE0A01305D355E00A9DDF8 /* Shared/Scenarios/S37_TableNodeInbox.swift in Sources */,
 				89DE0B01305D355E00A9DDF8 /* Shared/Scenarios/S38_PagerTabs.swift in Sources */,
+				89DE0B04305D355E00A9DDF8 /* Shared/Scenarios/S39_TabbedProfile.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -520,6 +526,7 @@
 				89DE0902305D355E00A9DDF8 /* Shared/Scenarios/S36_GridNodeMedia.swift in Sources */,
 				89DE0A02305D355E00A9DDF8 /* Shared/Scenarios/S37_TableNodeInbox.swift in Sources */,
 				89DE0B02305D355E00A9DDF8 /* Shared/Scenarios/S38_PagerTabs.swift in Sources */,
+				89DE0B05305D355E00A9DDF8 /* Shared/Scenarios/S39_TabbedProfile.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -570,6 +577,7 @@
 				89DE0903305D355E00A9DDF8 /* Shared/Scenarios/S36_GridNodeMedia.swift in Sources */,
 				89DE0A03305D355E00A9DDF8 /* Shared/Scenarios/S37_TableNodeInbox.swift in Sources */,
 				89DE0B03305D355E00A9DDF8 /* Shared/Scenarios/S38_PagerTabs.swift in Sources */,
+				89DE0B06305D355E00A9DDF8 /* Shared/Scenarios/S39_TabbedProfile.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

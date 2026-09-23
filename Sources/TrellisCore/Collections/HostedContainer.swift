@@ -77,6 +77,22 @@ public protocol ContainerHost: AnyObject {
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: not
     /// applicable.
     func presentedScrollOffset(of node: ScrollNode) -> LayoutPoint?
+
+    /// Applies `node.configuration` to its native scroll view now instead of at the next
+    /// layout commit — an offset tick does not commit, and a lock set from a tick must be in
+    /// effect before the next touch (ADR 0037 §3). A node without a native scroll view keeps
+    /// the value for its next commit.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    func applyScrollConfiguration(of node: ScrollNode)
+}
+
+extension ContainerHost {
+    /// Default for hosts without native scroll views: the configuration is read at the next
+    /// commit.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func applyScrollConfiguration(of node: ScrollNode) {}
 }
 
 /// A host's commit, as reported to its containers.
