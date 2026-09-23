@@ -1219,6 +1219,17 @@
     {
       "accessLevel": "public",
       "availability": [],
+      "declaration": "@MainActor var pageScrollNode: ScrollNode? { get }",
+      "identifier": "s:11TrellisCore10ScrollNodeC04pagecD0ACSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "ScrollNode",
+        "pageScrollNode"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
       "declaration": "@MainActor var configuration: ScrollConfiguration { get set }",
       "identifier": "s:11TrellisCore10ScrollNodeC13configurationAA0C13ConfigurationVvp",
       "kind": "swift.property",
@@ -4233,12 +4244,34 @@
     {
       "accessLevel": "public",
       "availability": [],
+      "declaration": "@MainActor func applyScrollConfiguration(of node: ScrollNode)",
+      "identifier": "s:11TrellisCore13ContainerHostP24applyScrollConfiguration2ofyAA0F4NodeC_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "ContainerHost",
+        "applyScrollConfiguration(of:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
       "declaration": "@MainActor var hostID: UInt64 { get }",
       "identifier": "s:11TrellisCore13ContainerHostP6hostIDs6UInt64Vvp",
       "kind": "swift.property",
       "pathComponents": [
         "ContainerHost",
         "hostID"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func applyScrollConfiguration(of node: ScrollNode)",
+      "identifier": "s:11TrellisCore13ContainerHostPAAE24applyScrollConfiguration2ofyAA0F4NodeC_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "ContainerHost",
+        "applyScrollConfiguration(of:)"
       ]
     },
     {
@@ -4872,6 +4905,38 @@
     {
       "accessLevel": "public",
       "availability": [],
+      "declaration": "enum TabsPlacement",
+      "identifier": "s:11TrellisCore13TabsPlacementO",
+      "kind": "swift.enum",
+      "pathComponents": [
+        "TabsPlacement"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "case inline",
+      "identifier": "s:11TrellisCore13TabsPlacementO6inlineyA2CmF",
+      "kind": "swift.enum.case",
+      "pathComponents": [
+        "TabsPlacement",
+        "inline"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "case pinned",
+      "identifier": "s:11TrellisCore13TabsPlacementO6pinnedyA2CmF",
+      "kind": "swift.enum.case",
+      "pathComponents": [
+        "TabsPlacement",
+        "pinned"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
       "declaration": "@MainActor final class TapRecognizer",
       "identifier": "s:11TrellisCore13TapRecognizerC",
       "kind": "swift.class",
@@ -5158,6 +5223,17 @@
       "kind": "swift.class",
       "pathComponents": [
         "CollectionNode"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var pageScrollNode: ScrollNode? { get }",
+      "identifier": "s:11TrellisCore14CollectionNodeC010pageScrollD0AA0fD0CSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "CollectionNode",
+        "pageScrollNode"
       ]
     },
     {
@@ -8424,6 +8500,225 @@
     {
       "accessLevel": "public",
       "availability": [],
+      "declaration": "@MainActor final class TabbedScrollNode<ID> where ID : Hashable, ID : Sendable",
+      "identifier": "s:11TrellisCore16TabbedScrollNodeC",
+      "kind": "swift.class",
+      "pathComponents": [
+        "TabbedScrollNode"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor let tabsNode: TabsNode<ID>",
+      "identifier": "s:11TrellisCore16TabbedScrollNodeC04tabsE0AA04TabsE0CyxGvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TabbedScrollNode",
+        "tabsNode"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor let scrollNode: ScrollNode",
+      "identifier": "s:11TrellisCore16TabbedScrollNodeC06scrollE0AA0dE0Cvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TabbedScrollNode",
+        "scrollNode"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func expandHeader(animated: Bool = true)",
+      "identifier": "s:11TrellisCore16TabbedScrollNodeC12expandHeader8animatedySb_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "TabbedScrollNode",
+        "expandHeader(animated:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func hostDidAttach(_ host: any ContainerHost)",
+      "identifier": "s:11TrellisCore16TabbedScrollNodeC13hostDidAttachyyAA13ContainerHost_pF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "TabbedScrollNode",
+        "hostDidAttach(_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func hostDidCommit(_ commit: ContainerCommit)",
+      "identifier": "s:11TrellisCore16TabbedScrollNodeC13hostDidCommityyAA09ContainerH0VF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "TabbedScrollNode",
+        "hostDidCommit(_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func hostDidDetach()",
+      "identifier": "s:11TrellisCore16TabbedScrollNodeC13hostDidDetachyyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "TabbedScrollNode",
+        "hostDidDetach()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var collapseProgress: Double { get }",
+      "identifier": "s:11TrellisCore16TabbedScrollNodeC16collapseProgressSdvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TabbedScrollNode",
+        "collapseProgress"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor let tabsConfiguration: TabsConfiguration",
+      "identifier": "s:11TrellisCore16TabbedScrollNodeC17tabsConfigurationAA04TabsG0Vvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TabbedScrollNode",
+        "tabsConfiguration"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var onCollapseProgressChange: (@MainActor @Sendable (Double) -> Void)?",
+      "identifier": "s:11TrellisCore16TabbedScrollNodeC24onCollapseProgressChangeySdYbScMYccSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TabbedScrollNode",
+        "onCollapseProgressChange"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor let pager: PagerNode<ID>",
+      "identifier": "s:11TrellisCore16TabbedScrollNodeC5pagerAA05PagerE0CyxGvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TabbedScrollNode",
+        "pager"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var pages: [Tab<ID>] { get set }",
+      "identifier": "s:11TrellisCore16TabbedScrollNodeC5pagesSayAA3TabVyxGGvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TabbedScrollNode",
+        "pages"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor init(header: Node, tabs: TabsConfiguration = .segmented(), pages: [Tab<ID>], selection: ID? = nil, style: LayoutStyle = LayoutStyle())",
+      "identifier": "s:11TrellisCore16TabbedScrollNodeC6header4tabs5pages9selection5styleACyxGAA0E0C_AA17TabsConfigurationVSayAA3TabVyxGGxSgAA11LayoutStyleVtcfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "TabbedScrollNode",
+        "init(header:tabs:pages:selection:style:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor let header: Node",
+      "identifier": "s:11TrellisCore16TabbedScrollNodeC6headerAA0E0Cvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TabbedScrollNode",
+        "header"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func select(_ id: ID, animated: Bool = true)",
+      "identifier": "s:11TrellisCore16TabbedScrollNodeC6select_8animatedyx_SbtF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "TabbedScrollNode",
+        "select(_:animated:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor override func dispose()",
+      "identifier": "s:11TrellisCore16TabbedScrollNodeC7disposeyyF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "TabbedScrollNode",
+        "dispose()"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor func pinTabs(animated: Bool = true)",
+      "identifier": "s:11TrellisCore16TabbedScrollNodeC7pinTabs8animatedySb_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "TabbedScrollNode",
+        "pinTabs(animated:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var isPinned: Bool { get }",
+      "identifier": "s:11TrellisCore16TabbedScrollNodeC8isPinnedSbvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TabbedScrollNode",
+        "isPinned"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var pinInset: Double? { get set }",
+      "identifier": "s:11TrellisCore16TabbedScrollNodeC8pinInsetSdSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TabbedScrollNode",
+        "pinInset"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var selection: ID? { get }",
+      "identifier": "s:11TrellisCore16TabbedScrollNodeC9selectionxSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TabbedScrollNode",
+        "selection"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
       "declaration": "enum AccessibilityRole",
       "identifier": "s:11TrellisCore17AccessibilityRoleO",
       "kind": "swift.enum",
@@ -9168,6 +9463,60 @@
       "pathComponents": [
         "TableCellProvider",
         "canUpdate(_:to:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "struct TabsConfiguration",
+      "identifier": "s:11TrellisCore17TabsConfigurationV",
+      "kind": "swift.struct",
+      "pathComponents": [
+        "TabsConfiguration"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "var appearance: TabsAppearance",
+      "identifier": "s:11TrellisCore17TabsConfigurationV10appearanceAA0C10AppearanceVvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TabsConfiguration",
+        "appearance"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "init(placement: TabsPlacement = .pinned, appearance: TabsAppearance = TabsAppearance())",
+      "identifier": "s:11TrellisCore17TabsConfigurationV9placement10appearanceAcA0C9PlacementO_AA0C10AppearanceVtcfc",
+      "kind": "swift.init",
+      "pathComponents": [
+        "TabsConfiguration",
+        "init(placement:appearance:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "var placement: TabsPlacement",
+      "identifier": "s:11TrellisCore17TabsConfigurationV9placementAA0C9PlacementOvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "TabsConfiguration",
+        "placement"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "static func segmented(placement: TabsPlacement = .pinned, appearance: TabsAppearance = TabsAppearance()) -> TabsConfiguration",
+      "identifier": "s:11TrellisCore17TabsConfigurationV9segmented9placement10appearanceAcA0C9PlacementO_AA0C10AppearanceVtFZ",
+      "kind": "swift.type.method",
+      "pathComponents": [
+        "TabsConfiguration",
+        "segmented(placement:appearance:)"
       ]
     },
     {
@@ -10775,6 +11124,27 @@
       "kind": "swift.struct",
       "pathComponents": [
         "ModifiedArrangement"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor protocol PageScrollProviding : AnyObject",
+      "identifier": "s:11TrellisCore19PageScrollProvidingP",
+      "kind": "swift.protocol",
+      "pathComponents": [
+        "PageScrollProviding"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "@MainActor var pageScrollNode: ScrollNode? { get }",
+      "identifier": "s:11TrellisCore19PageScrollProvidingP04pageD4NodeAA0dG0CSgvp",
+      "kind": "swift.property",
+      "pathComponents": [
+        "PageScrollProviding",
+        "pageScrollNode"
       ]
     },
     {
@@ -17086,6 +17456,17 @@
       "accessLevel": "public",
       "availability": [],
       "declaration": "static func != (lhs: borrowing Self, rhs: borrowing Self) -> Bool",
+      "identifier": "s:SQsRi_zRi0_zrlE2neoiySbx_xtFZ::SYNTHESIZED::s:11TrellisCore13TabsPlacementO",
+      "kind": "swift.func.op",
+      "pathComponents": [
+        "TabsPlacement",
+        "!=(_:_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "static func != (lhs: borrowing Self, rhs: borrowing Self) -> Bool",
       "identifier": "s:SQsRi_zRi0_zrlE2neoiySbx_xtFZ::SYNTHESIZED::s:11TrellisCore13TextAlignmentO",
       "kind": "swift.func.op",
       "pathComponents": [
@@ -17522,6 +17903,17 @@
       "kind": "swift.func.op",
       "pathComponents": [
         "PreparationRanges",
+        "!=(_:_:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
+      "declaration": "static func != (lhs: borrowing Self, rhs: borrowing Self) -> Bool",
+      "identifier": "s:SQsRi_zRi0_zrlE2neoiySbx_xtFZ::SYNTHESIZED::s:11TrellisCore17TabsConfigurationV",
+      "kind": "swift.func.op",
+      "pathComponents": [
+        "TabsConfiguration",
         "!=(_:_:)"
       ]
     },
