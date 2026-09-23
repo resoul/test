@@ -1,6 +1,6 @@
 # R14 — Collapsing header и интеграция профиля (этап 1)
 
-Статус на 2026-09-23: **этап 1 собирается, полный `swift test` зелёный; формат, API, matrix и Playground не проверены.** Код написан
+Статус на 2026-09-23: **этап 1 собирается, полный `swift test` и формат чистые; API, matrix и Playground не проверены.** Код написан
 в облачной сессии на Linux без Swift и Xcode (`download.swift.org` закрыт сетевой политикой
 окружения); сборка и тесты — на Mac пользователя по списку в разделе «Проверки». Карточка не
 закрыта; этап 2 (передача инерции) не начат.
@@ -15,10 +15,12 @@
   `test_pager_` (R13) 15 + 1 — все зелёные. Изменения в `PagerNode`/`TabsNode` R13 не сломали.
 - Полный `swift test`: 370 + 32 + 555 = 957 тестов, все зелёные (TrellisRenderTests, TrellisFluxTests,
   TrellisCoreTests).
-- `swift format lint` не проверен: в репозитории нет `.swift-format` (и других файлов, имя
-  которых начинается с точки: `.gitignore`, `.github/`) — при загрузке через веб-интерфейс
-  GitHub они не попали в репозиторий. Без конфигурации swift-format применяет умолчания (отступ
-  2 пробела) и отмечает весь код; повтор — с исходным `.swift-format`.
+- `.swift-format` и `.gitignore` не попали в репозиторий при загрузке через веб-интерфейс
+  GitHub; пользователь добавил их (коммит `4abfa6c`). `.github/` по-прежнему нет.
+- `swift format lint --strict --configuration .swift-format --recursive Package.swift Sources
+  Tests` — чисто. Playground (без `--strict`, как и вне `verify_bootstrap.py`): два
+  `LineLength` в `Playground/macOS/PlaygroundApp.swift:292,298` — файл не менялся с загрузки,
+  к R14 не относится.
 
 Решение: [ADR 0037](../adr/0037-tabbed-scroll-coordination.md) (вариант Telegram), разбор
 референса — [telegram-peerinfo-analysis.md](../telegram-peerinfo-analysis.md).
@@ -65,7 +67,7 @@
 
 ## Проверки (выполнить на Mac)
 
-Выполнены пункты 1 и 2 (см. статус выше); пункт 3 заблокирован отсутствием `.swift-format`; остальное не запускалось.
+Выполнены пункты 1–4 (см. статус выше); остальное не запускалось.
 
 1. `swift build --build-tests -Xswiftc -warnings-as-errors`
 2. `swift test --filter test_tabbed_` и `swift test --filter r14_`, затем полный `swift test`
@@ -93,7 +95,7 @@
 
 ## Не закрыто (явно)
 
-- Этап 1 собирается, полный `swift test` зелёный; формат, API baseline, matrix и Playground не проверены.
+- Этап 1 собирается, полный `swift test` и формат чистые; API baseline, matrix и Playground не проверены.
 - Этап 2 (передача инерции, ADR 0037 §5) не начат.
 - AX scroll и tvOS focus на заблокированной странице — не проверены, маршрут не специфицирован.
 - Refresh внешнего scroll не подключён.
