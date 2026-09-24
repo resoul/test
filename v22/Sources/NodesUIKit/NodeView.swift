@@ -17,6 +17,8 @@
         public let host: NodeHost
 
         fileprivate let renderer = LayerRenderer()
+        /// Holds the tree's layers, scaled by `zoom` from its top left corner.
+        private let contentLayer = CALayer()
         private var isLayingOut = false
         private var accessibilityCache: [UIAccessibilityElement]?
         /// The focus items of the tree, one per focusable node, kept while the node is: the
@@ -33,6 +35,8 @@
         public init(root: Node) {
             host = NodeHost(root: root, size: LayoutSize(width: 0, height: 0))
             super.init(frame: .zero)
+            contentLayer.anchorPoint = .zero
+            layer.addSublayer(contentLayer)
             isAccessibilityElement = false
             host.onNeedsLayout = { [weak self] in
                 guard let self, !self.isLayingOut else { return }
@@ -59,6 +63,24 @@
         /// Cancellation: not applicable.
         public var root: Node { host.root }
 
+        /// How many times bigger than its points the tree is shown: at 2, it is laid out in
+        /// half the view's size and drawn twice as big — for a TV, seen from across a room.
+        /// Text is drawn for the final size and stays sharp; taps, focus and accessibility
+        /// frames follow.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var zoom: Double = 1 {
+            didSet {
+                guard zoom != oldValue else { return }
+
+                invalidateIntrinsicContentSize()
+                setNeedsLayout()
+            }
+        }
+
+        /// `zoom`, kept positive.
+        private var factor: Double { zoom > 0 ? zoom : 1 }
+
         /// Lays the tree out in the bounds and draws it.
         ///
         /// Ownership: updates the tree and the layers. Isolation: MainActor. Errors: none.
@@ -68,16 +90,28 @@
             isLayingOut = true
             defer { isLayingOut = false }
 
-            let widthChanged = host.size.width != Double(bounds.width)
-            host.size = LayoutSize(width: Double(bounds.width), height: Double(bounds.height))
-            host.scale = Double(traitCollection.displayScale > 0 ? traitCollection.displayScale : 1)
+            let content = LayoutSize(
+                width: Double(bounds.width) / factor,
+                height: Double(bounds.height) / factor
+            )
+            let widthChanged = host.size.width != content.width
+            host.size = content
+            // Frames snap to, and text is drawn for, the pixels of the zoomed size.
+            host.scale =
+                Double(traitCollection.displayScale > 0 ? traitCollection.displayScale : 1) * factor
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            contentLayer.bounds = CGRect(x: 0, y: 0, width: content.width, height: content.height)
+            contentLayer.position = .zero
+            contentLayer.transform = CATransform3DMakeScale(CGFloat(factor), CGFloat(factor), 1)
+            CATransaction.commit()
             host.direction =
                 effectiveUserInterfaceLayoutDirection == .rightToLeft ? .rightToLeft : .leftToRight
             host.layoutIfNeeded()
             if host.needsRender {
                 renderer.render(
                     host.root,
-                    in: layer,
+                    in: contentLayer,
                     scale: host.scale,
                     animation: host.renderAnimation
                 )
@@ -98,9 +132,9 @@
         public override func sizeThatFits(_ size: CGSize) -> CGSize {
             let limited = size.width > 0 && size.width < CGFloat.greatestFiniteMagnitude
             let fitting = host.fittingSize(
-                width: limited ? .definite(Double(size.width)) : .maxContent
+                width: limited ? .definite(Double(size.width) / factor) : .maxContent
             )
-            return CGSize(width: fitting.width, height: fitting.height)
+            return CGSize(width: fitting.width * factor, height: fitting.height * factor)
         }
 
         /// Presses on nodes with `onTap`; other touches go on up the responder chain.
@@ -129,7 +163,7 @@
 
         private func point(of touch: UITouch) -> LayoutPoint {
             let location = touch.location(in: self)
-            return LayoutPoint(x: Double(location.x), y: Double(location.y))
+            return LayoutPoint(x: Double(location.x) / factor, y: Double(location.y) / factor)
         }
 
         // MARK: - Focus
@@ -235,12 +269,7 @@
             focusOrder = host.focusItems().map { item in
                 let focusItem =
                     focusItemsByNode[item.node] ?? NodeFocusItem(view: self, node: item.node)
-                focusItem.frame = CGRect(
-                    x: item.frame.origin.x,
-                    y: item.frame.origin.y,
-                    width: item.frame.size.width,
-                    height: item.frame.size.height
-                )
+                focusItem.frame = zoomed(item.frame)
                 kept[item.node] = focusItem
                 return focusItem
             }
@@ -277,10 +306,21 @@
         /// can make it wider than the screen.
         public override var intrinsicContentSize: CGSize {
             let width =
-                bounds.width > 0 ? AvailableSpace.definite(Double(bounds.width)) : .maxContent
+                bounds.width > 0
+                ? AvailableSpace.definite(Double(bounds.width) / factor) : .maxContent
             return CGSize(
                 width: UIView.noIntrinsicMetric,
-                height: host.fittingSize(width: width).height
+                height: host.fittingSize(width: width).height * factor
+            )
+        }
+
+        /// A frame in the tree's points, in the view's.
+        fileprivate func zoomed(_ frame: LayoutRect) -> CGRect {
+            CGRect(
+                x: frame.origin.x * factor,
+                y: frame.origin.y * factor,
+                width: frame.size.width * factor,
+                height: frame.size.height * factor
             )
         }
     }
@@ -368,12 +408,7 @@
             accessibilityValue = item.value
             accessibilityHint = item.hint
             accessibilityTraits = NodeAccessibilityElement.traits(item.traits)
-            accessibilityFrameInContainerSpace = CGRect(
-                x: item.frame.origin.x,
-                y: item.frame.origin.y,
-                width: item.frame.size.width,
-                height: item.frame.size.height
-            )
+            accessibilityFrameInContainerSpace = container.zoomed(item.frame)
         }
 
         override func accessibilityActivate() -> Bool {
