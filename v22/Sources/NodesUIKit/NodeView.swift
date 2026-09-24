@@ -317,19 +317,11 @@
 
         /// Brings the section guides in line with the tree's focus sections.
         private func updateSections() {
-            for item in focusOrder {
-                item.focusGroupIdentifier = nil
-            }
             var kept: [NodeID: SectionGuide] = [:]
             for section in host.focusSections() {
                 let guide = sectionGuides[section.node] ?? SectionGuide(in: self)
                 guide.place(zoomed(section.frame))
                 guide.items = section.items
-                // With a keyboard, Tab goes from section to section and the arrows within one.
-                if !isTV {
-                    for item in section.items {
-                        focusItemsByNode[item]?.focusGroupIdentifier = "section-\(section.node.raw)"
-                    }
                 }
                 kept[section.node] = guide
             }
@@ -478,9 +470,6 @@
         }
 
         var canBecomeFocused: Bool { true }
-
-        /// The focus group of the node's focus section, with a keyboard on iPad.
-        var focusGroupIdentifier: String?
 
         var preferredFocusEnvironments: [any UIFocusEnvironment] { [] }
         var parentFocusEnvironment: (any UIFocusEnvironment)? { view }

@@ -198,7 +198,8 @@ Apple TV Simulator.
 Фокус с клавиатуры (2026-09-24). `NodeHost.focusLook`: `.lift` (TV — нода крупнее, с
 тенью) или `.ring` (iPad, Mac — адаптер рисует рамку `FocusRing` цвета системы; нода по
 умолчанию не меняется). iPad: те же `UIFocusItem`, система включает их с клавиатурой;
-секции — группы фокуса (Tab между ними, стрелки внутри); Return/Space нажимают. Mac:
+Return/Space нажимают. Групп фокуса нет: `focusGroupIdentifier` недоступен на tvOS, а
+ветка по платформе — только `#if os` (дефект #135). Mac:
 `NodeNSView` — first responder; Tab/Shift-Tab по нодам в порядке чтения, после последней —
 к следующему view окна (`NodeHost.moveFocus`); стрелки — к ближайшей ноде в эту сторону;
 Return/Space нажимают; клик рамку не показывает. 3 теста на Linux, 2 AppKit — на Mac.
