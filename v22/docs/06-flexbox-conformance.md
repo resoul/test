@@ -47,13 +47,24 @@
 
 ## Первый шаг
 
-**Статус: набор и эталон готовы, прогон движка ещё не выполнен.**
+**Статус: набор и эталон готовы, первый прогон на Mac выполнен (2026-09-24); baseline
+ещё не в репозитории.**
 
 Сделано: [Conformance/CSSFlexbox](../../Conformance/CSSFlexbox/README.md) — 142 кейса в 18
 группах, эталонные frame сняты в Chromium 141, Swift-прогон
-`Tests/TrellisCoreTests/Layout/CSSConformanceTests.swift`. Swift-прогон написан без
-компилятора (в облачном окружении нет Swift toolchain) и ещё не собирался; baseline
-`expectations/trellis.json` и отчёт появятся после первой записи на Mac.
+`Tests/TrellisCoreTests/Layout/CSSConformanceTests.swift`. Swift-прогон собрался и
+отработал на Mac в режиме записи.
+
+Предварительный результат — по логу прогона, сверено с эталоном для 23 кейсов, которые
+выглядели подозрительно; полная картина будет в `reports/trellis.md`. Подтверждены
+расхождения, записанные в [реестр дефектов](../../docs/defects.md) как #95–#106: margin в
+размещении, stretch без margin и min/max, перераспределение grow после clamp, сумма grow
+< 1, `min > max`, автоматический минимальный размер (`min-width: auto`), `wrap-reverse`,
+absolute (растяжение `left`+`right`, padding box, статическая позиция), `aspect-ratio`
+при stretch, обрезка явного размера. Пробелы словаря (`unsupported`): `margin: auto`,
+`order`. Совпадают с Chromium, судя по логу: `justify-content`, `align-items`/`align-self`,
+обычный `wrap` с `align-content`, grow/shrink/basis без clamp, gap, проценты, вложенность,
+RTL без отступов — и `nested/profile-card` из примеров v22.
 
 Прогнать текущий `FlexboxEngine` Trellis (≈1,2 тыс. строк, перенесён из Weave) через такой
 набор и получить карту расхождений: сколько кейсов из N совпадает и на чём падает. От
