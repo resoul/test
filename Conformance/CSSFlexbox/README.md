@@ -48,6 +48,14 @@ TRELLIS_CSS_RECORD=1 swift test --filter cssFlexboxConformance
 swift test --filter cssFlexboxConformance
 ```
 
+Движок v22 (отдельный пакет, baseline `expectations/v22.json`, отчёт `reports/v22.md`):
+
+```sh
+cd v22
+swift test --filter cssFlexboxConformance
+V22_CSS_RECORD=1 swift test --filter cssFlexboxConformance
+```
+
 ## Общие правила кейсов
 
 Одинаковы для HTML-стороны и для движка; причина каждого — в скобках.

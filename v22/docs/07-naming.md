@@ -48,4 +48,6 @@ AGENTS.md Trellis).
 | `.hidden(_:)` / `.invisible(_:)` | предложено |
 | `.collapsesWhenEmpty()` | предложено |
 | `LayoutView` / `LayoutNSView` — базовые view-классы адаптеров | открыто |
-| Названия модулей (`Layout`, `Nodes`, `State`, …) | предложено; окончательное — после решения «Trellis v2 или новая библиотека» |
+| Названия модулей (`Nodes`, `State`, …) | предложено; окончательное — после решения «Trellis v2 или новая библиотека» |
+| Модуль раскладки — рабочее имя `V22Layout`; `Layout` нельзя (протокол SwiftUI) | принято |
+| Тип длины — `Length` (`.auto`, `.points`, `.fraction`); `Dimension` нельзя (класс Foundation) | принято |
