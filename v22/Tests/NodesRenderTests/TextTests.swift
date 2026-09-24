@@ -103,7 +103,7 @@
     import NodesAppKit
 
     @Test @MainActor
-    func aFlippedHostDrawsTextFlippedSoItShowsUpright() throws {
+    func aFlippedHostDrawsTextUpright() throws {
         let column = Column(Text("Hello"), height: 100)
         let view = NodeNSView(root: column)
         view.frame = CGRect(x: 0, y: 0, width: 300, height: 300)
@@ -111,10 +111,10 @@
 
         let layer = try #require(view.renderedLayer(for: column.text))
         let image = layer.contents as! CGImage
-        #expect(layer.contentsAreFlipped())
+        // The image is shown as it is: one upright line at the top of a 100-point box.
         let rows = inkRows(image)
         #expect(!rows.isEmpty)
-        #expect(rows.allSatisfy { $0 >= image.height / 2 })
+        #expect(rows.allSatisfy { $0 < image.height / 2 })
         view.host.detach()
     }
 #endif

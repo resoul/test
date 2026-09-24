@@ -40,7 +40,6 @@
             let revision: UInt64
             let size: CGSize
             let scale: Double
-            let isFlipped: Bool
         }
 
         /// Ownership: the caller owns the renderer. Isolation: MainActor. Errors: none.
@@ -74,8 +73,6 @@
                 container.addSublayer(rootLayer)
             }
 
-            // Drawn once the tree is in place: only then does a layer know whether it shows
-            // its contents flipped.
             for entry in drawings {
                 draw(entry.drawing, of: entry.node, into: entry.layer, scale: scale)
             }
@@ -127,12 +124,7 @@
             scale: Double
         ) {
             let size = CGSize(width: node.frame.size.width, height: node.frame.size.height)
-            let wanted = Drawing(
-                revision: drawing.drawingRevision,
-                size: size,
-                scale: scale,
-                isFlipped: layer.contentsAreFlipped()
-            )
+            let wanted = Drawing(revision: drawing.drawingRevision, size: size, scale: scale)
             guard drawn[node.id] != wanted else { return }
 
             drawn[node.id] = wanted
@@ -154,13 +146,9 @@
                 return
             }
 
+            // An image in `contents` is shown as it is, top row at the top, whatever the
+            // geometry of the layers around it — so it is drawn upright.
             context.scaleBy(x: CGFloat(scale), y: CGFloat(scale))
-            if wanted.isFlipped {
-                // The layer will flip its contents when it shows them; drawing them flipped
-                // makes them come out upright.
-                context.translateBy(x: 0, y: size.height)
-                context.scaleBy(x: 1, y: -1)
-            }
             drawing.draw(in: context, size: size)
             layer.contentsScale = CGFloat(scale)
             layer.contents = context.makeImage()
