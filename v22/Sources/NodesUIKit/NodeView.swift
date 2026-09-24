@@ -29,6 +29,8 @@
         private var isSelecting = false
         /// A focus guide over each focus section, kept while the section is.
         private var sectionGuides: [NodeID: SectionGuide] = [:]
+        /// The keyboard focus ring, off a TV.
+        private let focusRing = FocusRing()
 
         /// A view showing `root`.
         ///
@@ -113,6 +115,7 @@
             CATransaction.commit()
             host.direction =
                 effectiveUserInterfaceLayoutDirection == .rightToLeft ? .rightToLeft : .leftToRight
+            host.focusLook = isTV ? .lift : .ring
             host.layoutIfNeeded()
             if host.needsRender {
                 renderer.render(
@@ -124,6 +127,13 @@
                 host.didRender()
                 accessibilityCache = nil
                 updateFocusItems()
+                if usesFocus, !isTV {
+                    focusRing.show(
+                        around: host.focusedItem,
+                        color: tintColor.cgColor,
+                        in: contentLayer
+                    )
+                }
                 if UIAccessibility.isVoiceOverRunning {
                     UIAccessibility.post(notification: .layoutChanged, argument: nil)
                 }
@@ -174,9 +184,13 @@
 
         // MARK: - Focus
 
-        /// Whether the platform's focus system moves between the tree's nodes: on tvOS. With a
-        /// keyboard on iPad the tree takes no focus yet.
+        /// Whether the platform's focus system moves between the tree's nodes: on a TV, and on
+        /// iPad with a keyboard (the system turns it on only then).
         private var usesFocus: Bool {
+            isTV || traitCollection.userInterfaceIdiom == .pad
+        }
+
+        private var isTV: Bool {
             traitCollection.userInterfaceIdiom == .tv
         }
 
@@ -210,14 +224,19 @@
             super.didUpdateFocus(in: context, with: coordinator)
             if let next = context.nextFocusedItem as? NodeFocusItem, next.view === self {
                 host.focus(next.node)
+                // Return and Space come to the first responder, as the remote's buttons do.
+                if !isFirstResponder {
+                    becomeFirstResponder()
+                }
             } else if host.focusedNode != nil {
                 host.focus(nil)
             }
             updateSectionGuides()
         }
 
-        /// Remote presses come to the first responder, and a focus item that is not a view
-        /// is not one: the view takes the role where the tree takes focus.
+        /// Remote and keyboard presses come to the first responder, and a focus item that is
+        /// not a view is not one: the view takes the role where the tree takes focus — on a TV
+        /// at once, on iPad when one of its nodes gets the focus.
         ///
         /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
         public override var canBecomeFirstResponder: Bool { usesFocus }
@@ -225,7 +244,7 @@
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func didMoveToWindow() {
             super.didMoveToWindow()
-            if window != nil, usesFocus {
+            if window != nil, isTV {
                 becomeFirstResponder()
             }
         }
@@ -235,7 +254,7 @@
         ///
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-            if presses.contains(where: { $0.type == .select }), host.selectBegan() {
+            if presses.contains(where: NodeView.selects), host.selectBegan() {
                 isSelecting = true
             } else {
                 super.pressesBegan(presses, with: event)
@@ -244,7 +263,7 @@
 
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-            if isSelecting, presses.contains(where: { $0.type == .select }) {
+            if isSelecting, presses.contains(where: NodeView.selects) {
                 isSelecting = false
                 host.selectEnded()
             } else {
@@ -263,6 +282,12 @@
             } else {
                 super.pressesCancelled(presses, with: event)
             }
+        }
+
+        /// The remote's select button, or Return or Space on a keyboard.
+        private static func selects(_ press: UIPress) -> Bool {
+            press.type == .select || press.key?.keyCode == .keyboardReturnOrEnter
+                || press.key?.keyCode == .keyboardSpacebar
         }
 
         /// Brings the focus items in line with the tree after a drawing. Asks the focus system
@@ -292,11 +317,20 @@
 
         /// Brings the section guides in line with the tree's focus sections.
         private func updateSections() {
+            for item in focusOrder {
+                item.focusGroupIdentifier = nil
+            }
             var kept: [NodeID: SectionGuide] = [:]
             for section in host.focusSections() {
                 let guide = sectionGuides[section.node] ?? SectionGuide(in: self)
                 guide.place(zoomed(section.frame))
                 guide.items = section.items
+                // With a keyboard, Tab goes from section to section and the arrows within one.
+                if !isTV {
+                    for item in section.items {
+                        focusItemsByNode[item]?.focusGroupIdentifier = "section-\(section.node.raw)"
+                    }
+                }
                 kept[section.node] = guide
             }
             for (id, guide) in sectionGuides where kept[id] == nil {
@@ -444,6 +478,9 @@
         }
 
         var canBecomeFocused: Bool { true }
+
+        /// The focus group of the node's focus section, with a keyboard on iPad.
+        var focusGroupIdentifier: String?
 
         var preferredFocusEnvironments: [any UIFocusEnvironment] { [] }
         var parentFocusEnvironment: (any UIFocusEnvironment)? { view }

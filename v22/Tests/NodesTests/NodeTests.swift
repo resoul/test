@@ -879,3 +879,72 @@ func aSectionWithNothingToFocusIsLeftOut() {
     #expect(host.focusSections().map(\.node) == [rows.first.id])
     host.detach()
 }
+
+/// Four tappable boxes in two rows of two.
+@MainActor
+private final class Grid: Node {
+    let cells = (0..<4).map { _ in Badge() }
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.column) {
+            FlexContainer(.row) { cells[0]; cells[1] }.gap(10)
+            FlexContainer(.row) { cells[2]; cells[3] }.gap(10)
+        }
+        .gap(10)
+        .alignItems(.start)
+    }
+}
+
+@Test @MainActor
+func tabMovesTheFocusInReadingOrderAndStopsAtTheEnds() {
+    let grid = Grid()
+    let host = host(grid)
+    let ids = grid.cells.map(\.id)
+
+    #expect(host.moveFocus(.next))
+    #expect(host.focusedNode == ids[0])
+    #expect(host.moveFocus(.next))
+    #expect(host.moveFocus(.next))
+    #expect(host.moveFocus(.next))
+    #expect(host.focusedNode == ids[3])
+    #expect(!host.moveFocus(.next))
+    #expect(host.focusedNode == ids[3])
+    #expect(host.moveFocus(.previous))
+    #expect(host.focusedNode == ids[2])
+    host.focus(nil)
+    #expect(host.moveFocus(.previous))
+    #expect(host.focusedNode == ids[3])
+    host.detach()
+}
+
+@Test @MainActor
+func arrowsMoveTheFocusToTheNearestNodeThatWay() {
+    let grid = Grid()
+    let host = host(grid)
+    let ids = grid.cells.map(\.id)
+    host.focus(ids[0])
+
+    #expect(host.moveFocus(.right))
+    #expect(host.focusedNode == ids[1])
+    #expect(host.moveFocus(.down))
+    #expect(host.focusedNode == ids[3])
+    #expect(host.moveFocus(.left))
+    #expect(host.focusedNode == ids[2])
+    #expect(!host.moveFocus(.left))
+    #expect(host.moveFocus(.up))
+    #expect(host.focusedNode == ids[0])
+    host.detach()
+}
+
+@Test @MainActor
+func withARingTheNodeIsNotLifted() {
+    let row = ProfileRow()
+    let host = host(row)
+    host.focusLook = .ring
+
+    host.focus(row.badge.id)
+
+    #expect(row.badge.isFocused)
+    #expect(row.badge.appearance.scale == 1)
+    host.detach()
+}

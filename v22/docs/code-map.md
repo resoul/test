@@ -183,5 +183,9 @@
 | `NodeFocusItem` (UIKit), `NodeView.focusItems(in:)`, `didUpdateFocus`, `presses*` | один `UIFocusItem` на ноду, живёт пока нода; хранит `NodeID` и кадр; view — first responder, чтобы получить нажатия | Trellis `TrellisNodeProxy` |
 | `Appearance.scale`, `Shadow`; `LayerRenderer` — `position`/`bounds`/`transform` | увеличение и тень для фокуса; кадр — через position/bounds, т.к. `frame` при transform не определён | — |
 | `Node.isFocusSection`, `NodeHost.focusSections`, `SectionGuide` (UIKit) | `UIFocusGuide` на площади ноды, цель — последняя фокусированная внутри, иначе первая; выключен, пока фокус внутри | SwiftUI `.focusSection()` (tvOS) |
+| `FocusLook`, `NodeHost.focusLook`, `FocusRing` | TV — нода приподнимается; iPad/Mac — рамка от адаптера, нода не меняется | системный вид фокуса на каждой платформе |
+| `NodeHost.moveFocus`, `FocusMove`, `nearest` | Tab — порядок чтения, `false` на краю (дальше — следующий view); стрелки — вперёд ×1 + вбок ×2 | Trellis D38: стрелки по геометрии, tie по порядку |
+| `NodeNSView` `keyDown/keyUp`, `becomeFirstResponder` | AppKit без фокус-элементов: клавиатуру ведёт view; фокус при входе только от Tab | — |
+| `NodeView` на iPad: `usesFocus`, `focusGroupIdentifier`, `selects` | система фокуса iPadOS с клавиатурой; секции — группы фокуса | — |
 | `NodeView.zoom`, `contentLayer`, `zoomed` | дерево раскладывается в `bounds / zoom`, слой содержимого увеличен от левого верхнего угла; `host.scale` = экран × zoom, чтобы текст был чётким; `nil` — 2 на TV, 1 иначе | интерфейс для TV: размеры под телефон с 2–3 м читаются примерно вдвое крупнее |
 | `DemotvOS/` | tvOS-приложение с демо-экраном (`project.pbxproj` написан вручную, по образцу `Playground`) | — |

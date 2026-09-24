@@ -3,7 +3,7 @@
     import Nodes
 
     /// A tappable label on a filled, rounded box, dimmed while pressed, lifted (bigger, with a
-    /// shadow) while focused.
+    /// shadow) while focused on a TV.
     ///
     ///     let follow = Button("Follow") { profile.isFollowing.value.toggle() }
     ///
@@ -46,6 +46,8 @@
 
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func focusChanged(_ isFocused: Bool) {
+            guard (host?.focusLook ?? .lift) == .lift else { return }
+
             appearance.scale = isFocused ? 1.15 : 1
             appearance.shadow = isFocused ? Shadow(opacity: 0.45, radius: 14, y: 10) : nil
         }

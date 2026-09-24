@@ -23,6 +23,9 @@
         private let hostedLayer = CALayer()
         private var isLayingOut = false
         private var accessibilityCache: [NSAccessibilityElement]?
+        private let focusRing = FocusRing()
+        /// Return or Space went down on a focused node and has not come up yet.
+        private var isSelecting = false
 
         /// A view showing `root`.
         ///
@@ -34,6 +37,7 @@
             hostedLayer.isGeometryFlipped = true
             layer = hostedLayer
             wantsLayer = true
+            host.focusLook = .ring
             host.onNeedsLayout = { [weak self] in
                 guard let self, !self.isLayingOut else { return }
 
@@ -95,6 +99,11 @@
                 )
                 host.didRender()
                 accessibilityCache = nil
+                focusRing.show(
+                    around: host.focusedItem,
+                    color: NSColor.keyboardFocusIndicatorColor.cgColor,
+                    in: hostedLayer
+                )
                 NSAccessibility.post(element: self, notification: .layoutChanged)
             }
             if widthChanged {
@@ -103,7 +112,6 @@
             }
         }
 
-        /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
         /// The view is a container: its elements are the tree's.
         ///
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
@@ -159,6 +167,95 @@
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
             true
+        }
+
+        // MARK: - Keyboard focus
+
+        /// The view takes the keyboard when the tree has nodes to focus. Tab reaches it when
+        /// the system's keyboard navigation is on, as for any control.
+        ///
+        /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override var acceptsFirstResponder: Bool {
+            !host.focusItems().isEmpty
+        }
+
+        /// Reached by Tab or Shift-Tab, focuses the first or the last node. A click takes the
+        /// keyboard without showing a focus, as on any Mac control.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func becomeFirstResponder() -> Bool {
+            guard super.becomeFirstResponder() else { return false }
+
+            if window?.currentEvent?.type == .keyDown {
+                let backward = window?.keyViewSelectionDirection == .selectingPrevious
+                host.moveFocus(backward ? .previous : .next)
+            }
+            return true
+        }
+
+        /// Leaving the keyboard, the tree loses the focus.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func resignFirstResponder() -> Bool {
+            guard super.resignFirstResponder() else { return false }
+
+            if isSelecting {
+                isSelecting = false
+                host.pointerCancelled()
+            }
+            host.focus(nil)
+            return true
+        }
+
+        /// Tab and Shift-Tab go through the nodes and then on to the window's other views;
+        /// the arrows go to the nearest node that way; Return and Space press the focused
+        /// node. Other keys go on up the responder chain.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func keyDown(with event: NSEvent) {
+            let backward = event.modifierFlags.contains(.shift)
+            switch event.specialKey {
+            case .tab? where !backward:
+                if !host.moveFocus(.next) {
+                    window?.selectNextKeyView(self)
+                }
+            case .tab?, .backTab?:
+                if !host.moveFocus(.previous) {
+                    window?.selectPreviousKeyView(self)
+                }
+            case .upArrow?:
+                host.moveFocus(.up)
+            case .downArrow?:
+                host.moveFocus(.down)
+            case .leftArrow?:
+                host.moveFocus(.left)
+            case .rightArrow?:
+                host.moveFocus(.right)
+            default:
+                if NodeNSView.selects(event) {
+                    if !event.isARepeat, host.selectBegan() {
+                        isSelecting = true
+                    }
+                } else {
+                    super.keyDown(with: event)
+                }
+            }
+        }
+
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func keyUp(with event: NSEvent) {
+            if isSelecting, NodeNSView.selects(event) {
+                isSelecting = false
+                host.selectEnded()
+            } else {
+                super.keyUp(with: event)
+            }
+        }
+
+        /// Return, Enter or Space.
+        private static func selects(_ event: NSEvent) -> Bool {
+            event.specialKey == .carriageReturn || event.specialKey == .enter
+                || event.charactersIgnoringModifiers == " "
         }
 
         private func point(of event: NSEvent) -> LayoutPoint {

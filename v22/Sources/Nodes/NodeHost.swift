@@ -97,6 +97,12 @@ public final class NodeHost {
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public var focusAnimation: Animation? = .easeOut(duration: 0.15)
 
+    /// How focused nodes show the focus; the adapter sets it for its platform. A change
+    /// reaches nodes at their next `focusChanged`.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var focusLook: FocusLook = .lift
+
     /// Layout passes run so far — for tests and diagnostics.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
@@ -342,6 +348,16 @@ public final class NodeHost {
 
     // MARK: - Focus
 
+    /// The focused node's item, or `nil` — where the adapter draws a focus ring.
+    ///
+    /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    public var focusedItem: FocusItem? {
+        guard let focusedNode else { return nil }
+
+        return focusItems().first { $0.node == focusedNode }
+    }
+
     /// The nodes that can take focus, visible, in reading order, framed in the root's
     /// coordinates.
     ///
@@ -374,10 +390,87 @@ public final class NodeHost {
 
         let previous = focusedNode.flatMap { mounted[$0] }
         focusedNode = target?.id
+        // The adapter draws a focus ring, if any, at its next drawing.
+        setNeedsRender()
         withAnimation(focusAnimation) {
             previous?.setFocused(false)
             target?.setFocused(true)
         }
+    }
+
+    /// Moves the focus by the keyboard, where the adapter decides it (AppKit has no focus
+    /// system for parts of a view). With nothing focused, `.previous` focuses the last node
+    /// and any other move the first. Returns `false`, leaving the focus as it is, when there
+    /// is nowhere to go — Tab past the last node then goes on to the next view.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    @discardableResult
+    public func moveFocus(_ move: FocusMove) -> Bool {
+        let items = focusItems()
+        guard !items.isEmpty else { return false }
+
+        guard let current = items.firstIndex(where: { $0.node == focusedNode }) else {
+            focus(move == .previous ? items[items.count - 1].node : items[0].node)
+            return true
+        }
+
+        let target: FocusItem?
+        switch move {
+        case .next: target = current + 1 < items.count ? items[current + 1] : nil
+        case .previous: target = current > 0 ? items[current - 1] : nil
+        default: target = NodeHost.nearest(to: items[current], toward: move, among: items)
+        }
+        guard let target else { return false }
+
+        focus(target.node)
+        return true
+    }
+
+    /// The item nearest to `origin` that lies wholly toward `move`, preferring ones straight
+    /// ahead: the distance ahead counts once, the distance aside twice. Ties go to reading
+    /// order.
+    private static func nearest(
+        to origin: FocusItem,
+        toward move: FocusMove,
+        among items: [FocusItem]
+    ) -> FocusItem? {
+        let from = origin.frame
+        var best: (item: FocusItem, score: Double)?
+        for item in items where item.node != origin.node {
+            let to = item.frame
+            let ahead: Double
+            let aside: Double
+            switch move {
+            case .up:
+                ahead = from.origin.y - (to.origin.y + to.size.height)
+                aside = gap(from.origin.x, from.size.width, to.origin.x, to.size.width)
+            case .down:
+                ahead = to.origin.y - (from.origin.y + from.size.height)
+                aside = gap(from.origin.x, from.size.width, to.origin.x, to.size.width)
+            case .left:
+                ahead = from.origin.x - (to.origin.x + to.size.width)
+                aside = gap(from.origin.y, from.size.height, to.origin.y, to.size.height)
+            case .right:
+                ahead = to.origin.x - (from.origin.x + from.size.width)
+                aside = gap(from.origin.y, from.size.height, to.origin.y, to.size.height)
+            case .next, .previous:
+                return nil
+            }
+            guard ahead >= 0 else { continue }
+
+            let score = ahead + 2 * aside
+            if best == nil || score < best!.score {
+                best = (item, score)
+            }
+        }
+        return best?.item
+    }
+
+    /// How far apart two spans are along one axis; 0 when they overlap.
+    private static func gap(_ a: Double, _ aLength: Double, _ b: Double, _ bLength: Double)
+        -> Double
+    {
+        max(0, max(b - (a + aLength), a - (b + bLength)))
     }
 
     /// The remote's select button went down: the focused node shows itself pressed. Returns
@@ -418,7 +511,9 @@ public final class NodeHost {
             height: node.frame.size.height
         )
         if node.canBecomeFocused {
-            items.append(FocusItem(node: node.id, frame: frame))
+            items.append(
+                FocusItem(node: node.id, frame: frame, cornerRadius: node.appearance.cornerRadius)
+            )
             return
         }
 

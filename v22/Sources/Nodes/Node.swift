@@ -183,11 +183,14 @@ open class Node: LayoutElement {
     }
 
     /// The node got or lost the focus — to show it. Runs inside the host's
-    /// `focusAnimation`. The default makes the node a tenth bigger while focused; an override
-    /// replaces that.
+    /// `focusAnimation`. The default lifts the node, a tenth bigger, where the host's
+    /// `focusLook` is `.lift` (a TV); with `.ring` the adapter draws the ring and the default
+    /// does nothing. An override replaces that.
     ///
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
     open func focusChanged(_ isFocused: Bool) {
+        guard (host?.focusLook ?? .lift) == .lift else { return }
+
         appearance.scale = isFocused ? 1.1 : 1
     }
 
