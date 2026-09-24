@@ -47,7 +47,13 @@
 
 ## Первый шаг
 
-**Статус: не начат.**
+**Статус: набор и эталон готовы, прогон движка ещё не выполнен.**
+
+Сделано: [Conformance/CSSFlexbox](../../Conformance/CSSFlexbox/README.md) — 142 кейса в 18
+группах, эталонные frame сняты в Chromium 141, Swift-прогон
+`Tests/TrellisCoreTests/Layout/CSSConformanceTests.swift`. Swift-прогон написан без
+компилятора (в облачном окружении нет Swift toolchain) и ещё не собирался; baseline
+`expectations/trellis.json` и отчёт появятся после первой записи на Mac.
 
 Прогнать текущий `FlexboxEngine` Trellis (≈1,2 тыс. строк, перенесён из Weave) через такой
 набор и получить карту расхождений: сколько кейсов из N совпадает и на чём падает. От

@@ -30,6 +30,7 @@ Sources/TrellisUIKit   UIView-обвязка. iOS, iPadOS, tvOS; NativeProxies �
 Sources/TrellisAppKit  NSView-обвязка. macOS; AccessibilityElements — NSAccessibilityElement
 Playground/           приложения для проверки на устройствах
 Scripts/              линтер политики, API baseline, проверка сборки
+Conformance/          эталоны раскладки из Chromium (CSS Flexbox) для сравнения с движком
 ```
 
 Рендерер — **один и платформо-нейтральный**. В Weave два платформенных
