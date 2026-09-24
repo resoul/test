@@ -195,12 +195,14 @@
     /// host to act on it; it never holds the node itself.
     @MainActor
     final class NodeAccessibilityElement: NSAccessibilityElement {
-        private let node: NodeID
-        private weak var host: NodeHost?
+        /// Presses the node: it holds the node's identity and the host weakly. A `Sendable`
+        /// constant, so the nonisolated press can read it without touching `self`'s state.
+        private let press: @MainActor @Sendable () -> Bool
 
         init(parent: NodeNSView, item: AccessibilityItem) {
-            node = item.node
-            host = parent.host
+            press = { [weak host = parent.host, node = item.node] in
+                host?.activate(node) ?? false
+            }
             super.init()
             setAccessibilityParent(parent)
             setAccessibilityLabel(item.label)
@@ -222,9 +224,8 @@
         // AppKit declares this without actor isolation but calls it on the main thread;
         // `assumeIsolated` checks that at run time.
         override nonisolated func accessibilityPerformPress() -> Bool {
-            MainActor.assumeIsolated {
-                host?.activate(node) ?? false
-            }
+            let press = press
+            return MainActor.assumeIsolated { press() }
         }
 
         private static func role(_ traits: AccessibilityTraits) -> NSAccessibility.Role {
