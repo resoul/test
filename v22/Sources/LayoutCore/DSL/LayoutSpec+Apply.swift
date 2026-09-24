@@ -24,38 +24,53 @@ public struct LayoutPlacement {
     public let container: (any LayoutElement)?
 }
 
-extension LayoutSpec {
-    /// Lays the spec out in `rect` and gives every element its frame: in the coordinate space
-    /// of `rect`, or of the element whose `embeddedLayout` placed it. Frames are snapped to
-    /// the pixel grid of `scale` (edges are rounded, so neighbours never overlap or leave
-    /// hairline gaps). Spacing steps take their points from `spacing`. Elements of `hidden`,
+/// A spec turned into the engine's input, with what is needed to hand the result back to
+/// its elements. Built on the main actor; `input` is a value that can be solved anywhere —
+/// on a background thread unless `requiresMainThread`.
+///
+/// Ownership: borrows the spec's elements. Isolation: MainActor; `input` is `Sendable`.
+/// Errors: none. Cancellation: not applicable.
+@MainActor
+public struct PreparedLayout {
+    /// The tree to give `FlexboxEngine.layout`.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public let input: LayoutNode
+
+    /// Some content measures by asking a view, so the tree must be solved on the main
+    /// thread.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public let requiresMainThread: Bool
+
+    let elements: [LayoutTree.Entry]
+
+    /// Gives every element its frame from `result`, the engine's layout of `input` in
+    /// `rect.size`: in the coordinate space of `rect`, or of the element whose
+    /// `embeddedLayout` placed it. Frames are snapped to the pixel grid of `scale` (edges are
+    /// rounded, so neighbours never overlap or leave hairline gaps). Elements of `hidden`,
     /// `invisible` and `Breakpoint` specs are shown or hidden to match. Returns where every
     /// element went, in the order the spec mentions them.
     ///
-    /// Ownership: borrows the elements for the call. Isolation: MainActor; runs synchronously.
-    /// Errors: none. Cancellation: not applicable.
+    /// Ownership: borrows the elements for the call. Isolation: MainActor. Errors: none.
+    /// Cancellation: not applicable.
     @discardableResult
     public func apply(
+        _ result: LayoutResult,
         in rect: LayoutRect,
-        direction: LayoutDirection = .leftToRight,
-        scale: Double = 1,
-        spacing: SpacingScale = .standard
+        scale: Double = 1
     ) -> [LayoutPlacement] {
-        var tree = LayoutTree(direction: direction, spacing: spacing)
-        let root = tree.root(for: self)
-        guard let result = try? FlexboxEngine.layout(root, size: rect.size) else { return [] }
-
         let snap = scale > 0 ? scale : 1
         func snapped(_ value: Double) -> Double { (value * snap).rounded() / snap }
 
         // Frames snapped in the coordinates of `rect`, then made relative to their container
         // — whose own frame, earlier in pre-order, is snapped too.
         var absolute: [LayoutRect?] = []
-        absolute.reserveCapacity(tree.elements.count)
+        absolute.reserveCapacity(elements.count)
         var placements: [LayoutPlacement] = []
-        placements.reserveCapacity(tree.elements.count)
+        placements.reserveCapacity(elements.count)
         var visible: [ObjectIdentifier: Bool] = [:]
-        for (offset, entry) in tree.elements.enumerated() {
+        for (offset, entry) in elements.enumerated() {
             var placed: LayoutRect?
             if let frame = result.frame(for: LayoutID(UInt64(offset))) {
                 let minX = snapped(rect.origin.x + frame.origin.x)
@@ -84,7 +99,7 @@ extension LayoutSpec {
                 LayoutPlacement(
                     element: entry.element,
                     frame: frame,
-                    container: entry.container.map { tree.elements[$0].element }
+                    container: entry.container.map { elements[$0].element }
                 )
             )
 
@@ -96,13 +111,53 @@ extension LayoutSpec {
             }
         }
 
-        for entry in tree.elements where entry.managesVisibility {
+        for entry in elements where entry.managesVisibility {
             let key = ObjectIdentifier(entry.element)
             if let isVisible = visible.removeValue(forKey: key) {
                 entry.element.applyLayoutVisibility(isVisible)
             }
         }
         return placements
+    }
+}
+
+extension LayoutSpec {
+    /// Turns the spec into the engine's input — the part of a layout pass that asks the
+    /// elements for their layouts and content, so it runs on the main actor. Solve `input`
+    /// and hand the result to `PreparedLayout.apply`.
+    ///
+    /// Ownership: returns a value borrowing the elements. Isolation: MainActor. Errors: none.
+    /// Cancellation: not applicable.
+    public func prepare(
+        direction: LayoutDirection = .leftToRight,
+        spacing: SpacingScale = .standard
+    ) -> PreparedLayout {
+        var tree = LayoutTree(direction: direction, spacing: spacing)
+        let input = tree.root(for: self)
+        return PreparedLayout(
+            input: input,
+            requiresMainThread: tree.requiresMainThread,
+            elements: tree.elements
+        )
+    }
+
+    /// Lays the spec out in `rect` at once: `prepare`, solve, `PreparedLayout.apply`.
+    ///
+    /// Ownership: borrows the elements for the call. Isolation: MainActor; runs synchronously.
+    /// Errors: none. Cancellation: not applicable.
+    @discardableResult
+    public func apply(
+        in rect: LayoutRect,
+        direction: LayoutDirection = .leftToRight,
+        scale: Double = 1,
+        spacing: SpacingScale = .standard
+    ) -> [LayoutPlacement] {
+        let prepared = prepare(direction: direction, spacing: spacing)
+        guard let result = try? FlexboxEngine.layout(prepared.input, size: rect.size) else {
+            return []
+        }
+
+        return prepared.apply(result, in: rect, scale: scale)
     }
 
     /// The size the spec takes under the given space — for `sizeThatFits` and
@@ -138,6 +193,8 @@ struct LayoutTree {
     let direction: LayoutDirection
     let spacing: SpacingScale
     var elements: [Entry] = []
+    /// Some leaf's content can only be measured on the main thread.
+    private(set) var requiresMainThread = false
     private var containers: UInt64 = 0
     /// Elements whose embedded layout is being expanded: one that mentions itself, directly
     /// or through its subelements, is placed as a leaf there instead of recursing forever.
@@ -236,11 +293,15 @@ struct LayoutTree {
                 ]
             }
 
+            let content = element.layoutContent
+            if case let .measured(measurer) = content, measurer.requiresMainThread {
+                requiresMainThread = true
+            }
             return [
                 LayoutNode(
                     id: id,
                     style: style,
-                    content: element.layoutContent,
+                    content: content,
                     direction: direction,
                     variants: variants
                 )

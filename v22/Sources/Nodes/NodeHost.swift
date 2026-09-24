@@ -1,3 +1,4 @@
+import Foundation
 import LayoutCore
 import StateCore
 
@@ -68,6 +69,16 @@ public final class NodeHost {
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public private(set) var needsLayout = true
 
+    /// Solve layouts after the first one on a background thread. The main thread still asks
+    /// the nodes for their layouts and content (`layoutSpec()`, `update()`), and applies the
+    /// frames; only the engine's work moves. The tree keeps its old frames until the new ones
+    /// arrive, and a solve that a newer layout overtakes is cancelled and its result dropped.
+    /// A layout whose content only measures on the main thread (views inside it) is solved
+    /// there anyway.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var solvesInBackground = false
+
     /// Layout passes run so far — for tests and diagnostics.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
@@ -75,6 +86,14 @@ public final class NodeHost {
 
     private var mounted: [NodeID: Node] = [:]
     private var pressed: Node?
+    private var generation: UInt64 = 0
+    private var solving: Task<Void, Never>?
+    private var solverThread: Thread?
+
+    /// Stack of the background solver's thread. The engine recurses once per nesting level;
+    /// the 512 KiB of a task's thread holds a few hundred levels in an optimized build and a
+    /// few dozen in an unoptimized one. A task cannot ask for a stack size, a thread can.
+    nonisolated static let solverStackSize = 8 << 20
 
     /// Grows with every layout pass and measurement of any host: `NodeCache` tells passes
     /// apart by it.
@@ -145,16 +164,89 @@ public final class NodeHost {
         guard needsLayout else { return }
 
         needsLayout = false
-        needsRender = true
-        passes += 1
+        generation &+= 1
         NodeHost.passGeneration &+= 1
-        let placements = root.asLayoutSpec.apply(
-            in: LayoutRect(origin: .zero, size: size),
-            direction: direction,
-            scale: scale,
-            spacing: spacing
-        )
-        mount(placements)
+        cancelSolving()
+        let prepared = root.asLayoutSpec.prepare(direction: direction, spacing: spacing)
+        let rect = LayoutRect(origin: .zero, size: size)
+        guard solvesInBackground, passes > 0, !prepared.requiresMainThread else {
+            if let result = try? FlexboxEngine.layout(prepared.input, size: rect.size) {
+                finish(prepared, result, in: rect)
+            }
+            return
+        }
+
+        solveInBackground(prepared, in: rect)
+    }
+
+    /// Waits for a background solve in flight, if any, and its frames to be applied.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: returns early if
+    /// the solve is cancelled.
+    public func layoutFinished() async {
+        await solving?.value
+    }
+
+    private func finish(_ prepared: PreparedLayout, _ result: LayoutResult, in rect: LayoutRect) {
+        passes += 1
+        needsRender = true
+        mount(prepared.apply(result, in: rect, scale: scale))
+    }
+
+    private func solveInBackground(_ prepared: PreparedLayout, in rect: LayoutRect) {
+        let input = prepared.input
+        let pass = generation
+        solving = Task { [weak self] in
+            let result = await NodeHost.solve(input, size: rect.size) { thread in
+                self?.adopt(thread, pass: pass)
+            }
+            guard let self, pass == self.generation, let result else { return }
+
+            self.solving = nil
+            self.solverThread = nil
+            self.finish(prepared, result, in: rect)
+            self.onNeedsRender?()
+        }
+    }
+
+    /// Solves `input` on a thread of its own. The thread is handed to `started` from inside
+    /// its body, once it certainly runs: a thread cancelled before its body starts never
+    /// runs it, and the wait would never end. `nil` when cancelled.
+    private nonisolated static func solve(
+        _ input: LayoutNode,
+        size: LayoutSize,
+        started: @escaping @MainActor @Sendable (Thread) -> Void
+    ) async -> LayoutResult? {
+        await withCheckedContinuation { continuation in
+            let thread = Thread {
+                let running = Thread.current
+                Task { @MainActor in started(running) }
+                let context = LayoutContext(isCancelled: { Thread.current.isCancelled })
+                continuation.resume(
+                    returning: try? FlexboxEngine.layout(input, size: size, context: context)
+                )
+            }
+            thread.stackSize = solverStackSize
+            thread.qualityOfService = .userInitiated
+            thread.start()
+        }
+    }
+
+    /// Keeps the running solver's thread so a newer layout can cancel it; a thread whose pass
+    /// was already overtaken is cancelled at once.
+    private func adopt(_ thread: Thread, pass: UInt64) {
+        if pass == generation, solving != nil {
+            solverThread = thread
+        } else {
+            thread.cancel()
+        }
+    }
+
+    private func cancelSolving() {
+        solving?.cancel()
+        solving = nil
+        solverThread?.cancel()
+        solverThread = nil
     }
 
     // MARK: - Pointer
@@ -211,6 +303,8 @@ public final class NodeHost {
     /// Cancellation: this is the cancellation.
     public func detach() {
         pointerCancelled()
+        generation &+= 1
+        cancelSolving()
         for node in mounted.values {
             node.unmount()
         }

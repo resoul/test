@@ -451,3 +451,114 @@ func nodesNoLongerAskedForAreReleasedAtTheNextPass() {
     #expect(removed == nil)
     host.detach()
 }
+
+// MARK: - Background solving
+
+@Test @MainActor
+func aBackgroundSolveKeepsTheOldFramesUntilTheNewOnesArrive() async {
+    let screen = Screen()
+    let host = host(screen)
+    host.solvesInBackground = true
+    var renders = 0
+    host.onNeedsRender = { renders += 1 }
+    host.didRender()
+
+    screen.card.showsFollow.value = false
+    host.layoutIfNeeded()
+
+    #expect(screen.card.title.frame.size.width == 220)
+    await host.layoutFinished()
+    #expect(screen.card.title.frame.size.width == 290)
+    #expect(host.passes == 2)
+    #expect(renders == 1)
+    host.detach()
+}
+
+@Test @MainActor
+func anOvertakenSolveIsDropped() async {
+    let screen = Screen()
+    let host = host(screen)
+    host.solvesInBackground = true
+
+    screen.card.showsFollow.value = false
+    host.layoutIfNeeded()
+    screen.card.showsFollow.value = true
+    screen.card.title.contentSize = LayoutSize(width: 50, height: 20)
+    host.layoutIfNeeded()
+    await host.layoutFinished()
+
+    #expect(host.passes == 2)
+    #expect(screen.card.follow.isMounted)
+    #expect(screen.card.title.frame.size.width == 220)
+    host.detach()
+}
+
+@MainActor
+private final class Level: Node {
+    let leaf = Box(6, 3)
+    let next: Level?
+
+    init(depth: Int) {
+        next = depth > 0 ? Level(depth: depth - 1) : nil
+    }
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.column) {
+            leaf
+            if let next { next }
+        }
+        .padding(1)
+    }
+
+    var deepest: Level { next?.deepest ?? self }
+}
+
+@Test @MainActor
+func aDeepTreeIsSolvedOnAThreadWithRoomForIt() async {
+    let root = Level(depth: 200)
+    let host = host(root, width: 800, height: 3000)
+    host.solvesInBackground = true
+
+    root.deepest.leaf.contentSize = LayoutSize(width: 6, height: 7)
+    host.layoutIfNeeded()
+    await host.layoutFinished()
+
+    #expect(host.passes == 2)
+    #expect(root.deepest.leaf.frame.size.height == 7)
+    host.detach()
+}
+
+private struct MainThreadOnly: ContentMeasurer {
+    var requiresMainThread: Bool { true }
+    func minContentWidth() -> Double { 30 }
+    func maxContentWidth() -> Double { 30 }
+    func height(forWidth width: Double) -> Double { 30 }
+}
+
+@MainActor
+private final class ViewLike: Node {
+    override var layoutContent: LeafContent? { .measured(MainThreadOnly()) }
+}
+
+@MainActor
+private final class Holder: Node {
+    let view = ViewLike()
+    let width = State(100.0)
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer { view }.width(.points(width.value))
+    }
+}
+
+@Test @MainActor
+func contentMeasuredOnlyOnTheMainThreadIsSolvedThere() {
+    let holder = Holder()
+    let host = host(holder)
+    host.solvesInBackground = true
+
+    holder.width.value = 200
+    host.layoutIfNeeded()
+
+    #expect(host.passes == 2)
+    host.detach()
+}

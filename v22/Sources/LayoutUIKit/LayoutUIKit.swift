@@ -139,6 +139,9 @@
 
         /// The narrowest width: what the view asks for when offered one point. Zero is not
         /// used, because views may read a zero width as "no limit".
+        /// Views are asked for their size on the main thread only.
+        nonisolated var requiresMainThread: Bool { true }
+
         nonisolated func minContentWidth() -> Double {
             MainActor.assumeIsolated { min(width(limit: 1), width(limit: nil)) }
         }

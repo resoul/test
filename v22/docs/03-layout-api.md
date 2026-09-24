@@ -128,7 +128,17 @@ Mac (`NodesRenderTests`).
 отпущено над той же нодой; `pressChanged` — вид нажатого состояния. `NodeHost.pointerDown/
 pointerUp/pointerCancelled`, адаптеры передают touches (UIKit) и мышь (AppKit); то, что
 не попало в ноду с действием, идёт дальше по responder chain. `Button` в `NodesRender`.
-Демо — все кнопки нодами. Не сделано: расчёт в фоне, `NodeCache`, стиль шрифта
+Демо — все кнопки нодами.
+
+**Пятый срез (2026-09-24): `NodeCache`** (см. 04) **и расчёт в фоне.** `LayoutCore`:
+`LayoutSpec.prepare` → `PreparedLayout` (`input` — `Sendable`, решается где угодно;
+`apply(result, in:, scale:)` — на MainActor); `ContentMeasurer.requiresMainThread` (у
+измерителей view — `true`). `NodeHost.solvesInBackground`: после первого прохода движок
+работает на своём потоке со стеком 8 МиБ; `layoutSpec()`/`update()` и применение кадров —
+на главном; до прихода новых кадров остаются старые; обогнанный расчёт отменяется
+(`Thread.cancel` → точки отмены движка) и выбрасывается; раскладка с view внутри решается
+на главном. Первый проход синхронный — view не появляется пустым. Демо включает фоновый
+режим. Не сделано: расчёт в фоне, `NodeCache`, стиль шрифта
 (жирность, межстрочный интервал, число строк), выравнивание по правому краю для RTL.
 
 - Управление включено всегда (аналог `automaticallyManagesSubnodes` без флага).

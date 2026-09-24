@@ -29,11 +29,20 @@ public protocol ContentMeasurer: Sendable {
     ///
     /// Ownership: returns a value. Isolation: solving task. Errors: none. Cancellation: none.
     func firstBaseline(forWidth width: Double) -> Double?
+
+    /// Whether the measurer only works on the main thread (it asks a view for its size).
+    /// A layout with such content is solved on the main thread. The default is `false`.
+    ///
+    /// Ownership: returns a value. Isolation: any. Errors: none. Cancellation: none.
+    var requiresMainThread: Bool { get }
 }
 
 extension ContentMeasurer {
     /// Ownership: returns a value. Isolation: solving task. Errors: none. Cancellation: none.
     public func firstBaseline(forWidth width: Double) -> Double? { nil }
+
+    /// Ownership: returns a value. Isolation: any. Errors: none. Cancellation: none.
+    public var requiresMainThread: Bool { false }
 }
 
 /// What a leaf shows, excluding its padding.

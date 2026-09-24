@@ -29,6 +29,7 @@
             )
             screen.frame = content.bounds
             screen.autoresizingMask = [.width, .height]
+            screen.host.solvesInBackground = true
 
             let window = NSWindow(
                 contentRect: content.frame,

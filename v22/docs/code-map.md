@@ -168,3 +168,6 @@
 | `NodeHost.pointerDown/Up/Cancelled` | платформо-нейтральный путь событий; адаптер только передаёт точку | тестируется на Linux |
 | `Button` (`NodesRender`) | текст на фоне, затемнение при нажатии | демо |
 | `NodeCache`, `NodeHost.passGeneration` | нода на id модели; ушедшие отпускаются на следующем проходе | [04](04-conditionals-and-responsive.md#7-кэш-нод-для-динамических-списков) |
+| `LayoutSpec.prepare`, `PreparedLayout` | подготовка (MainActor) / расчёт (где угодно) / применение (MainActor) | фоновый расчёт |
+| `ContentMeasurer.requiresMainThread` | view меряются только на главном: такая раскладка решается там | `ViewMeasurer` |
+| `NodeHost.solvesInBackground`, `solve`, `adopt` | поток со стеком 8 МиБ; поток регистрируется изнутри тела; обогнанный расчёт отменяется и выбрасывается | дефекты #124, #22 (Trellis) |
