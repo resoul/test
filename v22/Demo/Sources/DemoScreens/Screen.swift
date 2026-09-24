@@ -46,7 +46,11 @@
             self.profile = profile
             super.init()
             appearance.cornerRadius = 8
-            onTap = { [profile] in profile.isFollowing.value.toggle() }
+            onTap = { [profile] in
+                withAnimation(.spring(response: 0.35, dampingRatio: 0.8)) {
+                    profile.isFollowing.value.toggle()
+                }
+            }
         }
 
         override func pressChanged(_ isPressed: Bool) {
@@ -66,13 +70,15 @@
         }
     }
 
-    /// A profile: a row when there is room, a column when there is not.
+    /// A profile: a row when there is room, a column when there is not. Following adds a
+    /// note under the bio.
     @MainActor
     final class ProfileCard: Node {
         let avatar: Avatar
         let name = Text("", style: TextStyle(size: 20, weight: .semibold, color: ink))
         let handle = Text("", style: TextStyle(size: 13, color: muted))
         let bio: Text
+        let note = Text("", style: TextStyle(size: 13, weight: .medium, color: accent))
         let badge: FollowBadge
         let profile: Profile
 
@@ -92,15 +98,18 @@
             name.text = profile.name.value
             handle.text =
                 "@" + profile.name.value.lowercased().replacingOccurrences(of: " ", with: "")
+            note.text = "You follow \(profile.name.value)"
         }
 
         override func layoutSpec() -> LayoutSpec? {
-            FlexContainer(.column) {
+            let following = profile.isFollowing.value
+            return FlexContainer(.column) {
                 Breakpoint(from: 460) {
                     FlexContainer(.row) {
                         avatar.size(56)
                         FlexContainer(.column) {
                             name; handle; bio
+                            if following { note }
                         }
                         .gap(4)
                         .flex(grow: 1, shrink: 1)
@@ -114,6 +123,7 @@
                         name
                         handle
                         bio
+                        if following { note }
                         badge.alignSelf(.start)
                     }
                     .gap(8)
@@ -132,7 +142,7 @@
         )
         let hint = Text(
             "Resize the window: under 460 points a card turns into a column. "
-                + "Tap a Follow badge.",
+                + "Tap a Follow badge, or rename Ada: the changes animate.",
             style: TextStyle(size: 14, color: muted)
         )
         let cards: [ProfileCard]
@@ -193,7 +203,9 @@
 
         private func renameAda() {
             nameIndex = (nameIndex + 1) % names.count
-            profiles[0].name.value = names[nameIndex]
+            withAnimation {
+                profiles[0].name.value = names[nameIndex]
+            }
         }
     }
 #endif

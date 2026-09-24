@@ -87,7 +87,12 @@
                 userInterfaceLayoutDirection == .rightToLeft ? .rightToLeft : .leftToRight
             host.layoutIfNeeded()
             if host.needsRender {
-                renderer.render(host.root, in: hostedLayer, scale: host.scale)
+                renderer.render(
+                    host.root,
+                    in: hostedLayer,
+                    scale: host.scale,
+                    animation: host.renderAnimation
+                )
                 host.didRender()
                 accessibilityCache = nil
                 NSAccessibility.post(element: self, notification: .layoutChanged)

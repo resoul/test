@@ -1,3 +1,4 @@
+import Foundation
 import LayoutCore
 import StateCore
 import Testing
@@ -651,4 +652,99 @@ func activatingAnElementTapsItsNode() {
     #expect(!host.activate(row.name.id))
     #expect(row.badge.taps == 1)
     host.detach()
+}
+
+// MARK: - Animation
+
+@Test @MainActor
+func changesInsideWithAnimationAreDrawnWithIt() {
+    let screen = Screen()
+    let host = host(screen)
+    host.didRender()
+
+    withAnimation {
+        screen.card.showsFollow.value = false
+    }
+    host.layoutIfNeeded()
+
+    #expect(host.renderAnimation == .default)
+    host.didRender()
+    #expect(host.renderAnimation == nil)
+    host.detach()
+}
+
+@Test @MainActor
+func changesOutsideWithAnimationAreDrawnAtOnce() {
+    let screen = Screen()
+    let host = host(screen)
+    host.didRender()
+
+    screen.card.showsFollow.value = false
+    host.layoutIfNeeded()
+    screen.appearance.opacity = 0.5
+
+    #expect(host.needsRender)
+    #expect(host.renderAnimation == nil)
+    host.detach()
+}
+
+@Test @MainActor
+func anAppearanceChangedInsideWithAnimationIsDrawnWithIt() {
+    let screen = Screen()
+    let host = host(screen)
+    host.didRender()
+
+    withAnimation(.linear(duration: 1)) {
+        screen.card.appearance.opacity = 0.5
+    }
+
+    #expect(host.renderAnimation == .linear(duration: 1))
+    host.detach()
+}
+
+@Test @MainActor
+func withAnimationNilTurnsAnimationOffInside() {
+    let screen = Screen()
+    let host = host(screen)
+    host.didRender()
+
+    withAnimation {
+        withAnimation(nil) {
+            screen.card.showsFollow.value = false
+        }
+    }
+    host.layoutIfNeeded()
+
+    #expect(host.renderAnimation == nil)
+    host.detach()
+}
+
+@Test @MainActor
+func aBackgroundSolveCarriesTheAnimationOfTheChangeThatAskedForIt() async {
+    let screen = Screen()
+    let host = host(screen)
+    host.solvesInBackground = true
+    host.didRender()
+
+    withAnimation(.spring()) {
+        screen.card.showsFollow.value = false
+    }
+    host.layoutIfNeeded()
+    // Overtaken by a change without animation: the pass that replaces it still animates.
+    screen.card.title.contentSize = LayoutSize(width: 50, height: 20)
+    host.layoutIfNeeded()
+    await host.layoutFinished()
+
+    #expect(host.renderAnimation == .spring())
+    #expect(host.passes == 2)
+    host.detach()
+}
+
+@Test
+func aSpringRunsUntilItComesToRest() {
+    let bouncy = Animation.spring(response: 0.5, dampingRatio: 0.5)
+    let calm = Animation.spring(response: 0.5, dampingRatio: 1)
+
+    #expect(bouncy.duration > calm.duration)
+    #expect(abs(calm.duration - log(1000) * 0.5 / (2 * Double.pi)) < 1e-9)
 }

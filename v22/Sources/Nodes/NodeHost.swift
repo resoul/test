@@ -64,6 +64,13 @@ public final class NodeHost {
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public private(set) var needsRender = true
 
+    /// The animation the next drawing moves with: set when a layout or a redraw is asked for
+    /// inside `withAnimation`, and by the layout pass that asking led to; cleared by
+    /// `didRender()`. `nil` draws the changes at once.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public private(set) var renderAnimation: Animation?
+
     /// Whether the next `layoutIfNeeded()` lays the tree out.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
@@ -89,6 +96,10 @@ public final class NodeHost {
     private var generation: UInt64 = 0
     private var solving: Task<Void, Never>?
     private var solverThread: Thread?
+    /// The animation of the layout asked for, until a pass takes it.
+    private var pendingAnimation: Animation?
+    /// The animation of the pass being solved in the background.
+    private var solvingAnimation: Animation?
 
     /// Stack of the background solver's thread. The engine recurses once per nesting level;
     /// the 512 KiB of a task's thread holds a few hundred levels in an optimized build and a
@@ -113,6 +124,9 @@ public final class NodeHost {
     ///
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public func setNeedsLayout() {
+        if let animation = Animation.current {
+            pendingAnimation = animation
+        }
         guard !needsLayout else { return }
 
         needsLayout = true
@@ -123,6 +137,9 @@ public final class NodeHost {
     ///
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public func setNeedsRender() {
+        if let animation = Animation.current {
+            renderAnimation = animation
+        }
         guard !needsRender else { return }
 
         needsRender = true
@@ -134,6 +151,7 @@ public final class NodeHost {
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public func didRender() {
         needsRender = false
+        renderAnimation = nil
     }
 
     /// The size the tree takes under the given space — for `sizeThatFits` and
@@ -166,16 +184,20 @@ public final class NodeHost {
         needsLayout = false
         generation &+= 1
         NodeHost.passGeneration &+= 1
+        // A pass that overtakes an animated one still in flight carries its animation on.
+        let animation = pendingAnimation ?? solvingAnimation
+        pendingAnimation = nil
         cancelSolving()
         let prepared = root.asLayoutSpec.prepare(direction: direction, spacing: spacing)
         let rect = LayoutRect(origin: .zero, size: size)
         guard solvesInBackground, passes > 0, !prepared.requiresMainThread else {
             if let result = try? FlexboxEngine.layout(prepared.input, size: rect.size) {
-                finish(prepared, result, in: rect)
+                finish(prepared, result, in: rect, animation: animation)
             }
             return
         }
 
+        solvingAnimation = animation
         solveInBackground(prepared, in: rect)
     }
 
@@ -187,9 +209,17 @@ public final class NodeHost {
         await solving?.value
     }
 
-    private func finish(_ prepared: PreparedLayout, _ result: LayoutResult, in rect: LayoutRect) {
+    private func finish(
+        _ prepared: PreparedLayout,
+        _ result: LayoutResult,
+        in rect: LayoutRect,
+        animation: Animation?
+    ) {
         passes += 1
         needsRender = true
+        if let animation {
+            renderAnimation = animation
+        }
         mount(prepared.apply(result, in: rect, scale: scale))
     }
 
@@ -202,9 +232,11 @@ public final class NodeHost {
             }
             guard let self, pass == self.generation, let result else { return }
 
+            let animation = self.solvingAnimation
             self.solving = nil
             self.solverThread = nil
-            self.finish(prepared, result, in: rect)
+            self.solvingAnimation = nil
+            self.finish(prepared, result, in: rect, animation: animation)
             self.onNeedsRender?()
         }
     }
@@ -247,6 +279,7 @@ public final class NodeHost {
         solving = nil
         solverThread?.cancel()
         solverThread = nil
+        solvingAnimation = nil
     }
 
     // MARK: - Pointer

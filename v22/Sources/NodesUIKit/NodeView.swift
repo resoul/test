@@ -69,7 +69,12 @@
                 effectiveUserInterfaceLayoutDirection == .rightToLeft ? .rightToLeft : .leftToRight
             host.layoutIfNeeded()
             if host.needsRender {
-                renderer.render(host.root, in: layer, scale: host.scale)
+                renderer.render(
+                    host.root,
+                    in: layer,
+                    scale: host.scale,
+                    animation: host.renderAnimation
+                )
                 host.didRender()
                 accessibilityCache = nil
                 if UIAccessibility.isVoiceOverRunning {

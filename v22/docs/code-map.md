@@ -173,3 +173,7 @@
 | `NodeHost.solvesInBackground`, `solve`, `adopt` | поток со стеком 8 МиБ; поток регистрируется изнутри тела; обогнанный расчёт отменяется и выбрасывается | дефекты #124, #22 (Trellis) |
 | `Accessibility`, `NodeHost.accessibilityItems`, `activate` | элементы доступности из дерева: текст, кнопки с подписью из текста внутри | как UIKit: `UIButton` читается подписью |
 | `NodeAccessibilityElement` (UIKit, AppKit) | хранит `NodeID` и слабый хост, не ноду | правило Trellis о нативных AX-объектах |
+| `Animation`, `withAnimation` | анимация — у изменения, не у ноды; `withAnimation` сразу выполняет обновления состояния, чтобы раскладка узнала свою анимацию | как SwiftUI `withAnimation` |
+| `NodeHost.renderAnimation`, `pendingAnimation`, `solvingAnimation` | анимация идёт от запроса к проходу (и через фоновый расчёт) к отрисовке; обогнавший проход её наследует | — |
+| `LayerRenderer.transition`, `Look` | явные `CABasicAnimation`/`CASpringAnimation` от показанного сейчас к новому; без анимации — снимается только анимация изменившегося свойства | прерывание посреди анимации |
+| `LayerRenderer.settle`, `leaving` | ушедшая нода гаснет на месте; слой отпускается на первой отрисовке после конца анимации; вернувшаяся — тот же слой | без колбэков завершения CA |
