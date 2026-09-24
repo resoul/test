@@ -108,15 +108,31 @@ private struct Words: ContentMeasurer {
     }
 }
 
-private func statistics(_ root: LayoutNode, width: Double = 800) throws -> SolveStatistics {
-    try FlexboxEngine.layout(root, size: LayoutSize(width: width, height: 100_000)).statistics
+/// Runs `body` on a thread of its own with `stackSize` bytes of stack. The solver recurses
+/// once per nesting level, and the test runner's threads may have as little as 512 KiB —
+/// too little for deep trees in an unoptimized build.
+private func onThread<Result: Sendable>(
+    stackSize: Int = 8 << 20,
+    _ body: @escaping @Sendable () throws -> Result
+) async throws -> Result {
+    try await withCheckedThrowingContinuation { continuation in
+        let thread = Thread { continuation.resume(with: Swift.Result { try body() }) }
+        thread.stackSize = stackSize
+        thread.start()
+    }
+}
+
+private func statistics(_ root: LayoutNode, width: Double = 800) async throws -> SolveStatistics {
+    try await onThread {
+        try FlexboxEngine.layout(root, size: LayoutSize(width: width, height: 100_000)).statistics
+    }
 }
 
 @Test
-func nestedColumnsRunEachContainerTwiceAndSizeEachLeafOnce() throws {
+func nestedColumnsRunEachContainerTwiceAndSizeEachLeafOnce() async throws {
     var tree = Tree()
     let depth = 16
-    let work = try statistics(tree.chain(depth: depth))
+    let work = try await statistics(tree.chain(depth: depth))
     let containers = depth + 1
     let leaves = 4 * depth + 1
 
@@ -126,20 +142,20 @@ func nestedColumnsRunEachContainerTwiceAndSizeEachLeafOnce() throws {
 }
 
 @Test
-func workGrowsLinearlyWithNesting() throws {
+func workGrowsLinearlyWithNesting() async throws {
     var tree = Tree()
-    let shallow = try statistics(tree.chain(depth: 50))
-    let deep = try statistics(tree.chain(depth: 100))
+    let shallow = try await statistics(tree.chain(depth: 50))
+    let deep = try await statistics(tree.chain(depth: 100))
 
     #expect(Double(deep.requests) <= 2.1 * Double(shallow.requests))
     #expect(Double(deep.containerRuns) <= 2.1 * Double(shallow.containerRuns))
 }
 
 @Test
-func cardsDoABoundedAmountOfWorkEach() throws {
+func cardsDoABoundedAmountOfWorkEach() async throws {
     var tree = Tree()
     let count = 10
-    let work = try statistics(tree.cards(count), width: 390)
+    let work = try await statistics(tree.cards(count), width: 390)
 
     // Two containers and four leaves per card. The row overflows, so the growing column
     // also needs its minimum size.
@@ -148,17 +164,12 @@ func cardsDoABoundedAmountOfWorkEach() throws {
 }
 
 @Test
-func fortyNestedContainersFitInOneMebibyteOfStack() {
+func fortyNestedContainersFitInOneMebibyteOfStack() async throws {
     // A phone's main thread has about 1 MiB of stack and the solver recurses once per
     // nesting level; this holds even for an unoptimized build, whose frames are largest.
     var tree = Tree()
     let root = tree.chain(depth: 40)
-    let finished = DispatchSemaphore(value: 0)
-    let thread = Thread {
-        _ = try? FlexboxEngine.layout(root, size: LayoutSize(width: 800, height: 100_000))
-        finished.signal()
+    _ = try await onThread(stackSize: 1 << 20) {
+        try FlexboxEngine.layout(root, size: LayoutSize(width: 800, height: 100_000)).frames.count
     }
-    thread.stackSize = 1 << 20
-    thread.start()
-    finished.wait()
 }
