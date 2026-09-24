@@ -60,7 +60,8 @@
         #expect(cardLayer?.backgroundColor?.components == [1, 0, 0, 1])
         #expect(avatarLayer?.frame == CGRect(x: 10, y: 10, width: 40, height: 40))
         #expect(avatarLayer?.opacity == 0.5)
-        #expect(badgeLayer?.frame == CGRect(x: 60, y: 10, width: 20, height: 20))
+        // `align-items` is `stretch`: the badge fills the line's height.
+        #expect(badgeLayer?.frame == CGRect(x: 60, y: 10, width: 20, height: 40))
         host.detach()
     }
 
