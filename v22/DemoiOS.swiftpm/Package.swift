@@ -18,8 +18,6 @@ let package = Package(
             teamIdentifier: "",
             displayVersion: "1.0",
             bundleVersion: "1",
-            appIcon: .placeholder(icon: .layers),
-            accentColor: .presetColor(.blue),
             supportedDeviceFamilies: [.pad, .phone],
             supportedInterfaceOrientations: [
                 .portrait,
