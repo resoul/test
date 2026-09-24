@@ -6,8 +6,10 @@
     import StateCore
     import Testing
 
-    // Animations are checked by what the renderer adds to the layers: nothing runs them in a
-    // test, so an added animation stays on its layer until the test removes it.
+    // Animations are checked by what the renderer adds to the layers, before Core Animation
+    // commits them: on layers outside a window a commit drops them. So a scene keeps a
+    // transaction open, around every render, until `close()` — deferred, so that a failed
+    // `#require` does not leave it open for the next test.
 
     @MainActor
     private final class Dot: Node {
@@ -52,7 +54,13 @@
 
         init() {
             host = NodeHost(root: row, size: LayoutSize(width: 200, height: 50))
+            CATransaction.begin()
             render()
+        }
+
+        func close() {
+            host.detach()
+            CATransaction.commit()
         }
 
         func render() {
@@ -84,6 +92,7 @@
     @Test @MainActor
     func anAnimatedRenderMovesLayersFromWhereTheyWere() throws {
         let scene = Scene()
+        defer { scene.close() }
 
         withAnimation {
             scene.row.spacer.width = 60
@@ -91,10 +100,7 @@
         scene.render()
 
         let dot = try #require(scene.layer(scene.row.dot))
-        let move = try #require(
-            dot.animation(forKey: "position") as? CABasicAnimation,
-            "dot: \(dot.animationKeys() ?? []), spacer: \(scene.layer(scene.row.spacer)?.animationKeys() ?? [])"
-        )
+        let move = try #require(dot.animation(forKey: "position") as? CABasicAnimation)
         #expect(move.fromValue as? CGPoint == CGPoint(x: 25, y: 5))
         #expect(move.toValue as? CGPoint == CGPoint(x: 65, y: 5))
         #expect(move.duration == 0.25)
@@ -103,24 +109,24 @@
         let resize = try #require(spacer.animation(forKey: "bounds") as? CABasicAnimation)
         #expect(resize.fromValue as? CGRect == CGRect(x: 0, y: 0, width: 20, height: 10))
         #expect(resize.toValue as? CGRect == CGRect(x: 0, y: 0, width: 60, height: 10))
-        scene.host.detach()
     }
 
     @Test @MainActor
     func aRenderWithoutAnimationShowsChangesAtOnce() {
         let scene = Scene()
+        defer { scene.close() }
 
         scene.row.spacer.width = 60
         scene.render()
 
         #expect(scene.layer(scene.row.dot)?.animationKeys() == nil)
         #expect(scene.layer(scene.row.dot)?.frame.origin.x == 60)
-        scene.host.detach()
     }
 
     @Test @MainActor
     func aRenderWithoutAnimationLeavesRunningAnimationsOfUnchangedValues() {
         let scene = Scene()
+        defer { scene.close() }
         withAnimation {
             scene.row.spacer.width = 60
         }
@@ -130,12 +136,12 @@
         scene.render()
 
         #expect(scene.layer(scene.row.dot)?.animation(forKey: "position") != nil)
-        scene.host.detach()
     }
 
     @Test @MainActor
     func aNodeComingInFadesIn() throws {
         let scene = Scene()
+        defer { scene.close() }
 
         withAnimation {
             scene.row.showsBadge.value = true
@@ -147,12 +153,12 @@
         #expect(fade.fromValue as? Float == 0)
         #expect(fade.toValue as? Float == 1)
         #expect(badge.animation(forKey: "position") == nil)
-        scene.host.detach()
     }
 
     @Test @MainActor
     func aNodeLeavingFadesOutWhereItWasAndIsDroppedAfterwards() throws {
         let scene = Scene()
+        defer { scene.close() }
         scene.row.showsBadge.value = true
         scene.render()
         let badge = try #require(scene.layer(scene.row.badge))
@@ -165,10 +171,7 @@
         #expect(scene.layer(scene.row.badge) == nil)
         #expect(badge.superlayer === scene.layer(scene.row))
         #expect(badge.opacity == 0)
-        let fade = try #require(
-            badge.animation(forKey: "opacity") as? CABasicAnimation,
-            "badge: \(badge.animationKeys() ?? [])"
-        )
+        let fade = try #require(badge.animation(forKey: "opacity") as? CABasicAnimation)
         #expect(fade.fromValue as? Float == 1)
         #expect(fade.toValue as? Float == 0)
 
@@ -177,12 +180,12 @@
         scene.render()
 
         #expect(badge.superlayer == nil)
-        scene.host.detach()
     }
 
     @Test @MainActor
     func aNodeComingBackWhileFadingOutKeepsItsLayer() throws {
         let scene = Scene()
+        defer { scene.close() }
         scene.row.showsBadge.value = true
         scene.render()
         let badge = try #require(scene.layer(scene.row.badge))
@@ -199,12 +202,12 @@
         #expect(scene.layer(scene.row.badge) === badge)
         #expect(badge.opacity == 1)
         #expect(scene.layer(scene.row)?.sublayers?.count == 3)
-        scene.host.detach()
     }
 
     @Test @MainActor
     func aNodeHiddenWithAnimationFadesOutBeforeItIsHidden() throws {
         let scene = Scene()
+        defer { scene.close() }
         let dot = try #require(scene.layer(scene.row.dot))
 
         withAnimation {
@@ -221,12 +224,12 @@
         scene.render()
 
         #expect(dot.isHidden)
-        scene.host.detach()
     }
 
     @Test @MainActor
     func appearanceChangesAnimateToo() throws {
         let scene = Scene()
+        defer { scene.close() }
 
         withAnimation {
             scene.row.dot.appearance.background = Color(red: 0, green: 0, blue: 1)
@@ -235,19 +238,16 @@
         scene.render()
 
         let dot = try #require(scene.layer(scene.row.dot))
-        let color = try #require(
-            dot.animation(forKey: "backgroundColor") as? CABasicAnimation,
-            "dot: \(dot.animationKeys() ?? [])"
-        )
+        let color = try #require(dot.animation(forKey: "backgroundColor") as? CABasicAnimation)
         let from = color.fromValue as! CGColor
         #expect(from.alpha == 0)
         #expect(dot.animation(forKey: "cornerRadius") != nil)
-        scene.host.detach()
     }
 
     @Test @MainActor
     func aSpringIsASpringAnimation() {
         let scene = Scene()
+        defer { scene.close() }
 
         withAnimation(.spring(response: 0.4, dampingRatio: 0.7)) {
             scene.row.spacer.width = 60
@@ -257,6 +257,5 @@
         let move = scene.layer(scene.row.dot)?.animation(forKey: "position")
         #expect(move is CASpringAnimation)
         #expect(move?.duration == Animation.spring(response: 0.4, dampingRatio: 0.7).duration)
-        scene.host.detach()
     }
 #endif
