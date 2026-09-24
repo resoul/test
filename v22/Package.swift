@@ -12,12 +12,15 @@ let package = Package(
         .library(name: "LayoutCore", targets: ["LayoutCore"]),
         .library(name: "LayoutUIKit", targets: ["LayoutUIKit"]),
         .library(name: "LayoutAppKit", targets: ["LayoutAppKit"]),
+        .library(name: "StateCore", targets: ["StateCore"]),
     ],
     targets: [
         .target(name: "LayoutCore"),
         .target(name: "LayoutUIKit", dependencies: ["LayoutCore"]),
         .target(name: "LayoutAppKit", dependencies: ["LayoutCore"]),
+        .target(name: "StateCore"),
         .testTarget(name: "LayoutCoreTests", dependencies: ["LayoutCore"]),
+        .testTarget(name: "StateCoreTests", dependencies: ["StateCore"]),
         .testTarget(
             name: "LayoutAdapterTests",
             dependencies: ["LayoutCore", "LayoutUIKit", "LayoutAppKit"]

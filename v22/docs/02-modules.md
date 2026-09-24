@@ -20,8 +20,9 @@ Nodes           дерево нод, снимок, фоновый расчёт, 
 NodesUIKit      встраивание нод в UIKit: view.addSubnode(node)
 NodesAppKit     встраивание нод в AppKit
 Theme           тема: шкала отступов, цвета, типографика; тема по умолчанию (см. 09)
-State           синхронное реактивное состояние на MainActor (открыто — см. 08)
-StateFlux       адаптер Flux → State
+StateCore       синхронное состояние на MainActor с отслеживанием чтений: State, Computed,
+                Observer, Effect (см. 08). Только стандартная библиотека.
+StateFlux       адаптер Flux ↔ StateCore (Flux ≥ 1.3.0)
 ```
 
 Зависимости направлены только вниз:
@@ -30,7 +31,7 @@ StateFlux       адаптер Flux → State
 NodesUIKit ──► Nodes ──► LayoutCore ◄── LayoutUIKit
 NodesAppKit ─┘                      ◄── LayoutAppKit
 Nodes ──► Theme ──► LayoutCore
-StateFlux ──► State        (Nodes от State не зависит)
+StateFlux ──► StateCore ◄── Nodes   (Nodes отслеживает чтения в layoutSpec()/update())
 ```
 
 ## Правила
@@ -58,5 +59,5 @@ StateFlux ──► State        (Nodes от State не зависит)
 | Flex-раскладка обычных UIView без нод | `Layout` + `LayoutUIKit` |
 | То же на macOS | `Layout` + `LayoutAppKit` |
 | Экран на нодах в UIKit-приложении | `Nodes` + `NodesUIKit` |
-| Ноды + реактивные данные из Flux | `Nodes` + `NodesUIKit` + `State` + `StateFlux` |
+| Ноды + реактивные данные из Flux | `Nodes` + `NodesUIKit` + `StateCore` + `StateFlux` |
 | Тесты математики раскладки без платформы | `Layout` |

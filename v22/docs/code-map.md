@@ -116,3 +116,13 @@
 |---|---|---|
 | отдельный пакет | не затрагивает Trellis | [10](10-layout-engine.md#решено) |
 | модуль `LayoutCore` (не `Layout`) | `Layout` — протокол SwiftUI | [02-modules.md](02-modules.md), [07](07-naming.md#прочие-имена) |
+
+## `Sources/StateCore`
+
+| Код | Что | Основание |
+|---|---|---|
+| модуль `StateCore` (не `State`) | модуль и тип с одним именем ломают квалификацию | [08](08-open-questions.md#состояние-и-реактивность), как `LayoutCore` |
+| `Tracking`, `Reads`, `Dependents` | запись чтений с версиями; зависимые — слабые ссылки | [08](08-open-questions.md#состояние-и-реактивность): автоматическая подписка по чтению |
+| `Computed.refresh` | «возможно изменилось» вниз сразу, проверка версий — лениво; равный результат не распространяется | там же |
+| `Observer.track` — проверка после подписки | запись в прочитанное во время самого прогона | тест `aFlushOfObserversThatFeedEachOtherEnds` |
+| `StateUpdates.flush`, `scheduler`, `roundLimit` | слияние записей до flush; flush «перед кадром» подставит слой нод | как D14 Trellis: burst → одна доставка |
