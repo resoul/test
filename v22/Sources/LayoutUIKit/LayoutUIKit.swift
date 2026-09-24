@@ -25,7 +25,8 @@
         /// Sets the view's size and position without touching its transform.
         ///
         /// Ownership: mutates the view. Isolation: MainActor. Errors: none. Cancellation: none.
-        public func applyLayoutFrame(_ frame: CGRect) {
+        public func applyLayoutFrame(_ frame: LayoutRect) {
+            let frame = CGRect(frame)
             bounds.size = frame.size
             center = CGPoint(x: frame.midX, y: frame.midY)
         }
@@ -46,7 +47,7 @@
         /// Cancellation: none.
         public func applyLayoutSpec() {
             layoutSpec()?.apply(
-                in: bounds,
+                in: LayoutRect(bounds),
                 direction: layoutDirection,
                 scale: layoutScale,
                 spacing: layoutSpacing
@@ -61,11 +62,12 @@
             guard let spec = layoutSpec() else { return .zero }
 
             let limited = size.width > 0 && size.width < CGFloat.greatestFiniteMagnitude
-            return spec.measure(
+            let measured = spec.measure(
                 width: limited ? .definite(Double(size.width)) : .maxContent,
                 direction: layoutDirection,
                 spacing: layoutSpacing
             )
+            return CGSize(measured)
         }
 
         var layoutDirection: LayoutDirection {
@@ -180,6 +182,34 @@
 
             let fitting = CGSize(width: CGFloat(width), height: CGFloat.greatestFiniteMagnitude)
             return max(0, Double(view.sizeThatFits(fitting).height))
+        }
+    }
+
+    extension CGRect {
+        init(_ rect: LayoutRect) {
+            self.init(
+                x: rect.origin.x,
+                y: rect.origin.y,
+                width: rect.size.width,
+                height: rect.size.height
+            )
+        }
+    }
+
+    extension LayoutRect {
+        init(_ rect: CGRect) {
+            self.init(
+                x: Double(rect.origin.x),
+                y: Double(rect.origin.y),
+                width: Double(rect.size.width),
+                height: Double(rect.size.height)
+            )
+        }
+    }
+
+    extension CGSize {
+        init(_ size: LayoutSize) {
+            self.init(width: size.width, height: size.height)
         }
     }
 #endif

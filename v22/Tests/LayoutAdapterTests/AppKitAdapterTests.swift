@@ -1,6 +1,6 @@
 #if canImport(AppKit)
     import AppKit
-    import LayoutAppKit
+    @testable import LayoutAppKit
     import LayoutCore
     import Testing
 
@@ -56,7 +56,7 @@
 
         FlexContainer(.column) { child.size(width: 20, height: 10) }
             .alignItems(.start)
-            .apply(in: host.bounds)
+            .apply(in: LayoutRect(host.bounds))
 
         #expect(child.frame == CGRect(x: 0, y: 90, width: 20, height: 10))
     }
@@ -70,7 +70,7 @@
 
         FlexContainer(.column) { card }
             .alignItems(.start)
-            .apply(in: host.bounds)
+            .apply(in: LayoutRect(host.bounds))
 
         #expect(card.frame.size == CGSize(width: 112, height: 80))
     }
@@ -88,7 +88,7 @@
             first.size(10).hidden()
             second.size(10).hidden(false)
         }
-        .apply(in: host.bounds)
+        .apply(in: LayoutRect(host.bounds))
 
         #expect(first.isHidden)
         #expect(!second.isHidden)

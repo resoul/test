@@ -10,15 +10,14 @@ extension LayoutSpec {
     /// Ownership: borrows the elements for the call. Isolation: MainActor; runs synchronously.
     /// Errors: none. Cancellation: not applicable.
     public func apply(
-        in rect: CGRect,
+        in rect: LayoutRect,
         direction: LayoutDirection = .leftToRight,
         scale: Double = 1,
         spacing: SpacingScale = .standard
     ) {
         var tree = LayoutTree(direction: direction, spacing: spacing)
         let root = tree.root(for: self)
-        let size = LayoutSize(width: Double(rect.width), height: Double(rect.height))
-        guard let result = try? FlexboxEngine.layout(root, size: size) else { return }
+        guard let result = try? FlexboxEngine.layout(root, size: rect.size) else { return }
 
         let snap = scale > 0 ? scale : 1
         func snapped(_ value: Double) -> Double { (value * snap).rounded() / snap }
@@ -27,12 +26,12 @@ extension LayoutSpec {
         for (offset, entry) in tree.elements.enumerated() {
             let frame = result.frame(for: LayoutID(UInt64(offset)))
             if let frame {
-                let minX = snapped(Double(rect.minX) + frame.origin.x)
-                let minY = snapped(Double(rect.minY) + frame.origin.y)
-                let maxX = snapped(Double(rect.minX) + frame.origin.x + frame.size.width)
-                let maxY = snapped(Double(rect.minY) + frame.origin.y + frame.size.height)
+                let minX = snapped(rect.origin.x + frame.origin.x)
+                let minY = snapped(rect.origin.y + frame.origin.y)
+                let maxX = snapped(rect.origin.x + frame.origin.x + frame.size.width)
+                let maxY = snapped(rect.origin.y + frame.origin.y + frame.size.height)
                 entry.element.applyLayoutFrame(
-                    CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+                    LayoutRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
                 )
             }
 
@@ -63,14 +62,10 @@ extension LayoutSpec {
         height: AvailableSpace = .maxContent,
         direction: LayoutDirection = .leftToRight,
         spacing: SpacingScale = .standard
-    ) -> CGSize {
+    ) -> LayoutSize {
         var tree = LayoutTree(direction: direction, spacing: spacing)
         let root = tree.root(for: self)
-        guard let size = try? FlexboxEngine.measure(root, width: width, height: height) else {
-            return .zero
-        }
-
-        return CGSize(width: size.width, height: size.height)
+        return (try? FlexboxEngine.measure(root, width: width, height: height)) ?? .zero
     }
 }
 

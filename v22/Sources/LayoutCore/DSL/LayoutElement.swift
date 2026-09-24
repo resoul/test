@@ -19,7 +19,7 @@ public protocol LayoutElement: AnyObject, LayoutSpecConvertible {
     ///
     /// Ownership: the element stores what it needs. Isolation: MainActor. Errors: none.
     /// Cancellation: none.
-    func applyLayoutFrame(_ frame: CGRect)
+    func applyLayoutFrame(_ frame: LayoutRect)
 
     /// Shows or hides the element — called only for elements of specs that manage visibility
     /// (`hidden`, `invisible`, `Breakpoint`). The default does nothing.
