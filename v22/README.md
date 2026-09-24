@@ -19,8 +19,9 @@
 
 ## Код
 
-- `Package.swift`, `Sources/LayoutCore`, `Tests/LayoutCoreTests` — отдельный пакет; модуль
-  раскладки собирается и на Linux.
+- `Package.swift` — отдельный пакет: `LayoutCore` (движок и DSL, собирается и на Linux),
+  `LayoutUIKit`, `LayoutAppKit` (адаптеры view); тесты `LayoutCoreTests`,
+  `LayoutAdapterTests` (только macOS).
 - [AGENTS.md](AGENTS.md) — правила кода v22, в том числе: **комментарии не ссылаются на
   наши документы**; связь кода с документами — в [docs/code-map.md](docs/code-map.md).
 

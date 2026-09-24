@@ -38,7 +38,9 @@ AGENTS.md Trellis).
 
 | Имя | Статус |
 |---|---|
-| `layoutSpec()` — метод раскладки (`layout()` занят в `NSView`) | предложено |
+| `layoutSpec()` — метод раскладки (`layout()` занят в `NSView`) | реализовано |
+| `LayoutSpec` — тип описания раскладки (не `Layout`: в файлах с SwiftUI была бы неоднозначность с `SwiftUI.Layout`); `FlexContainer` — его псевдоним | реализовано |
+| `LayoutElement`, `LayoutSpecProviding`, `LayoutView`, `LayoutNSView`, `applyLayoutSpec()` | реализовано |
 | `FlexContainer` | согласовано (по примеру) |
 | `Breakpoint` | согласовано |
 | Пороги `.sm` / `.md` / `.lg` / `.xl` / `.xxl` | согласовано (значения — предложено, [04](04-conditionals-and-responsive.md#именованные-пороги)) |

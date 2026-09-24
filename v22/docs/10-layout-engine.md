@@ -167,6 +167,27 @@ CSS и поведения Chromium, которых не было в ручном
 Не сделано в E2: выравнивание по базовой линии (`align-items: baseline`) — нужен ещё
 запрос первой базовой линии у измерителя.
 
+## Статус: `FlexContainer` для `UIView`/`NSView`
+
+**Сделано (2026-09-24), на Apple-платформах ещё не прогонялось.**
+
+- `LayoutCore/DSL` — платформо-нейтральный DSL: `LayoutSpec` (`FlexContainer` — его
+  псевдоним), `LayoutBuilder` (`if`, `if let`, `switch`, `for`, опциональные элементы),
+  модификаторы элемента и контейнера, `apply(in:direction:scale:)` с привязкой краёв к
+  пиксельной сетке, `measure(width:height:)`; протоколы `LayoutElement` и
+  `LayoutSpecProviding`. Проверено на Linux тестовыми элементами: карточка профиля
+  совпадает с Chromium до точки.
+- `LayoutUIKit` — `UIView: LayoutElement` (измерение: своя раскладка → `sizeThatFits` при
+  наличии intrinsic-размера → без содержимого), `LayoutView` (`layoutSubviews`,
+  `sizeThatFits`, `intrinsicContentSize` из раскладки), `applyLayoutSpec()` и
+  `layoutSpecSize(fitting:)` для ячеек и чужих классов.
+- `LayoutAppKit` — то же для `NSView`; `LayoutNSView` перевёрнут (`isFlipped`), в
+  неперевёрнутом родителе координата y отражается. Тесты `LayoutAdapterTests` выполняются
+  только на macOS.
+
+Не сделано: `hidden`/`invisible`, токены отступов, `from:`, `Breakpoint`, встраивание нод
+(`addSubnode`), базовая линия.
+
 ## Диагностика
 
 **Статус: принято в обсуждении.**

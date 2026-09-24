@@ -67,7 +67,13 @@ view.addSubnode(ProfileCard(user: user))
 
 ## Метод раскладки
 
-**Статус: предложено** — имя `layoutSpec()`.
+**Статус: реализовано** для `UIView`/`NSView` (модули `LayoutUIKit`/`LayoutAppKit`):
+`func layoutSpec() -> LayoutSpec?`. Возвращаемый тип — `LayoutSpec`, а не `Layout`, чтобы не
+спорить с `SwiftUI.Layout` в файлах, где импортирован SwiftUI.
+
+`.padding` на элементе ведёт себя как в SwiftUI — применяется к тому, что до него:
+`avatar.size(48).padding(8)` — аватар 48 в слоте 64; `avatar.padding(8).size(48)` — слот 48,
+аватар 32. На контейнере `.padding` — обычный отступ содержимого.
 
 - Имя `layout()` **нельзя**: у `NSView` уже есть системный `layout()` (аналог
   `layoutSubviews`), и `override` там означал бы совсем другое. `layoutSpec()` свободно
