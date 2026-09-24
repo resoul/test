@@ -17,7 +17,7 @@
 
         override func layoutSpec() -> LayoutSpec? {
             FlexContainer(.column) {
-                if let boxHeight { text.height(boxHeight) } else { text }
+                if let boxHeight { text.height(.points(boxHeight)) } else { text }
             }
             .alignItems(.start)
         }
