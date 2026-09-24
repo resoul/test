@@ -31,4 +31,9 @@ struct DemoScreenView: UIViewRepresentable {
     }
 
     func updateUIView(_ view: NodeView, context: Context) {}
+
+    /// The screen takes all the space it is offered.
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: NodeView, context: Context) -> CGSize? {
+        proposal.replacingUnspecifiedDimensions()
+    }
 }

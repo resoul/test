@@ -100,7 +100,7 @@
             view.renderedLayer(for: card.avatar)?.frame
                 == CGRect(x: 10, y: 10, width: 40, height: 40)
         )
-        #expect(view.intrinsicContentSize == CGSize(width: 90, height: 60))
+        #expect(view.intrinsicContentSize == CGSize(width: NSView.noIntrinsicMetric, height: 60))
         view.host.detach()
     }
 

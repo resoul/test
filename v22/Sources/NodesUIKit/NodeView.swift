@@ -60,6 +60,7 @@
             isLayingOut = true
             defer { isLayingOut = false }
 
+            let widthChanged = host.size.width != Double(bounds.width)
             host.size = LayoutSize(width: Double(bounds.width), height: Double(bounds.height))
             host.scale = Double(traitCollection.displayScale > 0 ? traitCollection.displayScale : 1)
             host.direction =
@@ -68,6 +69,10 @@
             if host.needsRender {
                 renderer.render(host.root, in: layer, scale: host.scale)
                 host.didRender()
+            }
+            if widthChanged {
+                // The height the tree wants depends on the width it has.
+                invalidateIntrinsicContentSize()
             }
         }
 
@@ -110,9 +115,17 @@
         }
 
         /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
+        /// No width of its own — the surroundings give it one (constraints, SwiftUI, a
+        /// frame), as for a paragraph of text — and the height the tree takes at the current
+        /// width. A tree's widest content is a poor width to ask for: one long line of text
+        /// can make it wider than the screen.
         public override var intrinsicContentSize: CGSize {
-            let fitting = host.fittingSize(width: .maxContent)
-            return CGSize(width: fitting.width, height: fitting.height)
+            let width =
+                bounds.width > 0 ? AvailableSpace.definite(Double(bounds.width)) : .maxContent
+            return CGSize(
+                width: UIView.noIntrinsicMetric,
+                height: host.fittingSize(width: width).height
+            )
         }
     }
 
