@@ -4,7 +4,7 @@ import Testing
 @testable import LayoutCore
 
 // Compares FlexboxEngine with CSS Flexbox as rendered by Chromium. Every case in
-// Conformance/CSSFlexbox/fixtures/ (hand-written flexbox.json and seeded random.json) is a
+// Conformance/CSSFlexbox/fixtures/ (hand-written and seeded random trees, with and without text) is a
 // tree with the frame Chromium gave each node; the test lays out the same tree and compares every frame within `tolerance`.
 //
 // The known outcome of every case (pass / fail / unsupported) is stored in
@@ -169,7 +169,7 @@ private func makeNode(
 
     let rtl = direction == .rightToLeft
     var style = FlexStyle()
-    var content: LayoutSize?
+    var content: LeafContent?
     var physicalInsets: [String: Double] = [:]
 
     for (property, value) in css.style {
@@ -267,9 +267,20 @@ private func makeNode(
                 throw Unsupported(reason: "content: \(value)")
             }
 
-            content = LayoutSize(
+            content = .size(
                 width: try number(size[0], property),
                 height: try number(size[1], property)
+            )
+        case "text":
+            guard case let .list(values) = value, let first = values.first else {
+                throw Unsupported(reason: "text: \(value)")
+            }
+
+            content = .measured(
+                WordsMeasurer(
+                    lineHeight: try number(first, property),
+                    words: try values.dropFirst().map { try number($0, property) }
+                )
             )
         default:
             throw Unsupported(reason: "\(property): \(value)")
@@ -296,6 +307,34 @@ private func makeNode(
         direction: direction,
         children: children
     )
+}
+
+/// Text as the fixtures model it: words of fixed widths and one line height, wrapped greedily
+/// — exactly how a browser wraps a line of equal-height inline blocks.
+private struct WordsMeasurer: ContentMeasurer {
+    let lineHeight: Double
+    let words: [Double]
+
+    func minContentWidth() -> Double { words.max() ?? 0 }
+
+    func maxContentWidth() -> Double { words.reduce(0, +) }
+
+    func height(forWidth width: Double) -> Double {
+        guard !words.isEmpty else { return 0 }
+
+        var lines = 1
+        var used = 0.0
+        for word in words {
+            if used > 0 && used + word > width + 1e-9 {
+                lines += 1
+                used = word
+            } else {
+                used += word
+            }
+        }
+
+        return Double(lines) * lineHeight
+    }
 }
 
 // MARK: - Running a case
@@ -406,7 +445,12 @@ private func report(_ fixture: Fixture, _ outcomes: [(name: String, outcome: Out
 @Test
 func cssFlexboxConformance() throws {
     // Hand-written cases, then seeded random trees; both rendered by the same browser.
-    let fixtureFiles = ["fixtures/flexbox.json", "fixtures/random.json"]
+    let fixtureFiles = [
+        "fixtures/flexbox.json",
+        "fixtures/random.json",
+        "fixtures/text.json",
+        "fixtures/random-text.json",
+    ]
     let expectationsURL = conformanceRoot.appendingPathComponent("expectations/engine.json")
     let reportURL = conformanceRoot.appendingPathComponent("reports/engine.md")
 

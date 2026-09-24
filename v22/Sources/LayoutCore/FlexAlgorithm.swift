@@ -37,6 +37,9 @@ struct FlexItem {
     let ratio: Double?
     /// Cross size already known while the flex base size is determined (§9.2 step 3, §9.8).
     let crossForBasis: Double?
+    /// `flex-basis` is a length or a resolved percentage, not `auto` or an unresolvable
+    /// percentage.
+    let basisIsDefinite: Bool
     /// Whether the item's flexed main size counts as definite for its own children (§9.8):
     /// yes when the container's main size is definite or the item specifies its main size.
     let mainIsDefinite: Bool
@@ -532,6 +535,8 @@ extension Solver {
             stretches: stretches,
             ratio: ratio,
             crossForBasis: crossForBasis,
+            basisIsDefinite: style.basis.resolve(isRow ? itemParent.width : itemParent.height)
+                != nil,
             mainIsDefinite: sizeMain != nil || (isRow ? itemParent.width : itemParent.height) != nil
         )
         let measureDefinite = DefiniteAxes(main: false, cross: crossForBasis != nil, isRow: isRow)
@@ -625,11 +630,12 @@ extension Solver {
         clamp(raw, item.minMain, item.maxMain, item.paddingMain) + item.marginsMain
     }
 
-    /// The outer contribution of an item that stays at its flex-basis when it cannot grow (or
-    /// shrink) towards `raw`.
+    /// The outer contribution of an item with a definite flex-basis that stays at that basis
+    /// when it cannot grow (or shrink) towards `raw`.
     private func flexedContribution(_ item: FlexItem, _ raw: Double) -> Double {
         let cannotReach =
-            (raw > item.basis && item.grow == 0) || (raw < item.basis && item.shrink == 0)
+            item.basisIsDefinite
+            && ((raw > item.basis && item.grow == 0) || (raw < item.basis && item.shrink == 0))
         return plainContribution(item, cannotReach ? item.basis : raw)
     }
 

@@ -6,7 +6,7 @@ import Testing
 func cancelledPassThrowsAndReturnsNothing() {
     let root = LayoutNode(
         id: LayoutID(0),
-        children: [LayoutNode(id: LayoutID(1), content: LayoutSize(width: 10, height: 10))]
+        children: [LayoutNode(id: LayoutID(1), content: .size(width: 10, height: 10))]
     )
     let cancelled = LayoutContext(isCancelled: { true })
 
@@ -66,8 +66,8 @@ func measureReturnsContentSizeOfAnAutoSizedTree() throws {
         id: LayoutID(0),
         style: style,
         children: [
-            LayoutNode(id: LayoutID(1), content: LayoutSize(width: 20, height: 20)),
-            LayoutNode(id: LayoutID(2), content: LayoutSize(width: 30, height: 10)),
+            LayoutNode(id: LayoutID(1), content: .size(width: 20, height: 20)),
+            LayoutNode(id: LayoutID(2), content: .size(width: 30, height: 10)),
         ]
     )
 

@@ -116,7 +116,7 @@ enum Axis: Hashable {
 struct FlatNode {
     let id: LayoutID
     let style: FlexStyle
-    let content: LayoutSize?
+    let content: LeafContent?
     let direction: LayoutDirection
     var children: [Int]
 }
@@ -223,7 +223,13 @@ struct Solver {
         }
 
         if nodes[index].children.isEmpty {
-            return leafSize(index, known: known, parent: parent, contentOnly: contentOnly)
+            return leafSize(
+                index,
+                known: known,
+                parent: parent,
+                available: available,
+                contentOnly: contentOnly
+            )
         }
 
         return try flexLayout(
@@ -246,6 +252,7 @@ struct Solver {
         _ index: Int,
         known: OptionalSize,
         parent: OptionalSize,
+        available: AvailableSize,
         contentOnly: Axis?
     ) -> LayoutSize {
         let node = nodes[index]
@@ -257,7 +264,12 @@ struct Solver {
             contentOnly: contentOnly,
             transferRatio: false
         )
-        let content = node.content ?? .zero
+        // Measured content (text) gets its width first — the known width, or the constraint
+        // on the width — and its height from that width.
+        let content = (node.content ?? .size(.zero)).size(
+            knownWidth: own.width.map { max(0, $0 - own.paddingWidth) },
+            available: available.width.shrunk(by: own.paddingWidth)
+        )
         let contentWidth = content.width + own.paddingWidth
         let contentHeight = content.height + own.paddingHeight
         var width = own.width
@@ -297,8 +309,23 @@ struct Solver {
             }
         }
 
+        let finalWidth = width ?? clamp(contentWidth, own.minWidth, own.maxWidth, own.paddingWidth)
+        if height == nil, case .measured = node.content, abs(finalWidth - contentWidth) > 1e-9 {
+            // The width was clamped or given: measured content wraps to the final width.
+            let wrapped = (node.content ?? .size(.zero)).size(
+                knownWidth: max(0, finalWidth - own.paddingWidth),
+                available: .definite(max(0, finalWidth - own.paddingWidth))
+            )
+            height = clamp(
+                wrapped.height + own.paddingHeight,
+                own.minHeight,
+                own.maxHeight,
+                own.paddingHeight
+            )
+        }
+
         return LayoutSize(
-            width: width ?? clamp(contentWidth, own.minWidth, own.maxWidth, own.paddingWidth),
+            width: finalWidth,
             height: height ?? clamp(contentHeight, own.minHeight, own.maxHeight, own.paddingHeight)
         )
     }

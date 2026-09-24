@@ -9,7 +9,9 @@
 // - every node is `display: flex` (every Trellis node is a flex container);
 // - `box-sizing: border-box` (width/height include padding, as in the engine);
 // - every node is `position: relative`, so an absolute child is placed against its parent;
-// - no text: a leaf with content gets a rigid inner block of the given size instead;
+// - no fonts: a leaf with `content: [w, h]` gets a rigid inner block of that size; a leaf
+//   with `text: [lineHeight, word, word, …]` is a plain block holding inline-block "words"
+//   of those widths, which wrap like text but do not depend on any font;
 // - all lengths are CSS px = points; percentages are strings like "50%".
 
 'use strict';
@@ -285,9 +287,10 @@ function edges(v) {
 const cssName = (k) => k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 
 function css(style) {
-  const out = ['display:flex', 'box-sizing:border-box', 'position:relative'];
+  const out = [style.text ? 'display:block' : 'display:flex', 'box-sizing:border-box', 'position:relative'];
+  if (style.text) out.push('font-size:0', 'line-height:0');
   for (const [k, v] of Object.entries(style)) {
-    if (k === 'content') continue;
+    if (k === 'content' || k === 'text') continue;
     if (k === 'padding' || k === 'margin') out.push(`${k}:${edges(v)}`);
     else if (['flexGrow', 'flexShrink', 'order', 'aspectRatio'].includes(k)) out.push(`${cssName(k)}:${v}`);
     else out.push(`${cssName(k)}:${px(v)}`);
@@ -302,10 +305,58 @@ function assignIDs(node, counter = { i: 0 }) {
 }
 
 function html(node) {
-  const content = node.style.content
+  let content = node.style.content
     ? `<div data-content style="flex-shrink:0;width:${node.style.content[0]}px;height:${node.style.content[1]}px"></div>`
     : '';
+  if (node.style.text) {
+    const [lineHeight, ...words] = node.style.text;
+    content = words
+      .map((w) => `<span data-content style="display:inline-block;vertical-align:top;width:${w}px;height:${lineHeight}px"></span>`)
+      .join('');
+  }
   return `<div id="${node.id}" style="${css(node.style)}">${content}${node.children.map(html).join('')}</div>`;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Text: content whose height depends on its width. Kept in its own fixture file.
+
+const textCases = [];
+{
+  const saved = cases.length;
+  const t = (lineHeight, ...words) => [lineHeight, ...words];
+  group('text', () => {
+    add('row-two-paragraphs-shrink', n({ width: 200, height: 100, alignItems: 'flex-start' },
+      n({ text: t(10, 40, 30, 50, 30) }), n({ text: t(10, 60, 40, 50) })));
+    add('row-min-content-floor', n({ width: 100, height: 100, alignItems: 'flex-start' },
+      n({ text: t(10, 70, 20) }), n({ text: t(10, 60, 30) })));
+    add('column-wraps-at-width', n({ width: 100, height: 200, flexDirection: 'column' },
+      n({ text: t(10, 40, 30, 50, 30, 20) }), n({ text: t(20, 90, 10) })));
+    add('basis-zero-grow', n({ width: 240, height: 100, alignItems: 'flex-start' },
+      n({ flexGrow: 1, flexBasis: 0, text: t(10, 50, 50, 50) }), n({ flexGrow: 1, flexBasis: 0, text: t(10, 30) })));
+    add('column-center-fit-content', n({ width: 120, height: 200, flexDirection: 'column', alignItems: 'center' },
+      n({ text: t(10, 30, 20) }), n({ text: t(10, 60, 50, 40) })));
+    add('padding-and-limits', n({ width: 300, height: 200, flexDirection: 'column', alignItems: 'flex-start' },
+      n({ padding: 10, text: t(10, 50, 50, 50, 50) }), n({ maxWidth: 90, text: t(10, 40, 40, 40) }),
+      n({ minWidth: 150, text: t(10, 20, 20) })));
+    add('width-below-longest-word', n({ width: 200, height: 100, alignItems: 'flex-start' },
+      n({ width: 30, text: t(10, 50, 10, 10) })));
+    add('profile-card', n({ width: 220, height: 120, padding: 16, columnGap: 12, alignItems: 'center' },
+      box(48, 48),
+      n({ flexDirection: 'column', rowGap: 4, flexGrow: 1, flexShrink: 1 },
+        n({ text: t(16, 40, 30, 50, 20) }), n({ text: t(12, 30, 30, 30, 30) })),
+      n({ content: [60, 28] })));
+    add('wrap-chips', n({ width: 160, height: 200, flexWrap: 'wrap', columnGap: 8, rowGap: 8, alignContent: 'flex-start' },
+      n({ padding: 4, text: t(10, 40) }), n({ padding: 4, text: t(10, 30, 30) }), n({ padding: 4, text: t(10, 70) }),
+      n({ padding: 4, text: t(10, 20) })));
+    add('stretched-row-height', n({ width: 150, height: 200, alignItems: 'stretch', alignContent: 'flex-start', flexWrap: 'wrap' },
+      n({ width: 70, text: t(10, 30, 30, 30) }), n({ width: 70, text: t(10, 20) })));
+    add('absolute-shrink-to-fit', n({ width: 200, height: 200 },
+      n({ position: 'absolute', top: 10, left: 10, text: t(10, 50, 50, 50, 50, 50) })));
+    add('nested-column-in-row', n({ width: 180, height: 150, alignItems: 'flex-start' },
+      n({ flexDirection: 'column', flexGrow: 1 }, n({ text: t(10, 40, 40, 40, 40) })),
+      n({ flexDirection: 'column', width: 60 }, n({ text: t(10, 30, 30, 30) }))));
+  });
+  textCases.push(...cases.splice(saved));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -327,7 +378,7 @@ function mulberry32(seed) {
   };
 }
 
-function randomTree(rng) {
+function randomTree(rng, withText = false) {
   const pick = (values) => values[Math.floor(rng() * values.length)];
   const chance = (p) => rng() < p;
 
@@ -377,6 +428,11 @@ function randomTree(rng) {
     if (depth < 3 && (isRoot || chance(0.45))) {
       const count = isRoot ? 1 + Math.floor(rng() * 5) : 1 + Math.floor(rng() * 3);
       for (let i = 0; i < count; i++) children.push(node(depth + 1, false));
+    } else if (!isRoot && withText && chance(0.6)) {
+      const words = [];
+      const count = 1 + Math.floor(rng() * 7);
+      for (let i = 0; i < count; i++) words.push(pick([10, 20, 30, 40, 60]));
+      s.text = [pick([10, 20]), ...words];
     } else if (!isRoot && chance(0.5)) {
       s.content = [pick([10, 30, 50, 90]), pick([10, 20, 30])];
     }
@@ -384,6 +440,17 @@ function randomTree(rng) {
   }
 
   return node(0, true);
+}
+
+const randomTextSeed = 7;
+const randomTextCount = 200;
+const randomTextCases = [];
+{
+  const rng = mulberry32(randomTextSeed);
+  for (let i = 0; i < randomTextCount; i++) {
+    const name = `random-text/${String(i).padStart(4, '0')}`;
+    randomTextCases.push({ name, group: 'random-text', root: randomTree(rng, true) });
+  }
 }
 
 const randomSeed = 2026;
@@ -435,6 +502,8 @@ async function render(browser, list, file, extra) {
   const browser = await chromium.launch();
   await render(browser, cases, 'flexbox.json', {});
   await render(browser, randomCases, 'random.json', { seed: randomSeed });
+  await render(browser, textCases, 'text.json', {});
+  await render(browser, randomTextCases, 'random-text.json', { seed: randomTextSeed });
   await browser.close();
 })().catch((error) => {
   console.error(error);

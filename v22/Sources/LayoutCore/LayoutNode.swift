@@ -15,7 +15,8 @@ public struct LayoutID: Sendable, Hashable, CustomStringConvertible {
 }
 
 /// One element of the immutable input tree. A node without children is a leaf; its
-/// `content` is the size of what it shows (for example an image), excluding `padding`.
+/// `content` is what it shows (a fixed size like an image, or measured content like text),
+/// excluding `padding`.
 ///
 /// Ownership: value type; the tree is an immutable snapshot the caller builds and may send to
 /// any task. Isolation: none. Errors: none. Cancellation: not applicable.
@@ -24,10 +25,10 @@ public struct LayoutNode: Sendable {
     public var id: LayoutID
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public var style: FlexStyle
-    /// Intrinsic content size of a leaf; ignored for a node with children.
+    /// Content of a leaf; ignored for a node with children.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public var content: LayoutSize?
+    public var content: LeafContent?
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public var direction: LayoutDirection
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
@@ -37,7 +38,7 @@ public struct LayoutNode: Sendable {
     public init(
         id: LayoutID,
         style: FlexStyle = FlexStyle(),
-        content: LayoutSize? = nil,
+        content: LeafContent? = nil,
         direction: LayoutDirection = .leftToRight,
         children: [LayoutNode] = []
     ) {

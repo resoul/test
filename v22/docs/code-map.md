@@ -29,6 +29,13 @@
 | `LayoutContext` / `LayoutCancelled` | отмена через `throws`, без частичного результата | Trellis D09, D10 |
 | `LayoutContext.checkpoint()` и вызовы в `flexLayout` (каждый контейнер, каждые 256 item) | точки отмены | Trellis D09, дефект #16 |
 
+## `Sources/LayoutCore/LeafContent.swift`
+
+| Код | Что | Основание |
+|---|---|---|
+| `ContentMeasurer` | min-/max-content ширина и высота при ширине | [10](10-layout-engine.md#статус-e2-текст); три запроса к листу — [10](10-layout-engine.md#ключевые-структуры) |
+| `LeafContent.size(knownWidth:available:)` | ширина по ограничению, высота при ней | [10](10-layout-engine.md#статус-e2-текст) |
+
 ## `Sources/LayoutCore/FlexStyle.swift`
 
 | Код | Что | Основание |

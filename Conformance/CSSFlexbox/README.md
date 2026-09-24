@@ -10,6 +10,8 @@
 generate.cjs            кейсы (JS DSL) → HTML → Chromium → эталонные frame
 fixtures/flexbox.json   ручные кейсы + эталон; коммитится, Swift-сторона только читает
 fixtures/random.json    400 случайных деревьев (seed 2026) из того же набора свойств
+fixtures/text.json      ручные кейсы с «текстом»
+fixtures/random-text.json  200 случайных деревьев с текстовыми листьями (seed 7)
 expectations/*.json     известный итог каждого кейса для конкретного движка (baseline)
 reports/*.md            отчёт последней записи baseline: сводка и все расхождения
 ```
@@ -64,9 +66,11 @@ CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance
 - Каждая нода — `display: flex` (каждая нода Trellis — flex-контейнер).
 - `box-sizing: border-box` (в движке `width`/`height` включают padding, как в Yoga).
 - Каждая нода — `position: relative`, чтобы absolute-ребёнок позиционировался от родителя.
-- Текста нет. Лист с содержимым (`content: [w, h]`) в HTML получает жёсткий внутренний
-  блок `w×h`, в движке — `LayoutContentMetrics(intrinsic:)`. Проверяется flex, а не
-  шрифтовые движки.
+- Шрифтов нет. Лист с содержимым (`content: [w, h]`) в HTML получает жёсткий внутренний
+  блок `w×h`. Лист с «текстом» (`text: [высота строки, слово, слово, …]`) — обычный блок со
+  словами-`inline-block` заданной ширины: Chromium переносит их как текст, а тестовый
+  измеритель — так же жадно. Проверяется раскладка, а не шрифтовые движки. Старый движок
+  Trellis читает только `flexbox.json`.
 - Длины — CSS px = pt; проценты — строки `"50%"`.
 - `padding`/`margin`/`top`/`left`/… — физические, как в CSS; для `direction: rtl`
   переводятся в leading/trailing на стороне теста.
