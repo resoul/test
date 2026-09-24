@@ -88,9 +88,9 @@ enum RunMode {
 }
 
 /// Which known sizes count as definite (CSS Flexbox §9.8) — percentages of children resolve
-/// only against a definite size. A size can be known without being definite: an item that is
-/// not stretched gets its cross size from its content, and a percentage height inside it
-/// behaves as `auto`, exactly as in a browser.
+/// only against a definite size. A height can be known without being definite: an item that
+/// is not stretched gets its height from its content, and a percentage height inside it
+/// behaves as `auto`, exactly as in a browser. A known width is always definite.
 struct DefiniteAxes: Hashable {
     var width: Bool
     var height: Bool
@@ -107,6 +107,12 @@ struct DefiniteAxes: Hashable {
     }
 }
 
+/// A physical axis.
+enum Axis: Hashable {
+    case horizontal
+    case vertical
+}
+
 struct FlatNode {
     let id: LayoutID
     let style: FlexStyle
@@ -120,7 +126,7 @@ struct MeasureKey: Hashable {
     let known: OptionalSize
     let parent: OptionalSize
     let available: AvailableSize
-    let contentOnly: Bool
+    let contentOnly: Axis?
     let definite: DefiniteAxes
 }
 
@@ -163,16 +169,17 @@ struct Solver {
 
     /// The border-box size of node `index`. `known` sizes are final and used as-is; `parent`
     /// is the containing block for percentages; `available` constrains everything else.
-    /// With `contentOnly` the node's own `width`/`height` are ignored: the result is the size
-    /// of its content, which is what a min-content or max-content *size* means in CSS (as
-    /// opposed to a contribution, which respects the node's own size properties).
+    /// With `contentOnly` the node's own size and min/max along that axis are ignored: the
+    /// result is the size of its content along it, which is what a min-content or max-content
+    /// *size* means in CSS (as opposed to a contribution, which respects the node's own size
+    /// properties). The other axis keeps its own sizes, since they can shape the content.
     mutating func compute(
         _ index: Int,
         known: OptionalSize,
         parent: OptionalSize,
         available: AvailableSize,
         mode: RunMode,
-        contentOnly: Bool = false,
+        contentOnly: Axis? = nil,
         definite: DefiniteAxes = .both
     ) throws -> LayoutSize {
         if case .size = mode {
@@ -208,7 +215,7 @@ struct Solver {
         _ parent: OptionalSize,
         _ available: AvailableSize,
         _ mode: RunMode,
-        _ contentOnly: Bool,
+        _ contentOnly: Axis?,
         _ definite: DefiniteAxes
     ) throws -> LayoutSize {
         if let width = known.width, let height = known.height, case .size = mode {
@@ -239,7 +246,7 @@ struct Solver {
         _ index: Int,
         known: OptionalSize,
         parent: OptionalSize,
-        contentOnly: Bool
+        contentOnly: Axis?
     ) -> LayoutSize {
         let node = nodes[index]
         let style = node.style
@@ -317,7 +324,7 @@ struct Solver {
         _ index: Int,
         known: OptionalSize,
         parent: OptionalSize,
-        contentOnly: Bool = false,
+        contentOnly: Axis? = nil,
         transferRatio: Bool = true,
         definite: DefiniteAxes = .both
     ) -> OwnSize {
@@ -327,18 +334,22 @@ struct Solver {
         let paddingWidth = max(0, padding.left) + max(0, padding.right)
         let paddingHeight = max(0, padding.top) + max(0, padding.bottom)
         // A content size ignores the node's own min/max as well as its own width/height.
-        let minWidth = contentOnly ? 0 : style.minWidth.resolve(parent.width) ?? 0
-        let minHeight = contentOnly ? 0 : style.minHeight.resolve(parent.height) ?? 0
-        let maxWidth = contentOnly ? .infinity : style.maxWidth.resolve(parent.width) ?? .infinity
+        let ignoreWidth = contentOnly == .horizontal
+        let ignoreHeight = contentOnly == .vertical
+        let minWidth = ignoreWidth ? 0 : style.minWidth.resolve(parent.width) ?? 0
+        let minHeight = ignoreHeight ? 0 : style.minHeight.resolve(parent.height) ?? 0
+        let maxWidth = ignoreWidth ? .infinity : style.maxWidth.resolve(parent.width) ?? .infinity
         let maxHeight =
-            contentOnly ? .infinity : style.maxHeight.resolve(parent.height) ?? .infinity
-        let styleWidth = contentOnly ? nil : style.width.resolve(parent.width)
-        let styleHeight = contentOnly ? nil : style.height.resolve(parent.height)
+            ignoreHeight ? .infinity : style.maxHeight.resolve(parent.height) ?? .infinity
+        let styleWidth = ignoreWidth ? nil : style.width.resolve(parent.width)
+        let styleHeight = ignoreHeight ? nil : style.height.resolve(parent.height)
         let specifiedWidth = styleWidth.map { clamp($0, minWidth, maxWidth, paddingWidth) }
         let specifiedHeight = styleHeight.map { clamp($0, minHeight, maxHeight, paddingHeight) }
         var width = known.width ?? specifiedWidth
         var height = known.height ?? specifiedHeight
-        var definiteWidth = known.width.map { definite.width ? $0 : nil } ?? specifiedWidth
+        // A width is definite once it is known: widths are resolved top-down from the
+        // containing block. Only a height can be known without being definite.
+        var definiteWidth = known.width ?? specifiedWidth
         var definiteHeight = known.height.map { definite.height ? $0 : nil } ?? specifiedHeight
         if transferRatio, let ratio = style.aspectRatio, ratio > 0 {
             if let base = width, height == nil {

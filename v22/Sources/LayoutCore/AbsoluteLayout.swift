@@ -20,7 +20,7 @@ extension Solver {
             let style = childNode.style
             let childOwn = ownSize(child, known: OptionalSize(), parent: containingBlock)
             let margin = style.margin.physical(childNode.direction)
-            let margins = Physical(
+            var margins = Physical(
                 top: margin.top.points,
                 left: margin.left.points,
                 bottom: margin.bottom.points,
@@ -89,6 +89,43 @@ extension Solver {
             }
 
             let childSize = LayoutSize(width: width ?? 0, height: height ?? 0)
+            // A height is definite when it is specified or pinned by both insets; a
+            // shrink-to-fit height comes from the content, like an auto height anywhere.
+            let heightIsDefinite =
+                childOwn.height != nil || (insets.top != nil && insets.bottom != nil)
+
+            // Auto margins of a box pinned by both insets take what is left, even when that is
+            // negative; horizontally a negative remainder goes to the end margin.
+            if let left = insets.left, let right = insets.right {
+                let remaining =
+                    size.width - left - right - childSize.width - margins.left - margins.right
+                switch (margin.left.isAuto, margin.right.isAuto) {
+                case (true, true):
+                    if remaining >= 0 {
+                        margins.left += remaining / 2
+                        margins.right += remaining / 2
+                    } else if node.direction == .rightToLeft {
+                        margins.left += remaining
+                    } else {
+                        margins.right += remaining
+                    }
+                case (true, false): margins.left += remaining
+                case (false, true): margins.right += remaining
+                case (false, false): break
+                }
+            }
+            if let top = insets.top, let bottom = insets.bottom {
+                let remaining =
+                    size.height - top - bottom - childSize.height - margins.top - margins.bottom
+                switch (margin.top.isAuto, margin.bottom.isAuto) {
+                case (true, true):
+                    margins.top += remaining / 2
+                    margins.bottom += remaining / 2
+                case (true, false): margins.top += remaining
+                case (false, true): margins.bottom += remaining
+                case (false, false): break
+                }
+            }
             let staticPosition = absoluteStaticPosition(
                 child,
                 size: childSize,
@@ -100,8 +137,10 @@ extension Solver {
                 innerCross: innerCross
             )
 
+            // Over-constrained (both insets and a width): the end inset gives way — `right` in
+            // left-to-right, `left` in right-to-left.
             let x: Double
-            if let left = insets.left {
+            if let left = insets.left, insets.right == nil || node.direction == .leftToRight {
                 x = left + margins.left
             } else if let right = insets.right {
                 x = size.width - right - margins.right - childSize.width
@@ -131,7 +170,8 @@ extension Solver {
                     width: .definite(childSize.width),
                     height: .definite(childSize.height)
                 ),
-                mode: .layout(frame.origin)
+                mode: .layout(frame.origin),
+                definite: DefiniteAxes(width: true, height: heightIsDefinite)
             )
         }
     }
@@ -155,13 +195,14 @@ extension Solver {
         let freeMain = innerMain - childMain - marginMainStart - axes.mainEnd(margins)
         let freeCross = innerCross - childCross - marginCrossStart - axes.crossEnd(margins)
 
-        let mainOffset = distribute(
-            justifyDistribution(container.justifyContent),
-            free: freeMain,
-            count: 1,
-            gap: 0,
-            startIsFlexEnd: container.direction.isReverse
-        ).offset
+        // A sole item: `space-between` packs at the start, `space-around`/`space-evenly`
+        // center it — without the safe fallback that applies to lines of in-flow items.
+        let mainOffset: Double =
+            switch container.justifyContent {
+            case .start, .spaceBetween: 0
+            case .end: freeMain
+            case .center, .spaceAround, .spaceEvenly: freeMain / 2
+            }
         let alignment: AlignItems =
             switch nodes[child].style.alignSelf {
             case .auto: container.alignItems

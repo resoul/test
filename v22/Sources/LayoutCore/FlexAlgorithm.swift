@@ -30,6 +30,9 @@ struct FlexItem {
     let grow: Double
     let shrink: Double
     let align: AlignSelf
+    /// `align-self: stretch` takes effect: the cross size property is `auto` (a percentage
+    /// is not, even when it cannot be resolved) and neither cross margin is `auto`.
+    let stretches: Bool
     /// Main size per point of cross size, from `aspect-ratio`.
     let ratio: Double?
     /// Cross size already known while the flex base size is determined (§9.2 step 3, §9.8).
@@ -118,7 +121,7 @@ extension Solver {
         parent: OptionalSize,
         available: AvailableSize,
         mode: RunMode,
-        contentOnly: Bool = false,
+        contentOnly: Axis? = nil,
         definite: DefiniteAxes = .both
     ) throws -> LayoutSize {
         try context.checkpoint()
@@ -131,6 +134,32 @@ extension Solver {
             contentOnly: contentOnly,
             definite: definite
         )
+        if let ratio = style.aspectRatio, ratio > 0, own.width == nil, own.height == nil,
+            contentOnly != .horizontal
+        {
+            // Neither side is given: the width comes from the content (within min/max width),
+            // and the height follows from it through the ratio.
+            let content = try compute(
+                index,
+                known: known,
+                parent: parent,
+                available: available,
+                mode: .size,
+                contentOnly: .horizontal,
+                definite: definite
+            )
+            let width = clamp(content.width, own.minWidth, own.maxWidth, own.paddingWidth)
+            return try flexLayout(
+                index,
+                known: OptionalSize(width: width, height: known.height),
+                parent: parent,
+                available: available,
+                mode: mode,
+                contentOnly: contentOnly,
+                definite: DefiniteAxes(width: true, height: definite.height)
+            )
+        }
+
         let axes = ContainerAxes(style: style, direction: node.direction, own: own)
         let isRow = axes.isRow
         let ownMain = isRow ? own.width : own.height
@@ -185,9 +214,13 @@ extension Solver {
         }
 
         // §9.3: collect items into flex lines.
+        // While a column's width is still being found, browsers size it as if its items did
+        // not wrap: its width is that of its widest item. Wrapping into columns happens once
+        // the width is known.
+        let wrap = !isRow && innerCrossDefinite == nil ? FlexWrap.noWrap : style.wrap
         var lines = collectLines(
             items,
-            wrap: style.wrap,
+            wrap: wrap,
             gap: axes.mainGap,
             limit: innerMainDefinite ?? itemsAvailableMain.definiteValue,
             minContent: innerMainDefinite == nil && itemsAvailableMain == .minContent
@@ -261,7 +294,7 @@ extension Solver {
         }
 
         // §9.4 step 8: cross size of each line.
-        let singleLine = style.wrap == .noWrap
+        let singleLine = wrap == .noWrap
         for lineIndex in lines.indices {
             if singleLine, let definite = innerCrossDefinite {
                 lines[lineIndex].crossSize = definite
@@ -310,7 +343,7 @@ extension Solver {
         for line in lines {
             for itemIndex in line.items {
                 let item = items[itemIndex]
-                if item.align == .stretch && item.sizeCross == nil && !item.hasAutoCrossMargin {
+                if item.stretches {
                     items[itemIndex].cross = clamp(
                         line.crossSize - item.marginsCross,
                         item.minCross,
@@ -380,8 +413,7 @@ extension Solver {
             frames[item.node] = frame
             // §9.8: the flexed main size is definite when the container's main size is; a
             // stretched cross size is definite; otherwise only specified sizes are.
-            let stretched =
-                item.align == .stretch && item.sizeCross == nil && !item.hasAutoCrossMargin
+            let stretched = item.stretches
             _ = try compute(
                 item.node,
                 known: OptionalSize(width: frame.size.width, height: frame.size.height),
@@ -393,7 +425,8 @@ extension Solver {
                 mode: .layout(frame.origin),
                 definite: DefiniteAxes(
                     main: item.mainIsDefinite,
-                    cross: item.sizeCross != nil || stretched,
+                    cross: item.sizeCross != nil || stretched
+                        || (item.ratio != nil && item.mainIsDefinite),
                     isRow: isRow
                 )
             )
@@ -461,12 +494,15 @@ extension Solver {
         let autoCross = axes.crossStart(autos) || axes.crossEnd(autos)
         let marginsCross = axes.crossStart(margins) + axes.crossEnd(margins)
 
+        let crossStyle = isRow ? style.height : style.width
+        let stretches = align == .stretch && crossStyle == .auto && !autoCross
+
         // §9.8 / §9.4 step 11: in a single-line container with a definite cross size, a
         // stretched item's cross size is definite before its main size is known.
         var crossForBasis = sizeCross
         if crossForBasis == nil, container.wrap == .noWrap,
             let innerCross = isRow ? itemParent.height : itemParent.width,
-            align == .stretch, !autoCross
+            stretches
         {
             crossForBasis = clamp(innerCross - marginsCross, minCross, maxCross, paddingCross)
         }
@@ -493,6 +529,7 @@ extension Solver {
             grow: max(0, style.grow),
             shrink: max(0, style.shrink),
             align: align,
+            stretches: stretches,
             ratio: ratio,
             crossForBasis: crossForBasis,
             mainIsDefinite: sizeMain != nil || (isRow ? itemParent.width : itemParent.height) != nil
@@ -504,10 +541,14 @@ extension Solver {
             ?? availableCross.shrunk(by: marginsCross)
 
         // §9.2 step 3: the flex base size.
-        if let basis = style.basis.resolve(isRow ? itemParent.width : itemParent.height) {
+        let percentMainBase = isRow ? itemParent.width : itemParent.height
+        let mainStyle = isRow ? style.width : style.height
+        if let basis = style.basis.resolve(percentMainBase) {
             item.basis = basis  // A: definite flex-basis
-        } else if let size = sizeMain {
-            item.basis = size  // `flex-basis: auto` uses the main size property
+        } else if style.basis == .auto, let size = mainStyle.resolve(percentMainBase) {
+            // `flex-basis: auto` uses the main size property, unclamped. A percentage basis
+            // that cannot be resolved behaves as `content` instead and skips this.
+            item.basis = size
         } else if let ratio, let cross = crossForBasis {
             item.basis = cross * ratio  // B: aspect ratio with a definite cross size
         } else {
@@ -522,7 +563,7 @@ extension Solver {
                     isRow: isRow
                 ),
                 mode: .size,
-                contentOnly: true,
+                contentOnly: isRow ? .horizontal : .vertical,
                 definite: measureDefinite
             )
             item.basis = axes.main(measured)
@@ -538,7 +579,7 @@ extension Solver {
                 parent: itemParent,
                 available: AvailableSize(main: .minContent, cross: crossAvailable, isRow: isRow),
                 mode: .size,
-                contentOnly: true,
+                contentOnly: isRow ? .horizontal : .vertical,
                 definite: measureDefinite
             )
             var suggestion = min(axes.main(minContent), item.maxMain)
