@@ -33,6 +33,12 @@ public struct LayoutNode: Sendable {
     public var direction: LayoutDirection
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public var children: [LayoutNode]
+    /// Styles that replace `style` when the width the parent gives this node — the width
+    /// its percentages resolve against — reaches `minWidth`. The last matching variant wins;
+    /// with no definite width the node keeps `style`.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var variants: [StyleVariant]
 
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public init(
@@ -40,13 +46,31 @@ public struct LayoutNode: Sendable {
         style: FlexStyle = FlexStyle(),
         content: LeafContent? = nil,
         direction: LayoutDirection = .leftToRight,
-        children: [LayoutNode] = []
+        children: [LayoutNode] = [],
+        variants: [StyleVariant] = []
     ) {
         self.id = id
         self.style = style
         self.content = content
         self.direction = direction
         self.children = children
+        self.variants = variants.sorted { $0.minWidth < $1.minWidth }
+    }
+}
+
+/// A style a node takes from a width on (see `LayoutNode.variants`).
+///
+/// Ownership: value type. Isolation: none. Errors: none. Cancellation: not applicable.
+public struct StyleVariant: Sendable {
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var minWidth: Double
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var style: FlexStyle
+
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public init(minWidth: Double, style: FlexStyle) {
+        self.minWidth = minWidth
+        self.style = style
     }
 }
 
@@ -54,7 +78,8 @@ public struct LayoutNode: Sendable {
 ///
 /// Ownership: value type. Isolation: none. Errors: none. Cancellation: not applicable.
 public struct LayoutResult: Sendable {
-    /// Frames in pre-order of the input tree.
+    /// Frames in pre-order of the input tree, for the nodes that were laid out: a node with
+    /// `display: .none`, and everything inside it, has none.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public let frames: [(id: LayoutID, frame: LayoutRect)]
@@ -83,7 +108,7 @@ public struct LayoutResult: Sendable {
         self.duplicateIDs = duplicates
     }
 
-    /// The frame of `id`, or `nil` when the id was not in the input.
+    /// The frame of `id`, or `nil` when the id was not in the input or was not laid out.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public func frame(for id: LayoutID) -> LayoutRect? {

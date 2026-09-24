@@ -129,7 +129,7 @@ extension Solver {
     ) throws -> LayoutSize {
         try context.checkpoint()
         let node = nodes[index]
-        let style = node.style
+        let style = self.style(index, parentWidth: parent.width)
         let own = ownSize(
             index,
             known: known,
@@ -192,10 +192,13 @@ extension Solver {
 
         // §9.1, §5.4: in-flow children in `order`, document order breaking ties.
         let flowChildren = node.children.enumerated()
-            .filter { nodes[$0.element].style.position != .absolute }
+            .filter {
+                let child = self.style($0.element, parentWidth: itemParent.width)
+                return child.position != .absolute && child.display != .none
+            }
             .sorted { lhs, rhs in
-                let left = nodes[lhs.element].style.order
-                let right = nodes[rhs.element].style.order
+                let left = self.style(lhs.element, parentWidth: itemParent.width).order
+                let right = self.style(rhs.element, parentWidth: itemParent.width).order
                 return left != right ? left < right : lhs.offset < rhs.offset
             }
             .map(\.element)
@@ -437,6 +440,7 @@ extension Solver {
 
         try layoutAbsoluteChildren(
             index,
+            containerStyle: style,
             size: result,
             origin: origin,
             own: own,
@@ -458,7 +462,7 @@ extension Solver {
         availableCross: AvailableSpace
     ) throws -> FlexItem {
         let node = nodes[child]
-        let style = node.style
+        let style = self.style(child, parentWidth: itemParent.width)
         let isRow = axes.isRow
         // Sizes as specified, without transferring the aspect ratio: a size that only follows
         // from the ratio is still `auto`, so the item can be stretched and its ratio applies

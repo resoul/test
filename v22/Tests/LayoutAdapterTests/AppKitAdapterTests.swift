@@ -74,4 +74,24 @@
 
         #expect(card.frame.size == CGSize(width: 112, height: 80))
     }
+
+    @MainActor
+    @Test
+    func hiddenItemsHideTheirViews() {
+        let host = NSView(frame: NSRect(x: 0, y: 0, width: 100, height: 20))
+        let first = NSView()
+        let second = NSView()
+        host.addSubview(first)
+        host.addSubview(second)
+
+        FlexContainer(.row) {
+            first.size(10).hidden()
+            second.size(10).hidden(false)
+        }
+        .apply(in: host.bounds)
+
+        #expect(first.isHidden)
+        #expect(!second.isHidden)
+        #expect(second.frame.minX == 0)
+    }
 #endif

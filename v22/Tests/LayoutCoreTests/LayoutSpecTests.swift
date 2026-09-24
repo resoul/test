@@ -8,6 +8,7 @@ import Testing
 private final class Box: LayoutElement {
     let layoutContent: LeafContent?
     private(set) var frame: CGRect?
+    private(set) var isVisible: Bool?
 
     init(_ width: Double = 0, _ height: Double = 0) {
         layoutContent = .size(width: width, height: height)
@@ -19,6 +20,10 @@ private final class Box: LayoutElement {
 
     func applyLayoutFrame(_ frame: CGRect) {
         self.frame = frame
+    }
+
+    func applyLayoutVisibility(_ isVisible: Bool) {
+        self.isVisible = isVisible
     }
 }
 
@@ -173,4 +178,139 @@ func framesSnapToThePixelGridWithoutGaps() {
     #expect(frames[0].maxX == frames[1].minX)
     #expect(frames[1].maxX == frames[2].minX)
     #expect(frames[2].maxX == 100)
+}
+
+@MainActor
+@Test
+func hiddenTakesNoSpaceAndHidesItsElement() {
+    let first = Box(10, 10)
+    let second = Box(20, 10)
+    let third = Box(30, 10)
+
+    FlexContainer(.row) {
+        first
+        second.hidden()
+        third.hidden(false)
+    }
+    .apply(in: CGRect(x: 0, y: 0, width: 100, height: 10))
+
+    #expect(first.isVisible == nil)
+    #expect(second.isVisible == false)
+    #expect(second.frame == nil)
+    #expect(third.isVisible == true)
+    #expect(third.frame?.minX == 10)
+}
+
+@MainActor
+@Test
+func invisibleKeepsItsSpace() {
+    let spinner = Box(10, 10)
+    let label = Box(20, 10)
+
+    FlexContainer(.row) {
+        spinner.invisible()
+        label
+    }
+    .apply(in: CGRect(x: 0, y: 0, width: 100, height: 10))
+
+    #expect(spinner.isVisible == false)
+    #expect(spinner.frame?.width == 10)
+    #expect(label.frame?.minX == 10)
+}
+
+@MainActor
+@Test
+func breakpointAtTheRootChoosesByTheWidth() {
+    let avatar = Box()
+    let text = Box(50, 10)
+    func spec() -> LayoutSpec {
+        Breakpoint(from: .sm) {
+            FlexContainer(.row) {
+                avatar.size(48)
+                text
+            }
+        } otherwise: {
+            FlexContainer(.column) {
+                avatar.size(64)
+                text
+            }
+            .alignItems(.start)
+        }
+    }
+
+    spec().apply(in: CGRect(x: 0, y: 0, width: 500, height: 100))
+    #expect(avatar.frame == CGRect(x: 0, y: 0, width: 48, height: 48))
+    #expect(text.frame?.minX == 48)
+    #expect(avatar.isVisible == true)
+
+    spec().apply(in: CGRect(x: 0, y: 0, width: 300, height: 100))
+    #expect(avatar.frame == CGRect(x: 0, y: 0, width: 64, height: 64))
+    #expect(text.frame?.minY == 64)
+    #expect(avatar.isVisible == true)
+}
+
+@MainActor
+@Test
+func breakpointInsideAContainerUsesTheWidthItsParentGives() {
+    let wide = Box(10, 10)
+    let narrow = Box(10, 10)
+    func spec() -> LayoutSpec {
+        FlexContainer(.row) {
+            Breakpoint(from: 400) {
+                wide
+            } otherwise: {
+                narrow
+            }
+        }
+        .padding(50)
+    }
+
+    spec().apply(in: CGRect(x: 0, y: 0, width: 520, height: 110))
+    #expect(wide.isVisible == true)
+    #expect(narrow.isVisible == false)
+
+    // 480 wide, but the content box that the breakpoint gets is only 380.
+    spec().apply(in: CGRect(x: 0, y: 0, width: 480, height: 110))
+    #expect(wide.isVisible == false)
+    #expect(narrow.isVisible == true)
+}
+
+@MainActor
+@Test
+func valuesFromAWidthOnApplyInOrder() {
+    let a = Box(10, 10)
+    let b = Box(10, 10)
+    func spec() -> LayoutSpec {
+        FlexContainer(.row) {
+            a
+            b
+        }
+        .gap(8)
+        .gap(16, from: .md)
+        .direction(.column, from: .lg)
+    }
+
+    spec().apply(in: CGRect(x: 0, y: 0, width: 500, height: 100))
+    #expect(b.frame?.minX == 18)
+
+    spec().apply(in: CGRect(x: 0, y: 0, width: 700, height: 100))
+    #expect(b.frame?.minX == 26)
+
+    spec().apply(in: CGRect(x: 0, y: 0, width: 900, height: 100))
+    #expect(b.frame?.minX == 0)
+    #expect(b.frame?.minY == 26)
+}
+
+@MainActor
+@Test
+func spacingStepsComeFromTheScale() {
+    let box = Box(10, 10)
+    let spec = FlexContainer(.row) { box }.padding(.s5).gap(.s2)
+
+    spec.apply(in: CGRect(x: 0, y: 0, width: 100, height: 100))
+    #expect(box.frame?.origin == CGPoint(x: 16, y: 16))
+
+    let roomy = SpacingScale(steps: [3, 6, 9, 12, 20, 30, 40, 60, 80])
+    spec.apply(in: CGRect(x: 0, y: 0, width: 100, height: 100), spacing: roomy)
+    #expect(box.frame?.origin == CGPoint(x: 20, y: 20))
 }

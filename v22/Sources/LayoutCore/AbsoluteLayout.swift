@@ -5,6 +5,7 @@
 extension Solver {
     mutating func layoutAbsoluteChildren(
         _ index: Int,
+        containerStyle: FlexStyle,
         size: LayoutSize,
         origin: LayoutPoint,
         own: OwnSize,
@@ -15,9 +16,11 @@ extension Solver {
         let node = nodes[index]
         let containingBlock = OptionalSize(width: size.width, height: size.height)
 
-        for child in node.children where nodes[child].style.position == .absolute {
+        for child in node.children {
+            let style = self.style(child, parentWidth: size.width)
+            guard style.position == .absolute, style.display != .none else { continue }
+
             let childNode = nodes[child]
-            let style = childNode.style
             let childOwn = ownSize(child, known: OptionalSize(), parent: containingBlock)
             let margin = style.margin.physical(childNode.direction)
             var margins = Physical(
@@ -129,8 +132,9 @@ extension Solver {
             let staticPosition = absoluteStaticPosition(
                 child,
                 size: childSize,
+                childStyle: style,
                 margins: margins,
-                container: node.style,
+                container: containerStyle,
                 own: own,
                 axes: axes,
                 innerMain: innerMain,
@@ -181,6 +185,7 @@ extension Solver {
     private func absoluteStaticPosition(
         _ child: Int,
         size: LayoutSize,
+        childStyle: FlexStyle,
         margins: Physical<Double>,
         container: FlexStyle,
         own: OwnSize,
@@ -204,7 +209,7 @@ extension Solver {
             case .center, .spaceAround, .spaceEvenly: freeMain / 2
             }
         let alignment: AlignItems =
-            switch nodes[child].style.alignSelf {
+            switch childStyle.alignSelf {
             case .auto: container.alignItems
             case .stretch: .stretch
             case .start: .start

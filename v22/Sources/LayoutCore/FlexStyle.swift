@@ -187,6 +187,16 @@ public enum Position: Sendable, Hashable {
     case absolute
 }
 
+/// CSS `display` as far as flex layout needs it: in the layout, or not at all.
+///
+/// Ownership: value type. Isolation: none. Errors: none. Cancellation: not applicable.
+public enum Display: Sendable, Hashable {
+    /// Laid out as a flex container (every node is one).
+    case flex
+    /// Takes no space and gets no frame; neither does anything inside it.
+    case none
+}
+
 /// Everything the flex algorithm reads from one node. Field names and defaults follow CSS,
 /// with one deliberate difference: sizes are border-box (`width` includes `padding`), as in
 /// every UI toolkit and in Yoga. Every node is a flex container.
@@ -251,6 +261,8 @@ public struct FlexStyle: Sendable, Hashable {
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public var insets = Edges<Double?>(all: nil)
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var display: Display = .flex
     /// CSS `order`: lower values are laid out first; ties keep document order.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.

@@ -13,4 +13,15 @@ public protocol LayoutSpecProviding: AnyObject {
     /// Ownership: returns a value borrowing the provider's elements. Isolation: MainActor.
     /// Errors: none. Cancellation: none.
     func layoutSpec() -> LayoutSpec?
+
+    /// The points of spacing steps (`.s1` … `.s9`) in this object's layout. The default is
+    /// `SpacingScale.standard`; a theme returns its own.
+    ///
+    /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
+    var layoutSpacing: SpacingScale { get }
+}
+
+extension LayoutSpecProviding {
+    /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
+    public var layoutSpacing: SpacingScale { .standard }
 }

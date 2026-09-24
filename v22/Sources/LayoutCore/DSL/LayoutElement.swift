@@ -20,9 +20,19 @@ public protocol LayoutElement: AnyObject, LayoutSpecConvertible {
     /// Ownership: the element stores what it needs. Isolation: MainActor. Errors: none.
     /// Cancellation: none.
     func applyLayoutFrame(_ frame: CGRect)
+
+    /// Shows or hides the element — called only for elements of specs that manage visibility
+    /// (`hidden`, `invisible`, `Breakpoint`). The default does nothing.
+    ///
+    /// Ownership: the element stores what it needs. Isolation: MainActor. Errors: none.
+    /// Cancellation: none.
+    func applyLayoutVisibility(_ isVisible: Bool)
 }
 
 extension LayoutElement {
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+    public func applyLayoutVisibility(_ isVisible: Bool) {}
+
     /// A spec that places this element as a single item.
     ///
     /// Ownership: the spec borrows the element. Isolation: MainActor. Errors: none.

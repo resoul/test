@@ -36,6 +36,13 @@
             }
             self.frame = frame
         }
+
+        /// Shows or hides the view for `hidden`, `invisible` and `Breakpoint`.
+        ///
+        /// Ownership: mutates the view. Isolation: MainActor. Errors: none. Cancellation: none.
+        public func applyLayoutVisibility(_ isVisible: Bool) {
+            isHidden = !isVisible
+        }
     }
 
     extension LayoutSpecProviding where Self: NSView {
@@ -45,7 +52,12 @@
         /// Ownership: sets frames of the spec's elements. Isolation: MainActor. Errors: none.
         /// Cancellation: none.
         public func applyLayoutSpec() {
-            layoutSpec()?.apply(in: bounds, direction: layoutDirection, scale: layoutScale)
+            layoutSpec()?.apply(
+                in: bounds,
+                direction: layoutDirection,
+                scale: layoutScale,
+                spacing: layoutSpacing
+            )
         }
 
         /// The size of `layoutSpec()` for `size`: a width of zero or of
@@ -58,7 +70,8 @@
             let limited = size.width > 0 && size.width < CGFloat.greatestFiniteMagnitude
             return spec.measure(
                 width: limited ? .definite(Double(size.width)) : .maxContent,
-                direction: layoutDirection
+                direction: layoutDirection,
+                spacing: layoutSpacing
             )
         }
 
@@ -141,8 +154,9 @@
 
             if let provider = view as? LayoutSpecProviding {
                 let spec = provider.layoutSpec()
+                let constraint = limit == nil ? AvailableSpace.maxContent : .minContent
                 return Double(
-                    spec?.measure(width: limit == nil ? .maxContent : .minContent).width ?? 0
+                    spec?.measure(width: constraint, spacing: provider.layoutSpacing).width ?? 0
                 )
             }
 
@@ -153,7 +167,11 @@
             guard let view else { return 0 }
 
             if let provider = view as? LayoutSpecProviding {
-                return Double(provider.layoutSpec()?.measure(width: .definite(width)).height ?? 0)
+                let spec = provider.layoutSpec()
+                return Double(
+                    spec?.measure(width: .definite(width), spacing: provider.layoutSpacing).height
+                        ?? 0
+                )
             }
 
             return max(0, Double(fitting(view, width: width).height))

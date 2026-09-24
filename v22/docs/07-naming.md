@@ -42,7 +42,9 @@ AGENTS.md Trellis).
 | `LayoutSpec` — тип описания раскладки (не `Layout`: в файлах с SwiftUI была бы неоднозначность с `SwiftUI.Layout`); `FlexContainer` — его псевдоним | реализовано |
 | `LayoutElement`, `LayoutSpecProviding`, `LayoutView`, `LayoutNSView`, `applyLayoutSpec()` | реализовано |
 | `FlexContainer` | согласовано (по примеру) |
-| `Breakpoint` | согласовано |
+| `Breakpoint` | реализовано (`Breakpoint(from:) { } otherwise: { }`) |
+| `BreakpointWidth` (`.sm` … `.xxl`, число) — тип порога; вместо `Breakpoint.Width` из черновика, потому что `Breakpoint` — псевдоним `LayoutSpec` и не может иметь вложенных типов | реализовано |
+| `Spacing` (`.s1` … `.s9`, `.points`), `SpacingScale` (`.standard`) | реализовано |
 | Пороги `.sm` / `.md` / `.lg` / `.xl` / `.xxl` | согласовано (значения — предложено, [04](04-conditionals-and-responsive.md#именованные-пороги)) |
 | `from:` — единое слово порога в `Breakpoint` и модификаторах | предложено |
 | Имена токенов отступов — номера шагов `.s1` … `.s9` | согласовано, [09](09-theme.md#имена-отступов--вариант-b) |

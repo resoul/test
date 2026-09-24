@@ -26,7 +26,9 @@ public enum FlexboxEngine {
             mode: .layout(.zero)
         )
         return LayoutResult(
-            frames: solver.nodes.indices.map { (solver.nodes[$0].id, solver.frames[$0]) }
+            frames: solver.nodes.indices.compactMap { index in
+                solver.frames[index].map { (solver.nodes[index].id, $0) }
+            }
         )
     }
 
@@ -116,6 +118,7 @@ enum Axis: Hashable {
 struct FlatNode {
     let id: LayoutID
     let style: FlexStyle
+    let variants: [StyleVariant]
     let content: LeafContent?
     let direction: LayoutDirection
     var children: [Int]
@@ -136,14 +139,14 @@ struct MeasureKey: Hashable {
 /// evicting those entries makes nested layouts exponential in depth.
 struct Solver {
     var nodes: [FlatNode] = []
-    var frames: [LayoutRect] = []
+    var frames: [LayoutRect?] = []
     var cache: [MeasureKey: LayoutSize] = [:]
     let context: LayoutContext
 
     init(root: LayoutNode, context: LayoutContext) {
         self.context = context
         flatten(root)
-        frames = Array(repeating: LayoutRect(x: 0, y: 0, width: 0, height: 0), count: nodes.count)
+        frames = Array(repeating: nil, count: nodes.count)
     }
 
     @discardableResult
@@ -153,6 +156,7 @@ struct Solver {
             FlatNode(
                 id: node.id,
                 style: node.style,
+                variants: node.variants,
                 content: node.content,
                 direction: node.direction,
                 children: []
@@ -165,6 +169,20 @@ struct Solver {
         }
         nodes[index].children = children
         return index
+    }
+
+    /// The style of node `index` for the width its parent gives it (`parentWidth`, the base
+    /// of its percentages): its last variant whose minimum width that reaches, else its base
+    /// style. Without a definite width the base style applies.
+    func style(_ index: Int, parentWidth: Double?) -> FlexStyle {
+        let node = nodes[index]
+        guard let width = parentWidth, !node.variants.isEmpty else { return node.style }
+
+        var chosen = node.style
+        for variant in node.variants where variant.minWidth <= width + 1e-9 {
+            chosen = variant.style
+        }
+        return chosen
     }
 
     /// The border-box size of node `index`. `known` sizes are final and used as-is; `parent`
@@ -256,7 +274,7 @@ struct Solver {
         contentOnly: Axis?
     ) -> LayoutSize {
         let node = nodes[index]
-        let style = node.style
+        let style = self.style(index, parentWidth: parent.width)
         let own = ownSize(
             index,
             known: known,
@@ -356,7 +374,7 @@ struct Solver {
         definite: DefiniteAxes = .both
     ) -> OwnSize {
         let node = nodes[index]
-        let style = node.style
+        let style = self.style(index, parentWidth: parent.width)
         let padding = style.padding.physical(node.direction)
         let paddingWidth = max(0, padding.left) + max(0, padding.right)
         let paddingHeight = max(0, padding.top) + max(0, padding.bottom)
