@@ -837,3 +837,45 @@ func aFocusedNodeThatLeavesTheTreeLosesTheFocus() {
     #expect(!card.follow.isFocused)
     host.detach()
 }
+
+@MainActor
+private final class Rows: Node {
+    let first = ProfileRow()
+    let second = ProfileRow()
+    let plain = ProfileRow()
+
+    override init() {
+        super.init()
+        first.isFocusSection = true
+        second.isFocusSection = true
+    }
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.column) { first; second; plain }
+    }
+}
+
+@Test @MainActor
+func focusSectionsListTheFocusableNodesInside() {
+    let rows = Rows()
+    rows.first.avatar.isFocusable = true
+    let host = host(rows)
+
+    let sections = host.focusSections()
+
+    #expect(sections.map(\.node) == [rows.first.id, rows.second.id])
+    #expect(sections[0].items == [rows.first.avatar.id, rows.first.badge.id])
+    #expect(sections[1].items == [rows.second.badge.id])
+    #expect(sections[1].frame == rows.second.frame)
+    host.detach()
+}
+
+@Test @MainActor
+func aSectionWithNothingToFocusIsLeftOut() {
+    let rows = Rows()
+    rows.second.badge.isFocusable = false
+    let host = host(rows)
+
+    #expect(host.focusSections().map(\.node) == [rows.first.id])
+    host.detach()
+}

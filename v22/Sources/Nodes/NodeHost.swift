@@ -353,6 +353,16 @@ public final class NodeHost {
         return items
     }
 
+    /// The visible focus sections with focusable nodes inside, outer ones first.
+    ///
+    /// Ownership: returns values. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    public func focusSections() -> [FocusSection] {
+        var sections: [FocusSection] = []
+        collectSections(root, origin: .zero, into: &sections)
+        return sections
+    }
+
     /// Moves the focus to `node` — the adapter calls it when the platform moved it — or
     /// clears it with `nil`. A node that is not mounted or cannot be focused clears it too.
     /// The nodes that lose and get the focus are told inside `focusAnimation`.
@@ -414,6 +424,32 @@ public final class NodeHost {
 
         for subnode in node.subnodes {
             collectFocus(subnode, origin: frame.origin, into: &items)
+        }
+    }
+
+    private func collectSections(
+        _ node: Node,
+        origin: LayoutPoint,
+        into sections: inout [FocusSection]
+    ) {
+        guard !node.isHidden, node.appearance.opacity > 0 else { return }
+
+        let frame = LayoutRect(
+            x: origin.x + node.frame.origin.x,
+            y: origin.y + node.frame.origin.y,
+            width: node.frame.size.width,
+            height: node.frame.size.height
+        )
+        if node.isFocusSection {
+            var items: [FocusItem] = []
+            collectFocus(node, origin: origin, into: &items)
+            if !items.isEmpty {
+                sections.append(FocusSection(node: node.id, frame: frame, items: items.map(\.node)))
+            }
+        }
+
+        for subnode in node.subnodes {
+            collectSections(subnode, origin: frame.origin, into: &sections)
         }
     }
 

@@ -27,6 +27,8 @@
         private var focusOrder: [NodeFocusItem] = []
         /// A select press that began on a focused node and has not ended yet.
         private var isSelecting = false
+        /// A focus guide over each focus section, kept while the section is.
+        private var sectionGuides: [NodeID: SectionGuide] = [:]
 
         /// A view showing `root`.
         ///
@@ -211,6 +213,7 @@
             } else if host.focusedNode != nil {
                 host.focus(nil)
             }
+            updateSectionGuides()
         }
 
         /// Remote presses come to the first responder, and a focus item that is not a view
@@ -281,8 +284,44 @@
                 $0.isFocused && kept[$0.node] == nil
             }
             focusItemsByNode = kept
+            updateSections()
             if lostFocus || (!hadItems && !focusOrder.isEmpty) {
                 setNeedsFocusUpdate()
+            }
+        }
+
+        /// Brings the section guides in line with the tree's focus sections.
+        private func updateSections() {
+            var kept: [NodeID: SectionGuide] = [:]
+            for section in host.focusSections() {
+                let guide = sectionGuides[section.node] ?? SectionGuide(in: self)
+                guide.place(zoomed(section.frame))
+                guide.items = section.items
+                kept[section.node] = guide
+            }
+            for (id, guide) in sectionGuides where kept[id] == nil {
+                guide.remove()
+            }
+            sectionGuides = kept
+            updateSectionGuides()
+        }
+
+        /// Points each guide at the node to focus in its section, and turns off the guide of
+        /// the section that has the focus: moves inside it go by the nodes themselves.
+        private func updateSectionGuides() {
+            let focused = host.focusedNode
+            for guide in sectionGuides.values {
+                if let focused, guide.items.contains(focused) {
+                    guide.lastFocused = focused
+                    guide.guide.isEnabled = false
+                } else {
+                    guide.guide.isEnabled = true
+                }
+                let target =
+                    guide.lastFocused.flatMap { guide.items.contains($0) ? $0 : nil }
+                    ?? guide.items.first
+                guide.guide.preferredFocusEnvironments =
+                    target.flatMap { focusItemsByNode[$0] }.map { [$0] } ?? []
             }
         }
 
@@ -351,6 +390,38 @@
             let view = NodeView(root: node)
             addSubview(view)
             return view
+        }
+    }
+
+    /// The focus guide over one focus section, framed by constraints to the view's edges.
+    @MainActor
+    private final class SectionGuide {
+        let guide = UIFocusGuide()
+        var items: [NodeID] = []
+        var lastFocused: NodeID?
+        private let left: NSLayoutConstraint
+        private let top: NSLayoutConstraint
+        private let width: NSLayoutConstraint
+        private let height: NSLayoutConstraint
+
+        init(in view: UIView) {
+            view.addLayoutGuide(guide)
+            left = guide.leftAnchor.constraint(equalTo: view.leftAnchor)
+            top = guide.topAnchor.constraint(equalTo: view.topAnchor)
+            width = guide.widthAnchor.constraint(equalToConstant: 0)
+            height = guide.heightAnchor.constraint(equalToConstant: 0)
+            NSLayoutConstraint.activate([left, top, width, height])
+        }
+
+        func place(_ frame: CGRect) {
+            left.constant = frame.minX
+            top.constant = frame.minY
+            width.constant = frame.width
+            height.constant = frame.height
+        }
+
+        func remove() {
+            guide.owningView?.removeLayoutGuide(guide)
         }
     }
 

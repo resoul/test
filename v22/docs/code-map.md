@@ -182,5 +182,6 @@
 | `NodeHost.selectBegan/Ended` | кнопка Select пульта нажимает сфокусированную ноду | как `pointerDown/Up` |
 | `NodeFocusItem` (UIKit), `NodeView.focusItems(in:)`, `didUpdateFocus`, `presses*` | один `UIFocusItem` на ноду, живёт пока нода; хранит `NodeID` и кадр; view — first responder, чтобы получить нажатия | Trellis `TrellisNodeProxy` |
 | `Appearance.scale`, `Shadow`; `LayerRenderer` — `position`/`bounds`/`transform` | увеличение и тень для фокуса; кадр — через position/bounds, т.к. `frame` при transform не определён | — |
+| `Node.isFocusSection`, `NodeHost.focusSections`, `SectionGuide` (UIKit) | `UIFocusGuide` на площади ноды, цель — последняя фокусированная внутри, иначе первая; выключен, пока фокус внутри | SwiftUI `.focusSection()` (tvOS) |
 | `NodeView.zoom`, `contentLayer`, `zoomed` | дерево раскладывается в `bounds / zoom`, слой содержимого увеличен от левого верхнего угла; `host.scale` = экран × zoom, чтобы текст был чётким; `nil` — 2 на TV, 1 иначе | интерфейс для TV: размеры под телефон с 2–3 м читаются примерно вдвое крупнее |
 | `DemotvOS/` | tvOS-приложение с демо-экраном (`project.pbxproj` написан вручную, по образцу `Playground`) | — |

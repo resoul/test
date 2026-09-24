@@ -97,6 +97,8 @@
             appearance.cornerRadius = 12
             appearance.borderWidth = 1
             appearance.borderColor = Color(red: 0.88, green: 0.89, blue: 0.91)
+            // On Apple TV, moving toward any part of the card focuses its badge.
+            isFocusSection = true
         }
 
         override func update() {
@@ -138,7 +140,24 @@
         }
     }
 
-    /// The whole screen: a title and a column of cards.
+    /// A row of actions across the screen. On Apple TV, moving toward any part of it focuses
+    /// its button, even though the button is not under the badges above.
+    @MainActor
+    final class Actions: Node {
+        let rename: Button
+
+        init(rename: Button) {
+            self.rename = rename
+            super.init()
+            isFocusSection = true
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.row) { rename }
+        }
+    }
+
+    /// The whole screen: a title, a column of cards and a row of actions.
     @MainActor
     final class Screen: Node {
         let title = Text(
@@ -151,11 +170,11 @@
             style: TextStyle(size: 14, color: muted)
         )
         let cards: [ProfileCard]
-        let rename: Button
+        let actions: Actions
 
         init(profiles: [Profile], rename: @escaping @MainActor () -> Void) {
             cards = profiles.map { ProfileCard(profile: $0) }
-            self.rename = Button("Rename Ada", action: rename)
+            actions = Actions(rename: Button("Rename Ada", action: rename))
             super.init()
             appearance.background = Color(red: 0.96, green: 0.96, blue: 0.97)
         }
@@ -165,9 +184,7 @@
                 title
                 hint
                 for card in cards { card }
-                // At the end, under the Follow badges: the Apple TV remote moves the focus
-                // only to what lies in the direction pressed.
-                rename.alignSelf(.end)
+                actions
             }
             .gap(16)
             .padding(24)

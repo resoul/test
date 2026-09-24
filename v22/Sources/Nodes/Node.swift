@@ -115,6 +115,16 @@ open class Node: LayoutElement {
         didSet { if isFocusable != oldValue { host?.setNeedsRender() } }
     }
 
+    /// Makes the node a focus section: when the remote moves the focus toward any part of
+    /// the node, the focus goes to a node inside it — the one focused there last, else the
+    /// first — instead of only to nodes lying straight in the direction pressed. For rows and
+    /// cards whose focusable nodes do not line up with their neighbors'.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var isFocusSection = false {
+        didSet { if isFocusSection != oldValue { host?.setNeedsRender() } }
+    }
+
     /// Whether the node has the focus of its host.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
