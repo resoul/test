@@ -49,6 +49,15 @@
 
                 self.needsLayout = true
             }
+            host.onFocusRequest = { [weak self] node in
+                guard let self else { return }
+
+                // The keyboard comes here first, so the focused node gets the keys.
+                if self.window?.firstResponder !== self {
+                    self.window?.makeFirstResponder(self)
+                }
+                self.host.focus(node)
+            }
         }
 
         /// Not supported: a node tree is built in code.

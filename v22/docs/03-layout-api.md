@@ -203,10 +203,15 @@ Return/Space нажимают. Групп фокуса нет: `focusGroupIdenti
 `NodeNSView` — first responder; Tab/Shift-Tab по нодам в порядке чтения, после последней —
 к следующему view окна (`NodeHost.moveFocus`); стрелки — к ближайшей ноде в эту сторону;
 Return/Space нажимают; клик рамку не показывает. 3 теста на Linux, 2 AppKit — на Mac.
+Проверено вживую (2026-09-24): Mac (Tab, рамка), iPad Simulator с клавиатурой, Apple TV
+Simulator; на устройствах — нет доступа.
 
-Не сделано: программный перевод фокуса на tvOS и iPad (`host.focus(id)` меняет
-состояние ноды, но не просит систему фокуса перевести его; на Mac работает, там фокус
-ведёт `NodeNSView`); Mac — `zoom`; фокус в Mac Catalyst не проверялся;
+Перевод фокуса из кода (2026-09-24): `host.requestFocus(id)` — адаптер просит систему
+фокуса (UIKit: `requestFocusUpdate` к элементу ноды, до перехода он — предпочтительный;
+AppKit: view становится first responder и фокусирует ноду); без адаптера хост фокусирует
+сам. `host.focus(id)` — только сообщение адаптера о переходе. В tvOS-демо — Play/Pause.
+
+Не сделано: Mac — `zoom`; фокус в Mac Catalyst не проверялся;
 прокрутка к ноде вне экрана — прокрутки ещё нет.
 
 - Управление включено всегда (аналог `automaticallyManagesSubnodes` без флага).

@@ -91,3 +91,21 @@
         view.host.detach()
     }
 #endif
+
+#if canImport(AppKit)
+    @Test @MainActor
+    func aFocusRequestFocusesTheNodeWithARing() throws {
+        let pair = Pair()
+        let view = NodeNSView(root: pair)
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 40)
+        view.layout()
+
+        view.host.requestFocus(pair.second.id)
+        view.layout()
+
+        #expect(view.host.focusedNode == pair.second.id)
+        let ring = try #require(view.layer?.sublayers?.last)
+        #expect(!ring.isHidden)
+        view.host.detach()
+    }
+#endif

@@ -219,7 +219,15 @@
         ///
         /// Ownership: owned by the model. Isolation: MainActor. Errors: none. Cancellation:
         /// not applicable.
-        public private(set) lazy var screen: Node = Screen(profiles: profiles) { [weak self] in
+        public var screen: Node { screenNode }
+
+        /// Ada's Follow badge — for a focus request.
+        ///
+        /// Ownership: owned by the screen. Isolation: MainActor. Errors: none. Cancellation:
+        /// not applicable.
+        public var firstBadge: Node { screenNode.cards[0].badge }
+
+        private lazy var screenNode = Screen(profiles: profiles) { [weak self] in
             self?.renameAda()
         }
 

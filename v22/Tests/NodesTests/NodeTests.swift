@@ -948,3 +948,22 @@ func withARingTheNodeIsNotLifted() {
     #expect(row.badge.appearance.scale == 1)
     host.detach()
 }
+
+@Test @MainActor
+func aFocusRequestGoesToTheAdapterOrFocusesAtOnce() {
+    let row = ProfileRow()
+    let host = host(row)
+
+    host.requestFocus(row.badge.id)
+    #expect(host.focusedNode == row.badge.id)
+
+    host.focus(nil)
+    var requested: [NodeID] = []
+    host.onFocusRequest = { requested.append($0) }
+    host.requestFocus(row.badge.id)
+    host.requestFocus(row.name.id)
+
+    #expect(requested == [row.badge.id])
+    #expect(host.focusedNode == nil)
+    host.detach()
+}

@@ -97,6 +97,13 @@ public final class NodeHost {
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public var focusAnimation: Animation? = .easeOut(duration: 0.15)
 
+    /// Set by the adapter: asks the platform to move the focus to a node (`requestFocus`).
+    /// Without one the host focuses the node itself.
+    ///
+    /// Ownership: the host keeps the closure; it must not keep the host. Isolation:
+    /// MainActor. Errors: none. Cancellation: not applicable.
+    public var onFocusRequest: (@MainActor (NodeID) -> Void)?
+
     /// How focused nodes show the focus; the adapter sets it for its platform. A change
     /// reaches nodes at their next `focusChanged`.
     ///
@@ -379,6 +386,22 @@ public final class NodeHost {
         return sections
     }
 
+    /// Asks for the focus to move to `node` — for the app, where it wants the focus (after
+    /// opening a screen, after a change). The platform's focus system moves it, and the
+    /// node learns of it as of any move; a platform may refuse, when the view is not where
+    /// the focus is. A node that is not mounted or cannot be focused is ignored.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func requestFocus(_ node: NodeID) {
+        guard let target = mounted[node], target.canBecomeFocused else { return }
+
+        if let onFocusRequest {
+            onFocusRequest(node)
+        } else {
+            focus(node)
+        }
+    }
+
     /// Moves the focus to `node` — the adapter calls it when the platform moved it — or
     /// clears it with `nil`. A node that is not mounted or cannot be focused clears it too.
     /// The nodes that lose and get the focus are told inside `focusAnimation`.
@@ -649,6 +672,7 @@ public final class NodeHost {
         root.hostOfRoot = nil
         onNeedsLayout = nil
         onNeedsRender = nil
+        onFocusRequest = nil
     }
 
     /// Makes the tree match the placements: each node's subnodes are the nodes placed by its

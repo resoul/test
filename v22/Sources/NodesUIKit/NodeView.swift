@@ -31,6 +31,9 @@
         private var sectionGuides: [NodeID: SectionGuide] = [:]
         /// The keyboard focus ring, off a TV.
         private let focusRing = FocusRing()
+        /// A node the app asked to focus (`NodeHost.requestFocus`), until the focus system
+        /// moves the focus.
+        private var requestedFocus: NodeID?
 
         /// A view showing `root`.
         ///
@@ -52,6 +55,9 @@
                 guard let self, !self.isLayingOut else { return }
 
                 self.setNeedsLayout()
+            }
+            host.onFocusRequest = { [weak self] node in
+                self?.requestFocus(on: node)
             }
         }
 
@@ -207,6 +213,9 @@
         /// Ownership: returns an item the view keeps. Isolation: MainActor. Errors: none.
         /// Cancellation: none.
         public override var preferredFocusEnvironments: [any UIFocusEnvironment] {
+            if let requested = requestedFocus, let item = focusItemsByNode[requested] {
+                return [item]
+            }
             if let focused = host.focusedNode, let item = focusItemsByNode[focused] {
                 return [item]
             }
@@ -222,6 +231,7 @@
             with coordinator: UIFocusAnimationCoordinator
         ) {
             super.didUpdateFocus(in: context, with: coordinator)
+            requestedFocus = nil
             if let next = context.nextFocusedItem as? NodeFocusItem, next.view === self {
                 host.focus(next.node)
                 // Return and Space come to the first responder, as the remote's buttons do.
@@ -284,6 +294,25 @@
             }
         }
 
+        /// Asks the focus system to focus the node's item; a node without one yet gets it
+        /// after the next drawing. Without a focus system (iPhone) the host just notes it.
+        private func requestFocus(on node: NodeID) {
+            guard usesFocus else {
+                host.focus(node)
+                return
+            }
+
+            requestedFocus = node
+            applyFocusRequest()
+        }
+
+        private func applyFocusRequest() {
+            guard let requestedFocus, let item = focusItemsByNode[requestedFocus] else { return }
+
+            item.setNeedsFocusUpdate()
+            item.updateFocusIfNeeded()
+        }
+
         /// The remote's select button, or Return or Space on a keyboard.
         private static func selects(_ press: UIPress) -> Bool {
             press.type == .select || press.key?.keyCode == .keyboardReturnOrEnter
@@ -313,6 +342,7 @@
             if lostFocus || (!hadItems && !focusOrder.isEmpty) {
                 setNeedsFocusUpdate()
             }
+            applyFocusRequest()
         }
 
         /// Brings the section guides in line with the tree's focus sections.

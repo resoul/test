@@ -1,6 +1,7 @@
 // The demo screen on Apple TV: the remote moves the focus between the Follow badges and the
-// Rename button, and the select button presses the focused one. Open `DemotvOS.xcodeproj`
-// in Xcode and run it on an Apple TV simulator.
+// Rename button, the select button presses the focused one, and Play/Pause brings the focus
+// back to Ada's badge. Open `DemotvOS.xcodeproj` in Xcode and run it on an Apple TV
+// simulator.
 import DemoScreens
 import NodesUIKit
 import UIKit
@@ -62,5 +63,14 @@ final class ScreenController: UIViewController {
 
     override var preferredFocusEnvironments: [any UIFocusEnvironment] {
         [screen]
+    }
+
+    /// Play/Pause on the remote asks for the focus on Ada's badge, from wherever it is.
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if presses.contains(where: { $0.type == .playPause }) {
+            screen.host.requestFocus(model.firstBadge.id)
+        } else {
+            super.pressesBegan(presses, with: event)
+        }
     }
 }
