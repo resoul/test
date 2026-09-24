@@ -46,9 +46,9 @@ final class ScreenController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = UIColor(red: 0.96, green: 0.96, blue: 0.97, alpha: 1)
+        // The screen is made for a phone; on a TV a node view shows it twice as big by
+        // itself (`zoom`).
         screen.host.solvesInBackground = true
-        // The screen is made for a phone; twice its size reads from across a room.
-        screen.zoom = 2
         screen.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(screen)
         let margins = view.safeAreaLayoutGuide

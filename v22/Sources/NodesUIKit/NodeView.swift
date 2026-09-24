@@ -64,12 +64,13 @@
         public var root: Node { host.root }
 
         /// How many times bigger than its points the tree is shown: at 2, it is laid out in
-        /// half the view's size and drawn twice as big — for a TV, seen from across a room.
-        /// Text is drawn for the final size and stays sharp; taps, focus and accessibility
-        /// frames follow.
+        /// half the view's size and drawn twice as big. Text is drawn for the final size and
+        /// stays sharp; taps, focus and accessibility frames follow. `nil`, the default, is 2
+        /// on a TV — seen from across a room, sizes made for a phone read about right there —
+        /// and 1 elsewhere.
         ///
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
-        public var zoom: Double = 1 {
+        public var zoom: Double? {
             didSet {
                 guard zoom != oldValue else { return }
 
@@ -78,8 +79,11 @@
             }
         }
 
-        /// `zoom`, kept positive.
-        private var factor: Double { zoom > 0 ? zoom : 1 }
+        /// `zoom`, or the device's, kept positive.
+        private var factor: Double {
+            let zoom = zoom ?? (traitCollection.userInterfaceIdiom == .tv ? 2 : 1)
+            return zoom > 0 ? zoom : 1
+        }
 
         /// Lays the tree out in the bounds and draws it.
         ///
