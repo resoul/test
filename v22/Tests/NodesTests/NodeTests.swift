@@ -389,3 +389,65 @@ func hiddenAndCancelledNodesAreNotTapped() {
     #expect(toolbar.first.taps == 0)
     host.detach()
 }
+
+// MARK: - Node cache
+
+@MainActor
+private final class Row: Node {
+    let key: Int
+
+    init(key: Int) {
+        self.key = key
+    }
+
+    override var layoutContent: LeafContent? { .size(width: 100, height: 20) }
+}
+
+@MainActor
+private final class List: Node {
+    let keys: State<[Int]>
+    let rows = NodeCache<Int, Row> { Row(key: $0) }
+
+    init(keys: [Int]) {
+        self.keys = State(keys)
+    }
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.column) {
+            for key in keys.value { rows[key] }
+        }
+    }
+}
+
+@Test @MainActor
+func aCachedNodeKeepsItsIdentityAcrossReorders() {
+    let list = List(keys: [1, 2, 3])
+    let host = host(list)
+    let second = list.rows[2]
+
+    list.keys.value = [3, 2, 1]
+    host.layoutIfNeeded()
+
+    #expect(list.rows[2] === second)
+    #expect(list.subnodes.map { ($0 as? Row)?.key } == [3, 2, 1])
+    #expect(second.frame.origin.y == 20)
+    host.detach()
+}
+
+@Test @MainActor
+func nodesNoLongerAskedForAreReleasedAtTheNextPass() {
+    let list = List(keys: [1, 2, 3])
+    let host = host(list)
+    weak var removed = list.rows[3]
+
+    list.keys.value = [1, 2]
+    host.layoutIfNeeded()
+    #expect(list.rows.count == 3)
+
+    list.keys.value = [2, 1]
+    host.layoutIfNeeded()
+
+    #expect(list.rows.count == 2)
+    #expect(removed == nil)
+    host.detach()
+}

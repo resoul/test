@@ -76,6 +76,10 @@ public final class NodeHost {
     private var mounted: [NodeID: Node] = [:]
     private var pressed: Node?
 
+    /// Grows with every layout pass and measurement of any host: `NodeCache` tells passes
+    /// apart by it.
+    static var passGeneration: UInt64 = 0
+
     /// A host for `root`, which must not be mounted anywhere else.
     ///
     /// Ownership: keeps `root`. Isolation: MainActor. Errors: none. Cancellation:
@@ -123,6 +127,7 @@ public final class NodeHost {
         height: AvailableSpace = .maxContent
     ) -> LayoutSize {
         StateUpdates.flush()
+        NodeHost.passGeneration &+= 1
         return root.asLayoutSpec.measure(
             width: width,
             height: height,
@@ -142,6 +147,7 @@ public final class NodeHost {
         needsLayout = false
         needsRender = true
         passes += 1
+        NodeHost.passGeneration &+= 1
         let placements = root.asLayoutSpec.apply(
             in: LayoutRect(origin: .zero, size: size),
             direction: direction,
