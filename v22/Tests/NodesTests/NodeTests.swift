@@ -1,0 +1,260 @@
+import LayoutCore
+import StateCore
+import Testing
+
+@testable import Nodes
+
+// Hosts are laid out explicitly with `layoutIfNeeded()`, which also flushes state updates,
+// so every test is synchronous and deterministic.
+
+/// A leaf of a fixed content size that can change.
+@MainActor
+private final class Box: Node {
+    var contentSize: LayoutSize {
+        didSet { setNeedsLayout() }
+    }
+
+    init(_ width: Double, _ height: Double) {
+        contentSize = LayoutSize(width: width, height: height)
+    }
+
+    override var layoutContent: LeafContent? { .size(contentSize) }
+}
+
+@MainActor
+private final class Card: Node {
+    let avatar = Box(40, 40)
+    let title = Box(100, 20)
+    let follow = Box(60, 30)
+    let showsFollow = State(true)
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.row) {
+            avatar
+            title.flex(grow: 1)
+            if showsFollow.value { follow }
+        }
+        .alignItems(.center)
+        .gap(10)
+        .padding(10)
+    }
+}
+
+@MainActor
+private final class Screen: Node {
+    let card = Card()
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.column) { card }
+            .padding(20)
+    }
+}
+
+@MainActor
+private func host(_ root: Node, width: Double = 400, height: Double = 300) -> NodeHost {
+    let host = NodeHost(root: root, size: LayoutSize(width: width, height: height))
+    host.layoutIfNeeded()
+    return host
+}
+
+@Test @MainActor
+func framesAreInTheCoordinatesOfTheSupernode() {
+    let screen = Screen()
+    let host = host(screen)
+
+    #expect(screen.frame == LayoutRect(x: 0, y: 0, width: 400, height: 300))
+    #expect(screen.card.frame == LayoutRect(x: 20, y: 20, width: 360, height: 60))
+    #expect(screen.card.avatar.frame == LayoutRect(x: 10, y: 10, width: 40, height: 40))
+    #expect(screen.card.title.frame == LayoutRect(x: 60, y: 20, width: 220, height: 20))
+    #expect(screen.card.follow.frame == LayoutRect(x: 290, y: 15, width: 60, height: 30))
+    host.detach()
+}
+
+@Test @MainActor
+func theWholeTreeIsLaidOutInOnePass() {
+    let screen = Screen()
+    let host = host(screen)
+
+    #expect(host.passes == 1)
+    host.detach()
+}
+
+@Test @MainActor
+func subnodesAreTheNodesTheLayoutMentions() {
+    let screen = Screen()
+    let host = host(screen)
+    let card = screen.card
+
+    #expect(screen.subnodes.map(\.id) == [card.id])
+    #expect(card.subnodes.map(\.id) == [card.avatar.id, card.title.id, card.follow.id])
+    #expect(card.title.supernode === card)
+    #expect(card.supernode === screen)
+    #expect(card.title.host === host)
+    host.detach()
+}
+
+@Test @MainActor
+func stateReadInTheLayoutLaysTheTreeOutAgain() {
+    let screen = Screen()
+    let host = host(screen)
+    let card = screen.card
+    let follow = card.follow
+    let followID = follow.id
+
+    card.showsFollow.value = false
+    host.layoutIfNeeded()
+
+    #expect(host.passes == 2)
+    #expect(!follow.isMounted)
+    #expect(follow.supernode == nil)
+    #expect(card.subnodes.map(\.id) == [card.avatar.id, card.title.id])
+    #expect(card.title.frame.size.width == 290)
+
+    card.showsFollow.value = true
+    host.layoutIfNeeded()
+
+    #expect(card.follow === follow)
+    #expect(card.follow.id == followID)
+    #expect(follow.isMounted)
+    host.detach()
+}
+
+@MainActor
+private final class Greeting: Node {
+    let label = Box(0, 20)
+    let name: State<String>
+    var updates = 0
+
+    init(name: State<String>) {
+        self.name = name
+    }
+
+    override func update() {
+        updates += 1
+        label.contentSize = LayoutSize(width: Double(name.value.count) * 10, height: 20)
+    }
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.row) { label }
+    }
+}
+
+@Test @MainActor
+func updateRunsBeforeTheFirstLayoutAndAfterItsStateChanges() {
+    let name = State("Ann")
+    let greeting = Greeting(name: name)
+    let host = host(greeting)
+
+    #expect(greeting.updates == 1)
+    #expect(host.passes == 1)
+    #expect(greeting.label.frame.size.width == 30)
+
+    name.value = "Annabel"
+    host.layoutIfNeeded()
+
+    #expect(greeting.updates == 2)
+    #expect(host.passes == 2)
+    #expect(greeting.label.frame.size.width == 70)
+    host.detach()
+}
+
+@Test @MainActor
+func theAdapterIsToldOnceUntilItLaysOut() {
+    let screen = Screen()
+    let host = host(screen)
+    var requests = 0
+    host.onNeedsLayout = { requests += 1 }
+
+    screen.card.showsFollow.value = false
+    screen.card.title.contentSize = LayoutSize(width: 120, height: 20)
+    StateUpdates.flush()
+    host.size = LayoutSize(width: 500, height: 300)
+
+    #expect(requests == 1)
+    host.layoutIfNeeded()
+    screen.card.title.contentSize = LayoutSize(width: 130, height: 20)
+
+    #expect(requests == 2)
+    host.detach()
+}
+
+@Test @MainActor
+func unmountedNodesNoLongerUpdate() {
+    let name = State("Ann")
+    let greeting = Greeting(name: name)
+    let showsGreeting = State(true)
+    let root = Switch(child: greeting, isOn: showsGreeting)
+    let host = host(root)
+
+    showsGreeting.value = false
+    host.layoutIfNeeded()
+    name.value = "Bob"
+    host.layoutIfNeeded()
+
+    #expect(!greeting.isMounted)
+    #expect(greeting.updates == 1)
+    host.detach()
+}
+
+@MainActor
+private final class Switch: Node {
+    let child: Node
+    let isOn: State<Bool>
+
+    init(child: Node, isOn: State<Bool>) {
+        self.child = child
+        self.isOn = isOn
+    }
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer {
+            if isOn.value { child }
+        }
+    }
+}
+
+@MainActor
+private final class Adaptive: Node {
+    let avatar = Box(40, 40)
+    let text = Box(100, 20)
+
+    override func layoutSpec() -> LayoutSpec? {
+        Breakpoint(from: 300) {
+            FlexContainer(.row) {
+                avatar; text
+            }
+        } otherwise: {
+            FlexContainer(.column) {
+                avatar; text
+            }
+        }
+    }
+}
+
+@Test @MainActor
+func aNodeInBothBranchesOfABreakpointIsMountedOnce() {
+    let adaptive = Adaptive()
+    let host = host(adaptive, width: 400)
+
+    #expect(adaptive.subnodes.map(\.id) == [adaptive.avatar.id, adaptive.text.id])
+    #expect(adaptive.text.frame.origin.x == 40)
+
+    host.size = LayoutSize(width: 200, height: 300)
+    host.layoutIfNeeded()
+
+    #expect(adaptive.subnodes.map(\.id) == [adaptive.avatar.id, adaptive.text.id])
+    #expect(adaptive.text.frame.origin == LayoutPoint(x: 0, y: 40))
+    host.detach()
+}
+
+@Test @MainActor
+func detachingUnmountsTheTree() {
+    let screen = Screen()
+    let host = host(screen)
+
+    host.detach()
+
+    #expect(!screen.isMounted)
+    #expect(!screen.card.isMounted)
+    #expect(screen.card.title.host == nil)
+}

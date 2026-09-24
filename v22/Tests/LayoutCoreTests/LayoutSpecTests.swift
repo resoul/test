@@ -323,3 +323,61 @@ func spacingStepsComeFromTheScale() {
     spec.apply(in: LayoutRect(x: 0, y: 0, width: 100, height: 100), spacing: roomy)
     #expect(box.frame?.origin == LayoutPoint(x: 20, y: 20))
 }
+
+/// An element that lays out its own subelements in the same pass.
+@MainActor
+private final class Panel: LayoutElement {
+    let layoutContent: LeafContent? = nil
+    var layout: () -> LayoutSpec?
+    private(set) var frame: LayoutRect?
+
+    init(_ layout: @escaping () -> LayoutSpec?) {
+        self.layout = layout
+    }
+
+    var embeddedLayout: LayoutSpec? { layout() }
+
+    func applyLayoutFrame(_ frame: LayoutRect) {
+        self.frame = frame
+    }
+}
+
+@Test @MainActor
+func anEmbeddedLayoutPlacesItsElementsRelativeToTheirContainer() {
+    let icon = Box(20, 20)
+    let label = Box(50, 10)
+    let panel = Panel {
+        FlexContainer(.row) {
+            icon; label
+        }.gap(5).padding(10)
+    }
+    let placements = FlexContainer(.column) { panel }
+        .padding(30)
+        .apply(in: LayoutRect(x: 0, y: 0, width: 200, height: 200))
+
+    #expect(panel.frame == LayoutRect(x: 30, y: 30, width: 140, height: 40))
+    #expect(icon.frame == LayoutRect(x: 10, y: 10, width: 20, height: 20))
+    #expect(label.frame == LayoutRect(x: 35, y: 10, width: 50, height: 20))
+    #expect(placements.map { $0.container === panel } == [false, true, true])
+}
+
+@Test @MainActor
+func placeModifiersApplyOnTopOfTheEmbeddedStyle() {
+    let icon = Box(20, 20)
+    let panel = Panel { FlexContainer { icon }.padding(10).width(40) }
+    FlexContainer(.row) { panel.width(100) }
+        .apply(in: LayoutRect(x: 0, y: 0, width: 300, height: 50))
+
+    #expect(panel.frame?.size.width == 100)
+    #expect(icon.frame?.origin == LayoutPoint(x: 10, y: 10))
+}
+
+@Test @MainActor
+func anElementEmbeddingItselfIsPlacedAsALeafThere() {
+    let panel = Panel { nil }
+    panel.layout = { FlexContainer { panel } }
+    let placements = FlexContainer { panel }
+        .apply(in: LayoutRect(x: 0, y: 0, width: 100, height: 100))
+
+    #expect(placements.count == 2)
+}

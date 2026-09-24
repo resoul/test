@@ -14,8 +14,17 @@ public protocol LayoutElement: AnyObject, LayoutSpecConvertible {
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
     var layoutContent: LeafContent? { get }
 
-    /// Receives the element's frame, in the coordinate space of the rectangle the spec was
-    /// applied in.
+    /// The layout of the element's own subelements, laid out in the same pass as the spec
+    /// that places the element: the element becomes a flex container whose style is that
+    /// layout's, with the element's place modifiers on top, and whose items are that
+    /// layout's items. `nil` places the element as a leaf measured by `layoutContent`.
+    ///
+    /// Ownership: returns a value borrowing the element's subelements. Isolation: MainActor.
+    /// Errors: none. Cancellation: none.
+    var embeddedLayout: LayoutSpec? { get }
+
+    /// Receives the element's frame: in the coordinate space of the element whose
+    /// `embeddedLayout` placed it, or else of the rectangle the spec was applied in.
     ///
     /// Ownership: the element stores what it needs. Isolation: MainActor. Errors: none.
     /// Cancellation: none.
@@ -32,6 +41,11 @@ public protocol LayoutElement: AnyObject, LayoutSpecConvertible {
 extension LayoutElement {
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
     public func applyLayoutVisibility(_ isVisible: Bool) {}
+
+    /// No embedded layout: the element is a leaf.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+    public var embeddedLayout: LayoutSpec? { nil }
 
     /// A spec that places this element as a single item.
     ///

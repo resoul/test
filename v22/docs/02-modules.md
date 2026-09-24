@@ -16,7 +16,9 @@ flex-раскладку для обычных `UIView`, только дерев�
 LayoutCore      чистая математика и описание раскладки. Только Foundation. Не знает про ноды.
 LayoutUIKit     та же раскладка для UIView (в layoutSubviews)
 LayoutAppKit    та же раскладка для NSView (в layout())
-Nodes           дерево нод, снимок, фоновый расчёт, рендер в CALayer. Использует Layout.
+Nodes           дерево нод: Node, NodeHost; раскладка всего дерева одним проходом,
+                подписка по чтению в layoutSpec()/update(). Использует LayoutCore, StateCore.
+                (Снимок, фоновый расчёт, рендер в CALayer — следующие срезы.)
 NodesUIKit      встраивание нод в UIKit: view.addSubnode(node)
 NodesAppKit     встраивание нод в AppKit
 Theme           тема: шкала отступов, цвета, типографика; тема по умолчанию (см. 09)

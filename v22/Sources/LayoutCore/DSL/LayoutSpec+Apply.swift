@@ -1,45 +1,98 @@
 import Foundation
 
+/// Where one element of a spec ended up.
+///
+/// Ownership: borrows the elements. Isolation: MainActor. Errors: none. Cancellation: not
+/// applicable.
+@MainActor
+public struct LayoutPlacement {
+    /// The element placed.
+    ///
+    /// Ownership: borrowed. Isolation: MainActor. Errors: none. Cancellation: none.
+    public let element: any LayoutElement
+
+    /// Its frame, in the coordinate space of `container`, or of the spec's rectangle when
+    /// `container` is `nil`; `nil` when the element was not laid out (`hidden`, the other
+    /// side of a `Breakpoint`, or inside such an item).
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: none.
+    public let frame: LayoutRect?
+
+    /// The element whose `embeddedLayout` placed this one, or `nil` for the spec itself.
+    ///
+    /// Ownership: borrowed. Isolation: MainActor. Errors: none. Cancellation: none.
+    public let container: (any LayoutElement)?
+}
+
 extension LayoutSpec {
-    /// Lays the spec out in `rect` and gives every element its frame, in the coordinate space
-    /// of `rect`. Frames are snapped to the pixel grid of `scale` (edges are rounded, so
-    /// neighbours never overlap or leave hairline gaps). Spacing steps take their points
-    /// from `spacing`. Elements of `hidden`, `invisible` and `Breakpoint` specs are shown or
-    /// hidden to match.
+    /// Lays the spec out in `rect` and gives every element its frame: in the coordinate space
+    /// of `rect`, or of the element whose `embeddedLayout` placed it. Frames are snapped to
+    /// the pixel grid of `scale` (edges are rounded, so neighbours never overlap or leave
+    /// hairline gaps). Spacing steps take their points from `spacing`. Elements of `hidden`,
+    /// `invisible` and `Breakpoint` specs are shown or hidden to match. Returns where every
+    /// element went, in the order the spec mentions them.
     ///
     /// Ownership: borrows the elements for the call. Isolation: MainActor; runs synchronously.
     /// Errors: none. Cancellation: not applicable.
+    @discardableResult
     public func apply(
         in rect: LayoutRect,
         direction: LayoutDirection = .leftToRight,
         scale: Double = 1,
         spacing: SpacingScale = .standard
-    ) {
+    ) -> [LayoutPlacement] {
         var tree = LayoutTree(direction: direction, spacing: spacing)
         let root = tree.root(for: self)
-        guard let result = try? FlexboxEngine.layout(root, size: rect.size) else { return }
+        guard let result = try? FlexboxEngine.layout(root, size: rect.size) else { return [] }
 
         let snap = scale > 0 ? scale : 1
         func snapped(_ value: Double) -> Double { (value * snap).rounded() / snap }
 
+        // Frames snapped in the coordinates of `rect`, then made relative to their container
+        // — whose own frame, earlier in pre-order, is snapped too.
+        var absolute: [LayoutRect?] = []
+        absolute.reserveCapacity(tree.elements.count)
+        var placements: [LayoutPlacement] = []
+        placements.reserveCapacity(tree.elements.count)
         var visible: [ObjectIdentifier: Bool] = [:]
         for (offset, entry) in tree.elements.enumerated() {
-            let frame = result.frame(for: LayoutID(UInt64(offset)))
-            if let frame {
+            var placed: LayoutRect?
+            if let frame = result.frame(for: LayoutID(UInt64(offset))) {
                 let minX = snapped(rect.origin.x + frame.origin.x)
                 let minY = snapped(rect.origin.y + frame.origin.y)
                 let maxX = snapped(rect.origin.x + frame.origin.x + frame.size.width)
                 let maxY = snapped(rect.origin.y + frame.origin.y + frame.size.height)
-                entry.element.applyLayoutFrame(
-                    LayoutRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+                placed = LayoutRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+            }
+            absolute.append(placed)
+
+            var frame = placed
+            if let container = entry.container, let origin = absolute[container]?.origin,
+                let own = placed
+            {
+                frame = LayoutRect(
+                    x: own.origin.x - origin.x,
+                    y: own.origin.y - origin.y,
+                    width: own.size.width,
+                    height: own.size.height
                 )
             }
+            if let frame {
+                entry.element.applyLayoutFrame(frame)
+            }
+            placements.append(
+                LayoutPlacement(
+                    element: entry.element,
+                    frame: frame,
+                    container: entry.container.map { tree.elements[$0].element }
+                )
+            )
 
             if entry.managesVisibility {
                 // An element can stand in several places (both branches of a breakpoint):
                 // it is visible if any of them shows it.
                 let key = ObjectIdentifier(entry.element)
-                visible[key] = (visible[key] ?? false) || (frame != nil && !entry.isInvisible)
+                visible[key] = (visible[key] ?? false) || (placed != nil && !entry.isInvisible)
             }
         }
 
@@ -49,6 +102,7 @@ extension LayoutSpec {
                 entry.element.applyLayoutVisibility(isVisible)
             }
         }
+        return placements
     }
 
     /// The size the spec takes under the given space — for `sizeThatFits` and
@@ -75,6 +129,8 @@ extension LayoutSpec {
 struct LayoutTree {
     struct Entry {
         let element: any LayoutElement
+        /// Index of the element whose embedded layout placed this one.
+        let container: Int?
         let managesVisibility: Bool
         let isInvisible: Bool
     }
@@ -83,6 +139,9 @@ struct LayoutTree {
     let spacing: SpacingScale
     var elements: [Entry] = []
     private var containers: UInt64 = 0
+    /// Elements whose embedded layout is being expanded: one that mentions itself, directly
+    /// or through its subelements, is placed as a leaf there instead of recursing forever.
+    private var expanding: Set<ObjectIdentifier> = []
 
     init(direction: LayoutDirection, spacing: SpacingScale) {
         self.direction = direction
@@ -101,12 +160,19 @@ struct LayoutTree {
                 for: spec,
                 managesVisibility: false,
                 isInvisible: false,
-                fill: true
+                fill: true,
+                container: nil
             )
             return LayoutNode(id: id, style: style, direction: direction, children: children)
         }
 
-        return nodes(for: spec, managesVisibility: false, isInvisible: false, fill: false)[0]
+        return nodes(
+            for: spec,
+            managesVisibility: false,
+            isInvisible: false,
+            fill: false,
+            container: nil
+        )[0]
     }
 
     /// The nodes a spec stands for: one, or the nodes of both branches of a breakpoint, each
@@ -116,7 +182,8 @@ struct LayoutTree {
         for spec: LayoutSpec,
         managesVisibility inherited: Bool,
         isInvisible inheritedInvisible: Bool,
-        fill: Bool
+        fill: Bool,
+        container: Int?
     ) -> [LayoutNode] {
         let managesVisibility = inherited || spec.managesVisibility
         let isInvisible = inheritedInvisible || spec.isInvisible
@@ -124,14 +191,49 @@ struct LayoutTree {
 
         switch spec.content {
         case let .element(element):
-            let id = LayoutID(UInt64(elements.count))
+            let index = elements.count
+            let id = LayoutID(UInt64(index))
             elements.append(
                 Entry(
                     element: element,
+                    container: container,
                     managesVisibility: managesVisibility,
                     isInvisible: isInvisible
                 )
             )
+            let key = ObjectIdentifier(element)
+            if !expanding.contains(key), let embedded = element.embeddedLayout {
+                // The element is a flex container: the embedded layout's own style, then the
+                // modifiers of the element's place in its parent.
+                var own = embedded
+                if case .container = own.content {} else { own = LayoutSpec { embedded } }
+                own.patches += spec.patches
+                let (ownStyle, ownVariants) = own.resolvedStyle(spacing)
+                guard case let .container(items) = own.content else { return [] }
+
+                expanding.insert(key)
+                defer { expanding.remove(key) }
+                var children: [LayoutNode] = []
+                for item in items {
+                    children += nodes(
+                        for: item,
+                        managesVisibility: false,
+                        isInvisible: false,
+                        fill: false,
+                        container: index
+                    )
+                }
+                return [
+                    LayoutNode(
+                        id: id,
+                        style: ownStyle,
+                        direction: direction,
+                        children: children,
+                        variants: ownVariants
+                    )
+                ]
+            }
+
             return [
                 LayoutNode(
                     id: id,
@@ -151,7 +253,8 @@ struct LayoutTree {
                     for: item,
                     managesVisibility: managesVisibility,
                     isInvisible: isInvisible,
-                    fill: false
+                    fill: false,
+                    container: container
                 )
             }
             return [
@@ -197,7 +300,8 @@ struct LayoutTree {
                         for: branch,
                         managesVisibility: true,
                         isInvisible: isInvisible,
-                        fill: false
+                        fill: false,
+                        container: container
                     )
                 }
             }

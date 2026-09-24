@@ -98,7 +98,15 @@ view.addSubnode(ProfileCard(user: user))
 
 ## Управление subnodes
 
-**Статус: согласовано** (по принципу), детали — предложено.
+**Статус: согласовано** (по принципу), детали — предложено. **Срез реализован
+(2026-09-24)** в модуле `Nodes`: `Node` (`layoutSpec()`, `update()`, `layoutContent`,
+`frame`, `subnodes`, `supernode`, `isMounted`) и `NodeHost` (размер, масштаб, направление,
+`onNeedsLayout`, `layoutIfNeeded()`). Раскладка всего дерева — один проход движка: нода с
+`layoutSpec()` в раскладке родителя встраивается в неё как flex-контейнер
+(`LayoutElement.embeddedLayout`), кадры детей — в координатах своей ноды. Что прочитано в
+`layoutSpec()` — зависимость раскладки; что в `update()` — зависимость `update()`, который
+идёт до первого замера ноды. 9 тестов на Linux. Не сделано: отрисовка в `CALayer`,
+`addSubnode` для UIKit/AppKit, расчёт в фоне, `NodeCache`.
 
 - Управление включено всегда (аналог `automaticallyManagesSubnodes` без флага).
 - Нода из свойства, упомянутая в результате `layoutSpec()`, смонтирована как subnode.
