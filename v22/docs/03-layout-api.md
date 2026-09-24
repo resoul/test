@@ -112,7 +112,16 @@ view.addSubnode(ProfileCard(user: user))
 дерево нод, только QuartzCore, общий для UIKit и AppKit), `NodeView`/`NodeNSView` и
 `view.addSubnode(node)`. `NodeNSView` — layer-hosting с `isGeometryFlipped`, чтобы
 AppKit не трогал геометрию слоя. Apple-часть на Linux не компилируется — проверяется на
-Mac (`NodesRenderTests`). Не сделано: текст, расчёт в фоне, `NodeCache`.
+Mac (`NodesRenderTests`).
+
+**Третий срез (2026-09-24):** `Text` (CoreText, модуль `NodesRender`): измерение
+(min-content — самое длинное слово, max-content — самая длинная строка, высота при ширине,
+первая базовая линия) и рисование строятся одной `TextLayout`, так что измеренное
+совпадает с нарисованным; `LayerDrawing` — нода рисует своё содержимое в bitmap слоя,
+перерисовка только при смене ревизии, размера, масштаба или переворота. Слой, который
+показывает содержимое перевёрнутым (`contentsAreFlipped()`, так в `NodeNSView`), получает
+его нарисованным перевёрнуто. Не сделано: расчёт в фоне, `NodeCache`, стиль шрифта
+(жирность, межстрочный интервал, число строк), выравнивание по правому краю для RTL.
 
 - Управление включено всегда (аналог `automaticallyManagesSubnodes` без флага).
 - Нода из свойства, упомянутая в результате `layoutSpec()`, смонтирована как subnode.

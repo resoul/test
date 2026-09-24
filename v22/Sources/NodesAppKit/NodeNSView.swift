@@ -76,7 +76,7 @@
                 userInterfaceLayoutDirection == .rightToLeft ? .rightToLeft : .leftToRight
             host.layoutIfNeeded()
             if host.needsRender {
-                renderer.render(host.root, in: hostedLayer)
+                renderer.render(host.root, in: hostedLayer, scale: host.scale)
                 host.didRender()
             }
         }
