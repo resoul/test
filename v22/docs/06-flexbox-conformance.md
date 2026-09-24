@@ -47,29 +47,29 @@
 
 ## Первый шаг
 
-**Статус: набор и эталон готовы, первый прогон на Mac выполнен (2026-09-24); baseline
-ещё не в репозитории.**
+**Статус: выполнен.** Baseline старого движка:
+[expectations/trellis.json](../../Conformance/CSSFlexbox/expectations/trellis.json),
+отчёт — [reports/trellis.md](../../Conformance/CSSFlexbox/reports/trellis.md):
+**107 pass, 29 fail, 6 unsupported из 142.** Все 29 падений покрыты дефектами #95–#106
+(шесть не сверенных вручную — остальные варианты `wrap-reverse`, #102).
 
 Сделано: [Conformance/CSSFlexbox](../../Conformance/CSSFlexbox/README.md) — 142 кейса в 18
 группах, эталонные frame сняты в Chromium 141, Swift-прогон
 `Tests/TrellisCoreTests/Layout/CSSConformanceTests.swift`. Swift-прогон собрался и
 отработал на Mac в режиме записи.
 
-Предварительный результат — по логу прогона, сверено с эталоном для 23 кейсов, которые
-выглядели подозрительно; полная картина будет в `reports/trellis.md`. Подтверждены
+Сначала расхождения были сверены по логу для 23 кейсов, затем подтверждены отчётом. Это
 расхождения, записанные в [реестр дефектов](../../docs/defects.md) как #95–#106: margin в
 размещении, stretch без margin и min/max, перераспределение grow после clamp, сумма grow
 < 1, `min > max`, автоматический минимальный размер (`min-width: auto`), `wrap-reverse`,
 absolute (растяжение `left`+`right`, padding box, статическая позиция), `aspect-ratio`
 при stretch, обрезка явного размера. Пробелы словаря (`unsupported`): `margin: auto`,
-`order`. Совпадают с Chromium, судя по логу: `justify-content`, `align-items`/`align-self`,
+`order`. Совпадают с Chromium: `justify-content`, `align-items`/`align-self`,
 обычный `wrap` с `align-content`, grow/shrink/basis без clamp, gap, проценты, вложенность,
 RTL без отступов — и `nested/profile-card` из примеров v22.
 
-Прогнать текущий `FlexboxEngine` Trellis (≈1,2 тыс. строк, перенесён из Weave) через такой
-набор и получить карту расхождений: сколько кейсов из N совпадает и на чём падает. От
-результата зависит решение «v22 на доработанном движке» или «новый движок». До прогона
-степень соответствия текущего движка CSS неизвестна — оценок здесь нет намеренно.
+Итог: по результату решено писать новый движок на основе старого, старый не чинить —
+[10-layout-engine.md](10-layout-engine.md).
 
 ## Адаптивность в движке
 
