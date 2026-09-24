@@ -152,6 +152,8 @@ value, hint, traits), `NodeHost.accessibilityItems()` — элементы в п
 Адаптеры: `UIAccessibilityElement` / `NSAccessibilityElement` хранят только `NodeID` и
 слабую ссылку на хост (правило Trellis: нативные AX-объекты не читают живые ноды),
 пересобираются после каждой отрисовки. 3 теста на Linux, 1 — AppKit на Mac.
+Проверено (2026-09-24): тесты на Mac проходят, включая AppKit (13 в `NodesRenderTests`).
+Не проверено: VoiceOver вживую на Mac и iOS, `UIAccessibilityElement` вне компиляции.
 
 - Управление включено всегда (аналог `automaticallyManagesSubnodes` без флага).
 - Нода из свойства, упомянутая в результате `layoutSpec()`, смонтирована как subnode.
