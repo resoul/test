@@ -20,21 +20,60 @@
             case right
         }
 
-        /// A font by its PostScript name; `nil` for the system font.
+        /// Stroke weight of the system font.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public enum Weight: Sendable, Hashable {
+            case regular
+            case medium
+            case semibold
+            case bold
+
+            /// The Core Text weight trait, from -1 (thinnest) to 1 (heaviest).
+            var trait: Double {
+                switch self {
+                case .regular: 0
+                case .medium: 0.23
+                case .semibold: 0.3
+                case .bold: 0.4
+                }
+            }
+        }
+
+        /// A font by its PostScript name; `nil` for the system font in `weight`.
         ///
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         public var fontName: String?
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         public var size: Double = 17
+        /// Weight of the system font; a named font has its own.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public var weight: Weight = .regular
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         public var color: Color = .black
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         public var alignment: Alignment = .leading
+        /// Extra space between lines, in points.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public var lineSpacing: Double = 0
+        /// At most this many lines; the last one shown ends with "…" when the text goes on.
+        /// `nil` for no limit.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public var maxLines: Int?
 
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-        public init(fontName: String? = nil, size: Double = 17, color: Color = .black) {
+        public init(
+            fontName: String? = nil,
+            size: Double = 17,
+            weight: Weight = .regular,
+            color: Color = .black
+        ) {
             self.fontName = fontName
             self.size = size
+            self.weight = weight
             self.color = color
         }
     }
@@ -119,28 +158,37 @@
     struct TextLayout {
         let string: CFAttributedString
         let font: CTFont
+        let maxLines: Int?
         private let attributes: CFDictionary
 
         init(text: String, style: TextStyle) {
-            let size = CGFloat(style.size)
-            font =
-                style.fontName.map { CTFontCreateWithName($0 as CFString, size, nil) }
-                ?? CTFontCreateUIFontForLanguage(.system, size, nil)
-                ?? CTFontCreateWithName("Helvetica" as CFString, size, nil)
+            font = TextLayout.font(for: style)
+            maxLines = style.maxLines.map { max(1, $0) }
 
-            var alignment: CTTextAlignment =
+            let alignment: CTTextAlignment =
                 switch style.alignment {
                 case .leading: .natural
                 case .center: .center
                 case .right: .right
                 }
-            let paragraph = withUnsafeMutableBytes(of: &alignment) { bytes in
-                var setting = CTParagraphStyleSetting(
-                    spec: .alignment,
-                    valueSize: MemoryLayout<CTTextAlignment>.size,
-                    value: bytes.baseAddress!
-                )
-                return CTParagraphStyleCreate(&setting, 1)
+            let spacing = CGFloat(max(0, style.lineSpacing))
+            let paragraph = withUnsafeBytes(of: alignment) { alignmentBytes in
+                withUnsafeBytes(of: spacing) { spacingBytes in
+                    var settings = [
+                        CTParagraphStyleSetting(
+                            spec: .alignment,
+                            valueSize: MemoryLayout<CTTextAlignment>.size,
+                            value: alignmentBytes.baseAddress!
+                        ),
+                        CTParagraphStyleSetting(
+                            spec: .lineSpacingAdjustment,
+                            valueSize: MemoryLayout<CGFloat>.size,
+                            value: spacingBytes.baseAddress!
+                        ),
+                    ]
+                    let count = settings.count
+                    return CTParagraphStyleCreate(&settings, count)
+                }
             }
             let color = CGColor(
                 red: CGFloat(style.color.red),
@@ -158,6 +206,28 @@
             string = CFAttributedStringCreate(nil, text as CFString, dictionary)
         }
 
+        /// The named font, or the system font in the style's weight.
+        private static func font(for style: TextStyle) -> CTFont {
+            let size = CGFloat(style.size)
+            if let name = style.fontName {
+                return CTFontCreateWithName(name as CFString, size, nil)
+            }
+
+            let system =
+                CTFontCreateUIFontForLanguage(.system, size, nil)
+                ?? CTFontCreateWithName("Helvetica" as CFString, size, nil)
+            guard style.weight != .regular else { return system }
+
+            // The same family, matched by weight.
+            let traits: [CFString: Any] = [kCTFontWeightTrait: style.weight.trait]
+            let attributes: [CFString: Any] = [
+                kCTFontFamilyNameAttribute: CTFontCopyFamilyName(system),
+                kCTFontTraitsAttribute: traits,
+            ]
+            let descriptor = CTFontDescriptorCreateWithAttributes(attributes as CFDictionary)
+            return CTFontCreateWithFontDescriptor(descriptor, size, nil)
+        }
+
         var ascent: Double { Double(CTFontGetAscent(font)) }
 
         /// Width of `line` set on one line, rounded up so that the text laid out at this
@@ -169,27 +239,79 @@
         }
 
         func height(forWidth width: Double) -> Double {
-            let framesetter = CTFramesetterCreateWithAttributedString(string)
-            let size = CTFramesetterSuggestFrameSizeWithConstraints(
-                framesetter,
-                CFRange(location: 0, length: 0),
-                nil,
-                CGSize(width: CGFloat(width), height: .greatestFiniteMagnitude),
-                nil
-            )
-            return ceil(Double(size.height))
+            let set = lines(forWidth: width)
+            return ceil(Double(set.height))
         }
 
         func draw(in context: CGContext, size: CGSize) {
+            let set = lines(forWidth: Double(size.width))
+            context.textMatrix = .identity
+            // Origins are in a box `set.boxHeight` tall; this one is `size.height` tall.
+            let shift = set.boxHeight - size.height
+            for index in set.lines.indices {
+                var line = set.lines[index]
+                if index == set.lines.count - 1, set.isTruncated {
+                    line = truncated(from: line, width: size.width)
+                }
+                context.textPosition = CGPoint(
+                    x: set.origins[index].x,
+                    y: set.origins[index].y - shift
+                )
+                CTLineDraw(line, context)
+            }
+        }
+
+        /// The lines of the text wrapped at `width`, at most `maxLines` of them, with their
+        /// origins in a box `boxHeight` tall, and the height they take from its top.
+        private func lines(forWidth width: Double) -> (
+            lines: [CTLine], origins: [CGPoint], boxHeight: CGFloat, height: CGFloat,
+            isTruncated: Bool
+        ) {
+            let boxHeight: CGFloat = 1_000_000
             let framesetter = CTFramesetterCreateWithAttributedString(string)
-            let path = CGPath(rect: CGRect(origin: .zero, size: size), transform: nil)
+            let path = CGPath(
+                rect: CGRect(x: 0, y: 0, width: CGFloat(width), height: boxHeight),
+                transform: nil
+            )
             let frame = CTFramesetterCreateFrame(
                 framesetter,
                 CFRange(location: 0, length: 0),
                 path,
                 nil
             )
-            CTFrameDraw(frame, context)
+            var all = CTFrameGetLines(frame) as? [CTLine] ?? []
+            var origins = [CGPoint](repeating: .zero, count: all.count)
+            CTFrameGetLineOrigins(frame, CFRange(location: 0, length: 0), &origins)
+
+            var isTruncated = false
+            if let maxLines, all.count > maxLines {
+                all = Array(all.prefix(maxLines))
+                origins = Array(origins.prefix(maxLines))
+                isTruncated = true
+            }
+            guard let last = all.last, let lastOrigin = origins.last else {
+                return ([], [], boxHeight, 0, false)
+            }
+
+            var descent: CGFloat = 0
+            var leading: CGFloat = 0
+            CTLineGetTypographicBounds(last, nil, &descent, &leading)
+            let height = boxHeight - (lastOrigin.y - descent - leading)
+            return (all, origins, boxHeight, height, isTruncated)
+        }
+
+        /// The rest of the text from the start of `line`, cut to `width` with "…" at the end.
+        private func truncated(from line: CTLine, width: CGFloat) -> CTLine {
+            let start = CTLineGetStringRange(line).location
+            let rest = CFAttributedStringCreateWithSubstring(
+                nil,
+                string,
+                CFRange(location: start, length: CFAttributedStringGetLength(string) - start)
+            )
+            let restLine = CTLineCreateWithAttributedString(rest!)
+            let ellipsis = CFAttributedStringCreate(nil, "\u{2026}" as CFString, attributes)
+            let token = CTLineCreateWithAttributedString(ellipsis!)
+            return CTLineCreateTruncatedLine(restLine, Double(width), .end, token) ?? line
         }
     }
 #endif

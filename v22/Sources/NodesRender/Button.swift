@@ -20,7 +20,7 @@
         /// Errors: none. Cancellation: not applicable.
         public init(
             _ title: String,
-            style: TextStyle = TextStyle(fontName: "Helvetica-Bold", size: 15, color: .white),
+            style: TextStyle = TextStyle(size: 15, weight: .semibold, color: .white),
             action: @escaping @MainActor () -> Void
         ) {
             label = Text(title, style: style)

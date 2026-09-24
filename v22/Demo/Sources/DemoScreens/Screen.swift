@@ -39,7 +39,7 @@
     /// "Follow" or "Following", by the profile's state.
     @MainActor
     final class FollowBadge: Node {
-        let label = Text("", style: TextStyle(fontName: "Helvetica-Bold", size: 13))
+        let label = Text("", style: TextStyle(size: 13, weight: .semibold))
         let profile: Profile
 
         init(profile: Profile) {
@@ -70,7 +70,7 @@
     @MainActor
     final class ProfileCard: Node {
         let avatar: Avatar
-        let name = Text("", style: TextStyle(fontName: "Helvetica-Bold", size: 20, color: ink))
+        let name = Text("", style: TextStyle(size: 20, weight: .semibold, color: ink))
         let handle = Text("", style: TextStyle(size: 13, color: muted))
         let bio: Text
         let badge: FollowBadge
@@ -128,7 +128,7 @@
     final class Screen: Node {
         let title = Text(
             "Nodes, text, state and a breakpoint",
-            style: TextStyle(fontName: "Helvetica-Bold", size: 26, color: ink)
+            style: TextStyle(size: 26, weight: .bold, color: ink)
         )
         let hint = Text(
             "Resize the window: under 460 points a card turns into a column. "

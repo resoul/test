@@ -96,6 +96,68 @@
         #expect(rows.allSatisfy { $0 < 100 })
         host.detach()
     }
+
+    /// The frame `text` gets in a column `width` wide.
+    @MainActor
+    private func frame(of text: Text, width: Double) -> LayoutRect {
+        let column = Column(text)
+        let host = NodeHost(root: column, size: LayoutSize(width: width, height: 2000))
+        host.layoutIfNeeded()
+        defer { host.detach() }
+        return text.frame
+    }
+
+    private let paragraph =
+        "The engine lays out a whole tree of nodes in one pass, measuring text as it goes."
+
+    @Test @MainActor
+    func boldTextIsWiderThanRegular() {
+        let regular = frame(of: Text("Hello world"), width: 1000)
+        let bold = frame(of: Text("Hello world", style: TextStyle(weight: .bold)), width: 1000)
+
+        #expect(bold.size.width > regular.size.width)
+    }
+
+    @Test @MainActor
+    func lineSpacingSpreadsWrappedLines() {
+        var spaced = TextStyle()
+        spaced.lineSpacing = 10
+        let tight = frame(of: Text("Hello world"), width: 60)
+        let loose = frame(of: Text("Hello world", style: spaced), width: 60)
+
+        #expect(loose.size.height >= tight.size.height + 9)
+    }
+
+    @Test @MainActor
+    func maxLinesKeepsOnlyTheFirstLines() {
+        var one = TextStyle()
+        one.maxLines = 1
+        var two = TextStyle()
+        two.maxLines = 2
+        let all = frame(of: Text(paragraph), width: 120)
+        let first = frame(of: Text(paragraph, style: one), width: 120)
+        let firstTwo = frame(of: Text(paragraph, style: two), width: 120)
+
+        #expect(first.size.height < firstTwo.size.height)
+        #expect(firstTwo.size.height < all.size.height)
+        #expect(abs(firstTwo.size.height - 2 * first.size.height) <= 2)
+    }
+
+    @Test @MainActor
+    func truncatedTextIsDrawn() throws {
+        var one = TextStyle()
+        one.maxLines = 1
+        let column = Column(Text(paragraph, style: one))
+        let host = NodeHost(root: column, size: LayoutSize(width: 120, height: 300))
+        host.layoutIfNeeded()
+        let renderer = LayerRenderer()
+        renderer.render(column, in: CALayer(), scale: 2)
+
+        let layer = try #require(renderer.layer(for: column.text))
+        let image = layer.contents as! CGImage
+        #expect(!inkRows(image).isEmpty)
+        host.detach()
+    }
 #endif
 
 #if canImport(AppKit)
