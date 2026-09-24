@@ -219,8 +219,12 @@
             )
         }
 
-        override func accessibilityPerformPress() -> Bool {
-            host?.activate(node) ?? false
+        // AppKit declares this without actor isolation but calls it on the main thread;
+        // `assumeIsolated` checks that at run time.
+        override nonisolated func accessibilityPerformPress() -> Bool {
+            MainActor.assumeIsolated {
+                host?.activate(node) ?? false
+            }
         }
 
         private static func role(_ traits: AccessibilityTraits) -> NSAccessibility.Role {
