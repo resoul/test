@@ -259,3 +259,25 @@
         #expect(move?.duration == Animation.spring(response: 0.4, dampingRatio: 0.7).duration)
     }
 #endif
+
+#if canImport(QuartzCore)
+    @Test @MainActor
+    func aScaledNodeKeepsItsFrameAndAnimatesItsTransform() throws {
+        let scene = Scene()
+        defer { scene.close() }
+
+        withAnimation {
+            scene.row.dot.appearance.scale = 1.1
+            scene.row.dot.appearance.shadow = Shadow()
+        }
+        scene.render()
+
+        let dot = try #require(scene.layer(scene.row.dot))
+        #expect(dot.bounds == CGRect(x: 0, y: 0, width: 10, height: 10))
+        #expect(dot.position == CGPoint(x: 25, y: 5))
+        #expect(CATransform3DEqualToTransform(dot.transform, CATransform3DMakeScale(1.1, 1.1, 1)))
+        #expect(dot.animation(forKey: "transform") != nil)
+        #expect(dot.shadowOpacity == 0.3)
+        #expect(dot.animation(forKey: "shadowOpacity") != nil)
+    }
+#endif

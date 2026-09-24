@@ -57,6 +57,11 @@
             appearance.opacity = isPressed ? 0.6 : 1
         }
 
+        override func focusChanged(_ isFocused: Bool) {
+            appearance.scale = isFocused ? 1.15 : 1
+            appearance.shadow = isFocused ? Shadow(opacity: 0.25, radius: 10, y: 6) : nil
+        }
+
         override func update() {
             let following = profile.isFollowing.value
             label.text = following ? "Following" : "Follow"

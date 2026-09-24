@@ -86,6 +86,17 @@ public final class NodeHost {
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public var solvesInBackground = false
 
+    /// The focused node, or `nil`. The platform's focus system decides where focus goes; the
+    /// adapter reports it with `focus(_:)`.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public private(set) var focusedNode: NodeID?
+
+    /// The animation of the nodes' `focusChanged`. `nil` shows focus at once.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var focusAnimation: Animation? = .easeOut(duration: 0.15)
+
     /// Layout passes run so far — for tests and diagnostics.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
@@ -329,6 +340,83 @@ public final class NodeHost {
         target.pressChanged(false)
     }
 
+    // MARK: - Focus
+
+    /// The nodes that can take focus, visible, in reading order, framed in the root's
+    /// coordinates.
+    ///
+    /// Ownership: returns values. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    public func focusItems() -> [FocusItem] {
+        var items: [FocusItem] = []
+        collectFocus(root, origin: .zero, into: &items)
+        return items
+    }
+
+    /// Moves the focus to `node` — the adapter calls it when the platform moved it — or
+    /// clears it with `nil`. A node that is not mounted or cannot be focused clears it too.
+    /// The nodes that lose and get the focus are told inside `focusAnimation`.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func focus(_ node: NodeID?) {
+        let target = node.flatMap { mounted[$0] }.flatMap { $0.canBecomeFocused ? $0 : nil }
+        guard target?.id != focusedNode else { return }
+
+        let previous = focusedNode.flatMap { mounted[$0] }
+        focusedNode = target?.id
+        withAnimation(focusAnimation) {
+            previous?.setFocused(false)
+            target?.setFocused(true)
+        }
+    }
+
+    /// The remote's select button went down: the focused node shows itself pressed. Returns
+    /// whether a focused node has `onTap`; when not, the adapter passes the press on.
+    ///
+    /// Ownership: remembers the pressed node until the button goes up. Isolation: MainActor.
+    /// Errors: none. Cancellation: `pointerCancelled()`.
+    @discardableResult
+    public func selectBegan() -> Bool {
+        pointerCancelled()
+        guard let target = focusedNode.flatMap({ mounted[$0] }), target.onTap != nil else {
+            return false
+        }
+
+        pressed = target
+        target.pressChanged(true)
+        return true
+    }
+
+    /// The select button went up: the pressed node is tapped.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func selectEnded() {
+        guard let target = pressed else { return }
+
+        pressed = nil
+        target.pressChanged(false)
+        target.onTap?()
+    }
+
+    private func collectFocus(_ node: Node, origin: LayoutPoint, into items: inout [FocusItem]) {
+        guard !node.isHidden, node.appearance.opacity > 0 else { return }
+
+        let frame = LayoutRect(
+            x: origin.x + node.frame.origin.x,
+            y: origin.y + node.frame.origin.y,
+            width: node.frame.size.width,
+            height: node.frame.size.height
+        )
+        if node.canBecomeFocused {
+            items.append(FocusItem(node: node.id, frame: frame))
+            return
+        }
+
+        for subnode in node.subnodes {
+            collectFocus(subnode, origin: frame.origin, into: &items)
+        }
+    }
+
     // MARK: - Accessibility
 
     /// The accessibility elements of the tree at its last layout, in reading order.
@@ -419,6 +507,7 @@ public final class NodeHost {
     /// Cancellation: this is the cancellation.
     public func detach() {
         pointerCancelled()
+        focus(nil)
         generation &+= 1
         cancelSolving()
         for node in mounted.values {
@@ -459,6 +548,9 @@ public final class NodeHost {
             children[container.id, default: []].append(node)
         }
 
+        if let focusedNode, present[focusedNode] == nil {
+            focus(nil)
+        }
         for (id, node) in mounted where present[id] == nil {
             node.unmount()
         }

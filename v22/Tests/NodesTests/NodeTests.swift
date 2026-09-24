@@ -748,3 +748,92 @@ func aSpringRunsUntilItComesToRest() {
     #expect(bouncy.duration > calm.duration)
     #expect(abs(calm.duration - log(1000) * 0.5 / (2 * Double.pi)) < 1e-9)
 }
+
+// MARK: - Focus
+
+@Test @MainActor
+func nodesWithATapActionAreFocusItems() {
+    let row = ProfileRow()
+    row.avatar.isFocusable = true
+    let host = host(row)
+
+    let items = host.focusItems()
+
+    #expect(items.map(\.node) == [row.avatar.id, row.badge.id])
+    #expect(items[0].frame == row.avatar.frame)
+    host.detach()
+}
+
+@Test @MainActor
+func aNodeCanBeTakenOutOfFocus() {
+    let row = ProfileRow()
+    row.badge.isFocusable = false
+    let host = host(row)
+
+    #expect(host.focusItems().isEmpty)
+    host.detach()
+}
+
+@Test @MainActor
+func focusingANodeTellsItAndAnimatesTheChange() {
+    let row = ProfileRow()
+    let host = host(row)
+    host.didRender()
+
+    host.focus(row.badge.id)
+
+    #expect(host.focusedNode == row.badge.id)
+    #expect(row.badge.isFocused)
+    #expect(row.badge.appearance.scale == 1.1)
+    #expect(host.renderAnimation == host.focusAnimation)
+
+    host.focus(nil)
+
+    #expect(!row.badge.isFocused)
+    #expect(row.badge.appearance.scale == 1)
+    host.detach()
+}
+
+@Test @MainActor
+func aNodeThatCannotBeFocusedIsNotFocused() {
+    let row = ProfileRow()
+    let host = host(row)
+
+    host.focus(row.name.id)
+
+    #expect(host.focusedNode == nil)
+    #expect(!row.name.isFocused)
+    host.detach()
+}
+
+@Test @MainActor
+func theSelectButtonTapsTheFocusedNode() {
+    let row = ProfileRow()
+    let host = host(row)
+
+    #expect(!host.selectBegan())
+    host.focus(row.badge.id)
+    #expect(host.selectBegan())
+    host.selectEnded()
+    #expect(host.selectBegan())
+    host.pointerCancelled()
+    host.selectEnded()
+
+    #expect(row.badge.taps == 1)
+    host.detach()
+}
+
+@Test @MainActor
+func aFocusedNodeThatLeavesTheTreeLosesTheFocus() {
+    let card = Card()
+    card.follow.isFocusable = true
+    let host = host(card)
+    host.focus(card.follow.id)
+
+    card.showsFollow.value = false
+    host.layoutIfNeeded()
+
+    #expect(host.focusedNode == nil)
+    #expect(!card.follow.isFocused)
+    host.detach()
+}

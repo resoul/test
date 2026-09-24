@@ -106,6 +106,20 @@ open class Node: LayoutElement {
     /// MainActor. Errors: none. Cancellation: set to `nil`.
     public var onTap: (@MainActor () -> Void)?
 
+    /// Whether the remote (tvOS) can move focus to the node. `nil`, the default, makes a node
+    /// with `onTap` focusable. A focusable node is focused as a whole: nodes inside it are
+    /// not focused separately.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var isFocusable: Bool? {
+        didSet { if isFocusable != oldValue { host?.setNeedsRender() } }
+    }
+
+    /// Whether the node has the focus of its host.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public private(set) var isFocused = false
+
     /// Whether the node is part of a laid-out tree.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
@@ -156,6 +170,15 @@ open class Node: LayoutElement {
     /// Ownership: stores the value. Isolation: MainActor. Errors: none. Cancellation: none.
     public func applyLayoutVisibility(_ isVisible: Bool) {
         isHidden = !isVisible
+    }
+
+    /// The node got or lost the focus — to show it. Runs inside the host's
+    /// `focusAnimation`. The default makes the node a tenth bigger while focused; an override
+    /// replaces that.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+    open func focusChanged(_ isFocused: Bool) {
+        appearance.scale = isFocused ? 1.1 : 1
     }
 
     /// A press on the node (one with `onTap`) began or ended — to show it pressed. The
@@ -225,6 +248,17 @@ open class Node: LayoutElement {
         guard !isInFirstUpdate else { return }
 
         host?.setNeedsLayout()
+    }
+
+    var canBecomeFocused: Bool {
+        isFocusable ?? (onTap != nil)
+    }
+
+    func setFocused(_ isFocused: Bool) {
+        guard isFocused != self.isFocused else { return }
+
+        self.isFocused = isFocused
+        focusChanged(isFocused)
     }
 
     // MARK: - Mounting

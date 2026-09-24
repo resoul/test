@@ -19,6 +19,12 @@
         fileprivate let renderer = LayerRenderer()
         private var isLayingOut = false
         private var accessibilityCache: [UIAccessibilityElement]?
+        /// The focus items of the tree, one per focusable node, kept while the node is: the
+        /// focus system recognizes the focused item by identity.
+        private var focusItemsByNode: [NodeID: NodeFocusItem] = [:]
+        private var focusOrder: [NodeFocusItem] = []
+        /// A select press that began on a focused node and has not ended yet.
+        private var isSelecting = false
 
         /// A view showing `root`.
         ///
@@ -77,6 +83,7 @@
                 )
                 host.didRender()
                 accessibilityCache = nil
+                updateFocusItems()
                 if UIAccessibility.isVoiceOverRunning {
                     UIAccessibility.post(notification: .layoutChanged, argument: nil)
                 }
@@ -125,7 +132,127 @@
             return LayoutPoint(x: Double(location.x), y: Double(location.y))
         }
 
+        // MARK: - Focus
+
+        /// Whether the platform's focus system moves between the tree's nodes: on tvOS. With a
+        /// keyboard on iPad the tree takes no focus yet.
+        private var usesFocus: Bool {
+            traitCollection.userInterfaceIdiom == .tv
+        }
+
+        /// The tree's focusable nodes as focus items, added to UIKit's own (subviews).
+        ///
+        /// Ownership: the view keeps the items. Isolation: MainActor. Errors: none.
+        /// Cancellation: none.
+        public override func focusItems(in rect: CGRect) -> [any UIFocusItem] {
+            super.focusItems(in: rect) + focusOrder.filter { $0.frame.intersects(rect) }
+        }
+
+        /// The focused node's item, so a focus update keeps the focus where it is.
+        ///
+        /// Ownership: returns an item the view keeps. Isolation: MainActor. Errors: none.
+        /// Cancellation: none.
+        public override var preferredFocusEnvironments: [any UIFocusEnvironment] {
+            if let focused = host.focusedNode, let item = focusItemsByNode[focused] {
+                return [item]
+            }
+            return super.preferredFocusEnvironments
+        }
+
+        /// Tells the host where the platform moved the focus: to one of the tree's nodes, or
+        /// away from them.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func didUpdateFocus(
+            in context: UIFocusUpdateContext,
+            with coordinator: UIFocusAnimationCoordinator
+        ) {
+            super.didUpdateFocus(in: context, with: coordinator)
+            if let next = context.nextFocusedItem as? NodeFocusItem, next.view === self {
+                host.focus(next.node)
+            } else if host.focusedNode != nil {
+                host.focus(nil)
+            }
+        }
+
+        /// Remote presses come to the first responder, and a focus item that is not a view
+        /// is not one: the view takes the role where the tree takes focus.
+        ///
         /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override var canBecomeFirstResponder: Bool { usesFocus }
+
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window != nil, usesFocus {
+                becomeFirstResponder()
+            }
+        }
+
+        /// The remote's select button presses the focused node; other presses go on up the
+        /// responder chain.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+            if presses.contains(where: { $0.type == .select }), host.selectBegan() {
+                isSelecting = true
+            } else {
+                super.pressesBegan(presses, with: event)
+            }
+        }
+
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+            if isSelecting, presses.contains(where: { $0.type == .select }) {
+                isSelecting = false
+                host.selectEnded()
+            } else {
+                super.pressesEnded(presses, with: event)
+            }
+        }
+
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func pressesCancelled(
+            _ presses: Set<UIPress>,
+            with event: UIPressesEvent?
+        ) {
+            if isSelecting {
+                isSelecting = false
+                host.pointerCancelled()
+            } else {
+                super.pressesCancelled(presses, with: event)
+            }
+        }
+
+        /// Brings the focus items in line with the tree after a drawing. Asks the focus system
+        /// to look again when the focused node is gone, and when the first items appear — it
+        /// may have looked for them before the tree was laid out.
+        private func updateFocusItems() {
+            guard usesFocus else { return }
+
+            let hadItems = !focusOrder.isEmpty
+            var kept: [NodeID: NodeFocusItem] = [:]
+            focusOrder = host.focusItems().map { item in
+                let focusItem =
+                    focusItemsByNode[item.node] ?? NodeFocusItem(view: self, node: item.node)
+                focusItem.frame = CGRect(
+                    x: item.frame.origin.x,
+                    y: item.frame.origin.y,
+                    width: item.frame.size.width,
+                    height: item.frame.size.height
+                )
+                kept[item.node] = focusItem
+                return focusItem
+            }
+            let lostFocus = focusItemsByNode.values.contains {
+                $0.isFocused && kept[$0.node] == nil
+            }
+            focusItemsByNode = kept
+            if lostFocus || (!hadItems && !focusOrder.isEmpty) {
+                setNeedsFocusUpdate()
+            }
+        }
+
         /// The tree's accessibility elements (`NodeHost.accessibilityItems()`), rebuilt after
         /// every drawing.
         ///
@@ -181,6 +308,46 @@
             addSubview(view)
             return view
         }
+    }
+
+    /// One focusable node of a tree for the platform's focus system. It keeps the node's
+    /// identity and its frame from the last drawing; it never holds the node itself.
+    @MainActor
+    final class NodeFocusItem: NSObject, UIFocusItem {
+        let node: NodeID
+        private(set) weak var view: NodeView?
+        /// In the view's coordinates.
+        var frame: CGRect = .zero
+
+        init(view: NodeView, node: NodeID) {
+            self.view = view
+            self.node = node
+        }
+
+        var isFocused: Bool {
+            UIFocusSystem.focusSystem(for: self)?.focusedItem === self
+        }
+
+        var canBecomeFocused: Bool { true }
+
+        var preferredFocusEnvironments: [any UIFocusEnvironment] { [] }
+        var parentFocusEnvironment: (any UIFocusEnvironment)? { view }
+        var focusItemContainer: (any UIFocusItemContainer)? { view }
+
+        func setNeedsFocusUpdate() {
+            UIFocusSystem.focusSystem(for: self)?.requestFocusUpdate(to: self)
+        }
+
+        func updateFocusIfNeeded() {
+            UIFocusSystem.focusSystem(for: self)?.updateFocusIfNeeded()
+        }
+
+        func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool { true }
+
+        func didUpdateFocus(
+            in context: UIFocusUpdateContext,
+            with coordinator: UIFocusAnimationCoordinator
+        ) {}
     }
 
     /// One accessibility element of a node tree. It keeps the node's identity and asks the

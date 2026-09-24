@@ -2,7 +2,8 @@
     import LayoutCore
     import Nodes
 
-    /// A tappable label on a filled, rounded box, dimmed while pressed.
+    /// A tappable label on a filled, rounded box, dimmed while pressed, lifted (bigger, with a
+    /// shadow) while focused.
     ///
     ///     let follow = Button("Follow") { profile.isFollowing.value.toggle() }
     ///
@@ -41,6 +42,12 @@
         public override func layoutSpec() -> LayoutSpec? {
             FlexContainer { label }
                 .padding(10)
+        }
+
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func focusChanged(_ isFocused: Bool) {
+            appearance.scale = isFocused ? 1.1 : 1
+            appearance.shadow = isFocused ? Shadow() : nil
         }
 
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.

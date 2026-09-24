@@ -130,12 +130,12 @@
 
             let before: (model: Look, shown: Look)? =
                 isNew ? nil : (Look(layer), Look(presentedBy: layer))
+            // Position and bounds rather than `frame`, which a scale transform would distort.
             let frame = node.frame
-            layer.frame = CGRect(
-                x: frame.origin.x,
-                y: frame.origin.y,
-                width: frame.size.width,
-                height: frame.size.height
+            layer.bounds = CGRect(x: 0, y: 0, width: frame.size.width, height: frame.size.height)
+            layer.position = CGPoint(
+                x: frame.origin.x + frame.size.width / 2,
+                y: frame.origin.y + frame.size.height / 2
             )
             apply(node.appearance, to: layer)
             applyVisibility(of: node, to: layer, isNew: isNew, animated: pass.animation != nil)
@@ -279,12 +279,37 @@
                 after.borderWidth,
                 changed: before.borderWidth != after.borderWidth
             )
+            change(
+                "transform",
+                shown.transform,
+                after.transform,
+                changed: !CATransform3DEqualToTransform(before.transform, after.transform)
+            )
+            change(
+                "shadowOpacity",
+                shown.shadowOpacity,
+                after.shadowOpacity,
+                changed: before.shadowOpacity != after.shadowOpacity
+            )
+            change(
+                "shadowRadius",
+                shown.shadowRadius,
+                after.shadowRadius,
+                changed: before.shadowRadius != after.shadowRadius
+            )
+            change(
+                "shadowOffset",
+                shown.shadowOffset,
+                after.shadowOffset,
+                changed: before.shadowOffset != after.shadowOffset
+            )
             let colors = [
                 (
                     "backgroundColor", before.backgroundColor, shown.backgroundColor,
                     after.backgroundColor
                 ),
                 ("borderColor", before.borderColor, shown.borderColor, after.borderColor),
+                ("shadowColor", before.shadowColor, shown.shadowColor, after.shadowColor),
             ]
             for (key, old, from, to) in colors where !Look.same(old, to) {
                 // No color is the other color, transparent: it fades rather than jumps.
@@ -383,6 +408,19 @@
             layer.borderColor = appearance.borderColor.map(cgColor)
             layer.opacity = Float(appearance.opacity)
             layer.masksToBounds = appearance.clipsContent
+            layer.transform =
+                appearance.scale == 1
+                ? CATransform3DIdentity
+                : CATransform3DMakeScale(CGFloat(appearance.scale), CGFloat(appearance.scale), 1)
+            if let shadow = appearance.shadow {
+                layer.shadowColor = cgColor(shadow.color)
+                layer.shadowOpacity = Float(shadow.opacity)
+                layer.shadowRadius = CGFloat(shadow.radius)
+                layer.shadowOffset = CGSize(width: shadow.x, height: shadow.y)
+            } else {
+                // The color and geometry stay, so a shadow that goes away fades out in place.
+                layer.shadowOpacity = 0
+            }
         }
 
         private func cgColor(_ color: Color) -> CGColor {
@@ -405,6 +443,11 @@
         var borderWidth: CGFloat
         var backgroundColor: CGColor?
         var borderColor: CGColor?
+        var transform: CATransform3D
+        var shadowOpacity: Float
+        var shadowRadius: CGFloat
+        var shadowOffset: CGSize
+        var shadowColor: CGColor?
 
         /// The model values of `layer`: what it shows once its animations are over.
         init(_ layer: CALayer) {
@@ -422,6 +465,11 @@
             borderWidth = layer.borderWidth
             backgroundColor = layer.backgroundColor
             borderColor = layer.borderColor
+            transform = layer.transform
+            shadowOpacity = layer.shadowOpacity
+            shadowRadius = layer.shadowRadius
+            shadowOffset = layer.shadowOffset
+            shadowColor = layer.shadowColor
         }
 
         /// What `layer` shows right now: midway through its animations, if any run; nothing,

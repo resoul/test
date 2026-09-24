@@ -55,6 +55,56 @@ public struct Appearance: Sendable, Hashable {
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public var clipsContent = false
 
+    /// Size of the drawn box relative to its frame, around its center: 1.1 is a tenth
+    /// bigger. Layout, taps and focus see the frame, not the scaled box.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var scale: Double = 1
+
+    /// A shadow under the box; `nil` for none.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var shadow: Shadow?
+
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public init() {}
+}
+
+/// A shadow cast by a node's box.
+///
+/// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+public struct Shadow: Sendable, Hashable {
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var color: Color
+    /// From 0 to 1.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var opacity: Double
+    /// Blur radius in points.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var radius: Double
+    /// Offset in points, rightward.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var x: Double
+    /// Offset in points, downward.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var y: Double
+
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public init(
+        color: Color = .black,
+        opacity: Double = 0.3,
+        radius: Double = 12,
+        x: Double = 0,
+        y: Double = 8
+    ) {
+        self.color = color
+        self.opacity = opacity
+        self.radius = radius
+        self.x = x
+        self.y = y
+    }
 }
