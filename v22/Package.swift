@@ -17,7 +17,9 @@ let package = Package(
         .library(name: "StateFlux", targets: ["StateFlux"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/resoul/flux.git", from: "1.3.0")
+        // The lowest release StateFlux works with: packages that also use Trellis, which pins
+        // Flux 1.2.1, still resolve. On its own the package gets the newest release.
+        .package(url: "https://github.com/resoul/flux.git", from: "1.2.1")
     ],
     targets: [
         .target(name: "LayoutCore"),
