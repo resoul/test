@@ -14,6 +14,7 @@ LayoutAppKit    та же раскладка для NSView (в layout())
 Nodes           дерево нод, снимок, фоновый расчёт, рендер в CALayer. Использует Layout.
 NodesUIKit      встраивание нод в UIKit: view.addSubnode(node)
 NodesAppKit     встраивание нод в AppKit
+Theme           тема: шкала отступов, цвета, типографика; тема по умолчанию (см. 09)
 State           синхронное реактивное состояние на MainActor (открыто — см. 08)
 StateFlux       адаптер Flux → State
 ```
@@ -23,6 +24,7 @@ StateFlux       адаптер Flux → State
 ```
 NodesUIKit ──► Nodes ──► Layout ◄── LayoutUIKit
 NodesAppKit ─┘                  ◄── LayoutAppKit
+Nodes ──► Theme ──► Layout
 StateFlux ──► State        (Nodes от State не зависит)
 ```
 
