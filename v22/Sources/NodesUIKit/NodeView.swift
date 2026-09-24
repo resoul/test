@@ -322,7 +322,6 @@
                 let guide = sectionGuides[section.node] ?? SectionGuide(in: self)
                 guide.place(zoomed(section.frame))
                 guide.items = section.items
-                }
                 kept[section.node] = guide
             }
             for (id, guide) in sectionGuides where kept[id] == nil {
