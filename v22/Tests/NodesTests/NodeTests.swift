@@ -287,3 +287,105 @@ func theHostMeasuresItsTree() {
     #expect(host.fittingSize(width: .maxContent) == LayoutSize(width: 280, height: 100))
     host.detach()
 }
+
+// MARK: - Taps
+
+@MainActor
+private final class Tappable: Node {
+    let icon = Box(20, 20)
+    var taps = 0
+    var presses: [Bool] = []
+
+    override init() {
+        super.init()
+        onTap = { [unowned self] in taps += 1 }
+    }
+
+    override func pressChanged(_ isPressed: Bool) {
+        presses.append(isPressed)
+    }
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer { icon }.padding(10)
+    }
+}
+
+@MainActor
+private final class Toolbar: Node {
+    let first = Tappable()
+    let second = Tappable()
+    let plain = Box(40, 40)
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.row) {
+            first; second; plain
+        }
+        .alignItems(.start)
+    }
+}
+
+@Test @MainActor
+func hitTestingFindsTheDeepestNodeUnderThePoint() {
+    let toolbar = Toolbar()
+    let host = host(toolbar)
+
+    #expect(toolbar.hitTest(LayoutPoint(x: 15, y: 15)) === toolbar.first.icon)
+    #expect(toolbar.hitTest(LayoutPoint(x: 42, y: 2)) === toolbar.second)
+    #expect(toolbar.hitTest(LayoutPoint(x: 90, y: 30)) === toolbar.plain)
+    #expect(toolbar.hitTest(LayoutPoint(x: 300, y: 250)) === toolbar)
+    #expect(toolbar.hitTest(LayoutPoint(x: 500, y: 250)) == nil)
+    #expect(toolbar.hitTest(LayoutPoint(x: -1, y: 0)) == nil)
+    host.detach()
+}
+
+@Test @MainActor
+func aTapGoesToTheNearestNodeWithATapAction() {
+    let toolbar = Toolbar()
+    let host = host(toolbar)
+
+    #expect(host.pointerDown(at: LayoutPoint(x: 15, y: 15)))
+    host.pointerUp(at: LayoutPoint(x: 16, y: 16))
+
+    #expect(toolbar.first.taps == 1)
+    #expect(toolbar.first.presses == [true, false])
+    #expect(toolbar.second.taps == 0)
+    host.detach()
+}
+
+@Test @MainActor
+func releasingOutsideThePressedNodeTapsNothing() {
+    let toolbar = Toolbar()
+    let host = host(toolbar)
+
+    host.pointerDown(at: LayoutPoint(x: 15, y: 15))
+    host.pointerUp(at: LayoutPoint(x: 55, y: 15))
+
+    #expect(toolbar.first.taps == 0)
+    #expect(toolbar.second.taps == 0)
+    #expect(toolbar.first.presses == [true, false])
+    host.detach()
+}
+
+@Test @MainActor
+func aPressWithNothingTappableIsPassedOn() {
+    let toolbar = Toolbar()
+    let host = host(toolbar)
+
+    #expect(!host.pointerDown(at: LayoutPoint(x: 90, y: 30)))
+    host.detach()
+}
+
+@Test @MainActor
+func hiddenAndCancelledNodesAreNotTapped() {
+    let toolbar = Toolbar()
+    let host = host(toolbar)
+    toolbar.second.appearance.opacity = 0
+
+    #expect(toolbar.hitTest(LayoutPoint(x: 45, y: 15)) === toolbar)
+    host.pointerDown(at: LayoutPoint(x: 15, y: 15))
+    host.pointerCancelled()
+    host.pointerUp(at: LayoutPoint(x: 15, y: 15))
+
+    #expect(toolbar.first.taps == 0)
+    host.detach()
+}

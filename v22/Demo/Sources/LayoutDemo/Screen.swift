@@ -45,6 +45,11 @@
             self.profile = profile
             super.init()
             appearance.cornerRadius = 8
+            onTap = { [profile] in profile.isFollowing.value.toggle() }
+        }
+
+        override func pressChanged(_ isPressed: Bool) {
+            appearance.opacity = isPressed ? 0.6 : 1
         }
 
         override func update() {
@@ -125,13 +130,16 @@
             style: TextStyle(fontName: "Helvetica-Bold", size: 26, color: ink)
         )
         let hint = Text(
-            "Resize the window: under 460 points a card turns into a column.",
+            "Resize the window: under 460 points a card turns into a column. "
+                + "Tap a Follow badge.",
             style: TextStyle(size: 14, color: muted)
         )
         let cards: [ProfileCard]
+        let rename: Button
 
-        init(profiles: [Profile]) {
+        init(profiles: [Profile], rename: @escaping @MainActor () -> Void) {
             cards = profiles.map { ProfileCard(profile: $0) }
+            self.rename = Button("Rename Ada", action: rename)
             super.init()
             appearance.background = Color(red: 0.96, green: 0.96, blue: 0.97)
         }
@@ -141,6 +149,7 @@
                 title
                 hint
                 for card in cards { card }
+                rename.alignSelf(.start)
             }
             .gap(16)
             .padding(24)

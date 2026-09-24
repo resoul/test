@@ -24,18 +24,10 @@
 
         func applicationDidFinishLaunching(_ notification: Notification) {
             let content = NSView(frame: NSRect(x: 0, y: 0, width: 640, height: 560))
-
-            let bar = NSStackView(views: [
-                NSButton(title: "Follow Ada", target: self, action: #selector(toggleAda)),
-                NSButton(title: "Follow Grace", target: self, action: #selector(toggleGrace)),
-                NSButton(title: "Rename Ada", target: self, action: #selector(renameAda)),
-            ])
-            bar.frame = NSRect(x: 12, y: 8, width: 616, height: 32)
-            bar.autoresizingMask = [.width, .maxYMargin]
-            content.addSubview(bar)
-
-            let screen = content.addSubnode(Screen(profiles: profiles))
-            screen.frame = NSRect(x: 0, y: 48, width: 640, height: 512)
+            let screen = content.addSubnode(
+                Screen(profiles: profiles) { [weak self] in self?.renameAda() }
+            )
+            screen.frame = content.bounds
             screen.autoresizingMask = [.width, .height]
 
             let window = NSWindow(
@@ -55,15 +47,7 @@
             true
         }
 
-        @objc private func toggleAda() {
-            profiles[0].isFollowing.value.toggle()
-        }
-
-        @objc private func toggleGrace() {
-            profiles[1].isFollowing.value.toggle()
-        }
-
-        @objc private func renameAda() {
+        private func renameAda() {
             nameIndex = (nameIndex + 1) % names.count
             profiles[0].name.value = names[nameIndex]
         }

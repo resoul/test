@@ -80,6 +80,35 @@
             return CGSize(width: fitting.width, height: fitting.height)
         }
 
+        /// Presses on nodes with `onTap`; other touches go on up the responder chain.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+            guard let touch = touches.first, host.pointerDown(at: point(of: touch)) else {
+                super.touchesBegan(touches, with: event)
+                return
+            }
+        }
+
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+            if let touch = touches.first {
+                host.pointerUp(at: point(of: touch))
+            }
+            super.touchesEnded(touches, with: event)
+        }
+
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+            host.pointerCancelled()
+            super.touchesCancelled(touches, with: event)
+        }
+
+        private func point(of touch: UITouch) -> LayoutPoint {
+            let location = touch.location(in: self)
+            return LayoutPoint(x: Double(location.x), y: Double(location.y))
+        }
+
         /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
         public override var intrinsicContentSize: CGSize {
             let fitting = host.fittingSize(width: .maxContent)

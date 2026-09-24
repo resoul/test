@@ -164,3 +164,6 @@
 | `UIView/NSView.addSubnode` | нода в обычном view | [05](05-platform-adapters.md#встраивание-нод) |
 | `LayerDrawing`, `LayerRenderer.draw` | содержимое ноды — bitmap в `contents`, всегда прямо | дефект #129 |
 | `Text`, `TextMeasurer`, `TextLayout` | одна `TextLayout` для замера и рисования | правило Trellis: измерение и рисование — одна строка (дефект #37 Trellis) |
+| `Node.hitTest`, `Node.onTap`, `pressChanged` | нажатия: ближайшая нода с действием, засчитывается над той же нодой | как `UIButton` (touch up inside) |
+| `NodeHost.pointerDown/Up/Cancelled` | платформо-нейтральный путь событий; адаптер только передаёт точку | тестируется на Linux |
+| `Button` (`NodesRender`) | текст на фоне, затемнение при нажатии | демо |

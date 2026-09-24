@@ -74,6 +74,7 @@ public final class NodeHost {
     public private(set) var passes = 0
 
     private var mounted: [NodeID: Node] = [:]
+    private var pressed: Node?
 
     /// A host for `root`, which must not be mounted anywhere else.
     ///
@@ -150,12 +151,60 @@ public final class NodeHost {
         mount(placements)
     }
 
+    // MARK: - Pointer
+
+    /// A finger or the mouse went down at `point`, in the root's coordinates. Returns whether
+    /// a node with `onTap` is under it — the node then shows itself pressed. When it returns
+    /// `false`, the adapter passes the event on.
+    ///
+    /// Ownership: remembers the pressed node until the pointer goes up. Isolation:
+    /// MainActor. Errors: none. Cancellation: `pointerCancelled()`.
+    @discardableResult
+    public func pointerDown(at point: LayoutPoint) -> Bool {
+        pointerCancelled()
+        var node = root.hitTest(point)
+        while let current = node, current.onTap == nil {
+            node = current.supernode
+        }
+        guard let target = node else { return false }
+
+        pressed = target
+        target.pressChanged(true)
+        return true
+    }
+
+    /// The pointer went up at `point`: the pressed node is tapped if the pointer is still
+    /// over it (or over a node inside it).
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func pointerUp(at point: LayoutPoint) {
+        guard let target = pressed else { return }
+
+        pressed = nil
+        target.pressChanged(false)
+        if let hit = root.hitTest(point), hit.isDescendant(of: target) {
+            target.onTap?()
+        }
+    }
+
+    /// The system took the pointer away (a scroll began, the window lost it): nothing is
+    /// tapped.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func pointerCancelled() {
+        guard let target = pressed else { return }
+
+        pressed = nil
+        target.pressChanged(false)
+    }
+
     /// Unmounts the whole tree and lets go of the root's host role. The host does nothing
     /// afterwards.
     ///
     /// Ownership: releases the tree's subscriptions. Isolation: MainActor. Errors: none.
     /// Cancellation: this is the cancellation.
     public func detach() {
+        pointerCancelled()
         for node in mounted.values {
             node.unmount()
         }

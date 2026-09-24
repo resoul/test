@@ -96,6 +96,34 @@
             return CGSize(width: fitting.width, height: fitting.height)
         }
 
+        /// Presses on nodes with `onTap`; other clicks go on up the responder chain.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func mouseDown(with event: NSEvent) {
+            if !host.pointerDown(at: point(of: event)) {
+                super.mouseDown(with: event)
+            }
+        }
+
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func mouseUp(with event: NSEvent) {
+            host.pointerUp(at: point(of: event))
+            super.mouseUp(with: event)
+        }
+
+        /// A click on an inactive window also reaches the nodes.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+            true
+        }
+
+        private func point(of event: NSEvent) -> LayoutPoint {
+            // The view is flipped, so the point is measured from the top left.
+            let location = convert(event.locationInWindow, from: nil)
+            return LayoutPoint(x: Double(location.x), y: Double(location.y))
+        }
+
         /// The layer drawing `node`, for tests and debugging.
         ///
         /// Ownership: returns a layer the view's renderer owns. Isolation: MainActor.

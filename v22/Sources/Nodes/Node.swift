@@ -82,6 +82,12 @@ open class Node: LayoutElement {
         didSet { if appearance != oldValue { host?.setNeedsRender() } }
     }
 
+    /// What a tap on the node, or on a subnode without a tap action of its own, does.
+    ///
+    /// Ownership: the node keeps the closure; it must not keep the node. Isolation:
+    /// MainActor. Errors: none. Cancellation: set to `nil`.
+    public var onTap: (@MainActor () -> Void)?
+
     /// Whether the node is part of a laid-out tree.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
@@ -132,6 +138,49 @@ open class Node: LayoutElement {
     /// Ownership: stores the value. Isolation: MainActor. Errors: none. Cancellation: none.
     public func applyLayoutVisibility(_ isVisible: Bool) {
         isHidden = !isVisible
+    }
+
+    /// A press on the node (one with `onTap`) began or ended — to show it pressed. The
+    /// default does nothing.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+    open func pressChanged(_ isPressed: Bool) {}
+
+    /// The deepest visible node under `point`, given in this node's coordinates, or `nil`.
+    /// Later subnodes are on top. Subnodes outside the node's box are found too, unless the
+    /// node clips its content.
+    ///
+    /// Ownership: returns a node of the tree. Isolation: MainActor. Errors: none.
+    /// Cancellation: not applicable.
+    public func hitTest(_ point: LayoutPoint) -> Node? {
+        guard !isHidden, appearance.opacity > 0 else { return nil }
+
+        let isInside =
+            point.x >= 0 && point.y >= 0 && point.x < frame.size.width
+            && point.y < frame.size.height
+        if appearance.clipsContent && !isInside { return nil }
+
+        for subnode in subnodes.reversed() {
+            let local = LayoutPoint(
+                x: point.x - subnode.frame.origin.x,
+                y: point.y - subnode.frame.origin.y
+            )
+            if let hit = subnode.hitTest(local) { return hit }
+        }
+        return isInside ? self : nil
+    }
+
+    /// Whether `ancestor` is this node or one of its supernodes.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func isDescendant(of ancestor: Node) -> Bool {
+        var node: Node? = self
+        while let current = node {
+            if current === ancestor { return true }
+
+            node = current.supernode
+        }
+        return false
     }
 
     /// The host of the tree this node is mounted in.
