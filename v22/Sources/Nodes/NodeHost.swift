@@ -50,6 +50,19 @@ public final class NodeHost {
     /// MainActor. Errors: none. Cancellation: not applicable.
     public var onNeedsLayout: (@MainActor () -> Void)?
 
+    /// Called once when something visible changed without needing a layout (an
+    /// `appearance`) — the adapter redraws from it.
+    ///
+    /// Ownership: the host keeps the closure; it must not keep the host. Isolation:
+    /// MainActor. Errors: none. Cancellation: not applicable.
+    public var onNeedsRender: (@MainActor () -> Void)?
+
+    /// Whether the tree changed since the adapter last drew it: set by every layout and by
+    /// `setNeedsRender()`, cleared by `didRender()`.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public private(set) var needsRender = true
+
     /// Whether the next `layoutIfNeeded()` lays the tree out.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
@@ -82,6 +95,41 @@ public final class NodeHost {
         onNeedsLayout?()
     }
 
+    /// Marks the tree as needing to be drawn again.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func setNeedsRender() {
+        guard !needsRender else { return }
+
+        needsRender = true
+        onNeedsRender?()
+    }
+
+    /// Tells the host the adapter has drawn the tree as it is now.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func didRender() {
+        needsRender = false
+    }
+
+    /// The size the tree takes under the given space — for `sizeThatFits` and
+    /// `intrinsicContentSize`.
+    ///
+    /// Ownership: returns a value. Isolation: MainActor; synchronous. Errors: none.
+    /// Cancellation: not applicable.
+    public func fittingSize(
+        width: AvailableSpace,
+        height: AvailableSpace = .maxContent
+    ) -> LayoutSize {
+        StateUpdates.flush()
+        return root.asLayoutSpec.measure(
+            width: width,
+            height: height,
+            direction: direction,
+            spacing: spacing
+        )
+    }
+
     /// Runs pending state updates, then lays the tree out if anything asked for it.
     ///
     /// Ownership: sets frames and subnodes of the tree. Isolation: MainActor; synchronous.
@@ -91,6 +139,7 @@ public final class NodeHost {
         guard needsLayout else { return }
 
         needsLayout = false
+        needsRender = true
         passes += 1
         let placements = root.asLayoutSpec.apply(
             in: LayoutRect(origin: .zero, size: size),
@@ -114,6 +163,7 @@ public final class NodeHost {
         root.unmount()
         root.hostOfRoot = nil
         onNeedsLayout = nil
+        onNeedsRender = nil
     }
 
     /// Makes the tree match the placements: each node's subnodes are the nodes placed by its

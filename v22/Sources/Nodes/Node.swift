@@ -75,6 +75,13 @@ open class Node: LayoutElement {
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public private(set) var isHidden = false
 
+    /// How the node's box looks. A change redraws the tree without a layout.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var appearance = Appearance() {
+        didSet { if appearance != oldValue { host?.setNeedsRender() } }
+    }
+
     /// Whether the node is part of a laid-out tree.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.

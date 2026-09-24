@@ -6,7 +6,8 @@ import PackageDescription
 // on Apple platforms. LayoutUIKit and LayoutAppKit adapt it to views; on a platform without
 // that framework they build as empty modules. StateCore is synchronous main-actor state with
 // dependency tracking; StateFlux connects it to Flux streams, the package's one dependency.
-// Nodes is the tree of nodes laid out by LayoutCore and driven by StateCore.
+// Nodes is the tree of nodes laid out by LayoutCore and driven by StateCore; NodesRender draws
+// it into CALayers (Apple platforms), NodesUIKit and NodesAppKit put it into views.
 let package = Package(
     name: "Layout",
     platforms: [.macOS(.v14), .iOS(.v16), .tvOS(.v16)],
@@ -17,6 +18,9 @@ let package = Package(
         .library(name: "StateCore", targets: ["StateCore"]),
         .library(name: "StateFlux", targets: ["StateFlux"]),
         .library(name: "Nodes", targets: ["Nodes"]),
+        .library(name: "NodesRender", targets: ["NodesRender"]),
+        .library(name: "NodesUIKit", targets: ["NodesUIKit"]),
+        .library(name: "NodesAppKit", targets: ["NodesAppKit"]),
     ],
     dependencies: [
         // The lowest release StateFlux works with: packages that also use Trellis, which pins
@@ -29,6 +33,9 @@ let package = Package(
         .target(name: "LayoutAppKit", dependencies: ["LayoutCore"]),
         .target(name: "StateCore"),
         .target(name: "Nodes", dependencies: ["LayoutCore", "StateCore"]),
+        .target(name: "NodesRender", dependencies: ["Nodes", "LayoutCore"]),
+        .target(name: "NodesUIKit", dependencies: ["Nodes", "NodesRender", "LayoutCore"]),
+        .target(name: "NodesAppKit", dependencies: ["Nodes", "NodesRender", "LayoutCore"]),
         .target(
             name: "StateFlux",
             dependencies: ["StateCore", .product(name: "Flux", package: "flux")]
@@ -36,6 +43,10 @@ let package = Package(
         .testTarget(name: "LayoutCoreTests", dependencies: ["LayoutCore"]),
         .testTarget(name: "StateCoreTests", dependencies: ["StateCore"]),
         .testTarget(name: "NodesTests", dependencies: ["Nodes", "LayoutCore", "StateCore"]),
+        .testTarget(
+            name: "NodesRenderTests",
+            dependencies: ["Nodes", "NodesRender", "NodesUIKit", "NodesAppKit", "LayoutCore"]
+        ),
         .testTarget(name: "StateFluxTests", dependencies: ["StateFlux", "StateCore"]),
         .testTarget(
             name: "LayoutAdapterTests",

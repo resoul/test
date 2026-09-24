@@ -258,3 +258,32 @@ func detachingUnmountsTheTree() {
     #expect(!screen.card.isMounted)
     #expect(screen.card.title.host == nil)
 }
+
+@Test @MainActor
+func anAppearanceChangeAsksForDrawingNotForLayout() {
+    let screen = Screen()
+    let host = host(screen)
+    host.didRender()
+    var renders = 0
+    var layouts = 0
+    host.onNeedsRender = { renders += 1 }
+    host.onNeedsLayout = { layouts += 1 }
+
+    screen.card.appearance.background = .white
+    screen.card.appearance.cornerRadius = 12
+
+    #expect(renders == 1)
+    #expect(layouts == 0)
+    #expect(host.needsRender)
+    host.detach()
+}
+
+@Test @MainActor
+func theHostMeasuresItsTree() {
+    let screen = Screen()
+    let host = NodeHost(root: screen, size: LayoutSize(width: 0, height: 0))
+
+    #expect(host.fittingSize(width: .definite(400)) == LayoutSize(width: 280, height: 100))
+    #expect(host.fittingSize(width: .maxContent) == LayoutSize(width: 280, height: 100))
+    host.detach()
+}

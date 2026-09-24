@@ -152,3 +152,13 @@
 | `Node.prepare`, `isInFirstUpdate` | `update()` до первого замера; его изменения уже в этом проходе | один проход при первом показе |
 | `NodeHost.mount` | `subnodes` — ноды из размещений; не упомянутые — сняты, но живы; нода в обеих ветках `Breakpoint` — там, где раскладка её показала | [03](03-layout-api.md#управление-subnodes) |
 | `NodeHost.layoutIfNeeded` | сначала `StateUpdates.flush()`, потом проход | порядок «update → раскладка» |
+| `Appearance`, `NodeHost.setNeedsRender` | вид ноды — отдельно от раскладки: смена не запускает проход | Texture: свойства ноды, не раскладки |
+
+## `Sources/NodesRender`, `Sources/NodesUIKit`, `Sources/NodesAppKit`
+
+| Код | Что | Основание |
+|---|---|---|
+| `LayerRenderer` | один платформо-нейтральный рендерер, только QuartzCore | правило Trellis «рендерер один» (AGENTS.md корня) |
+| `NodeNSView` — layer-hosting, `isGeometryFlipped` | AppKit не меняет геометрию своего слоя; начало координат — сверху слева | [05](05-platform-adapters.md#что-адаптер-обязан-закрыть) |
+| `NodeView.layoutSubviews`, `NodeNSView.layout` | размер/масштаб/направление → `NodeHost`, проход, отрисовка | [05](05-platform-adapters.md#встраивание-нод) |
+| `UIView/NSView.addSubnode` | нода в обычном view | [05](05-platform-adapters.md#встраивание-нод) |

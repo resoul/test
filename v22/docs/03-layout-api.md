@@ -105,8 +105,14 @@ view.addSubnode(ProfileCard(user: user))
 `layoutSpec()` в раскладке родителя встраивается в неё как flex-контейнер
 (`LayoutElement.embeddedLayout`), кадры детей — в координатах своей ноды. Что прочитано в
 `layoutSpec()` — зависимость раскладки; что в `update()` — зависимость `update()`, который
-идёт до первого замера ноды. 9 тестов на Linux. Не сделано: отрисовка в `CALayer`,
-`addSubnode` для UIKit/AppKit, расчёт в фоне, `NodeCache`.
+идёт до первого замера ноды. 9 тестов на Linux.
+
+**Второй срез (2026-09-24):** `Appearance` (фон, скругление, рамка, прозрачность, обрезка —
+смена перерисовывает без раскладки), `NodesRender.LayerRenderer` (одно дерево `CALayer` на
+дерево нод, только QuartzCore, общий для UIKit и AppKit), `NodeView`/`NodeNSView` и
+`view.addSubnode(node)`. `NodeNSView` — layer-hosting с `isGeometryFlipped`, чтобы
+AppKit не трогал геометрию слоя. Apple-часть на Linux не компилируется — проверяется на
+Mac (`NodesRenderTests`). Не сделано: текст, расчёт в фоне, `NodeCache`.
 
 - Управление включено всегда (аналог `automaticallyManagesSubnodes` без флага).
 - Нода из свойства, упомянутая в результате `layoutSpec()`, смонтирована как subnode.
