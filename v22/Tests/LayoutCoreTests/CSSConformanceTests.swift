@@ -319,6 +319,9 @@ private struct WordsMeasurer: ContentMeasurer {
 
     func maxContentWidth() -> Double { words.reduce(0, +) }
 
+    /// Words sit on the baseline, so the first baseline is the bottom of the first line.
+    func firstBaseline(forWidth width: Double) -> Double? { words.isEmpty ? nil : lineHeight }
+
     func height(forWidth width: Double) -> Double {
         guard !words.isEmpty else { return 0 }
 
@@ -450,6 +453,7 @@ func cssFlexboxConformance() throws {
         "fixtures/random.json",
         "fixtures/text.json",
         "fixtures/random-text.json",
+        "fixtures/random-baseline.json",
     ]
     let expectationsURL = conformanceRoot.appendingPathComponent("expectations/engine.json")
     let reportURL = conformanceRoot.appendingPathComponent("reports/engine.md")

@@ -22,6 +22,18 @@ public protocol ContentMeasurer: Sendable {
     ///
     /// Ownership: returns a value. Isolation: solving task. Errors: none. Cancellation: none.
     func height(forWidth width: Double) -> Double
+
+    /// The distance from the top of the content to the baseline of its first line, laid out
+    /// in `width`, or `nil` when the content has no baseline — the bottom of the content is
+    /// used then. The default is `nil`.
+    ///
+    /// Ownership: returns a value. Isolation: solving task. Errors: none. Cancellation: none.
+    func firstBaseline(forWidth width: Double) -> Double?
+}
+
+extension ContentMeasurer {
+    /// Ownership: returns a value. Isolation: solving task. Errors: none. Cancellation: none.
+    public func firstBaseline(forWidth width: Double) -> Double? { nil }
 }
 
 /// What a leaf shows, excluding its padding.
@@ -39,6 +51,17 @@ public enum LeafContent: Sendable {
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public static func size(width: Double, height: Double) -> LeafContent {
         .size(LayoutSize(width: width, height: height))
+    }
+
+    /// The first baseline of the content laid out in `width`: the measurer's, or the bottom
+    /// of the content when it has none.
+    func baseline(width: Double) -> Double {
+        switch self {
+        case let .size(size):
+            return size.height
+        case let .measured(measurer):
+            return measurer.firstBaseline(forWidth: width) ?? measurer.height(forWidth: width)
+        }
     }
 
     /// The content size under `width`: a known content width, or a constraint — min-content,

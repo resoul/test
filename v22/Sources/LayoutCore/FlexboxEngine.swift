@@ -124,6 +124,12 @@ struct FlatNode {
     var children: [Int]
 }
 
+struct BaselineKey: Hashable {
+    let node: Int
+    let size: OptionalSize
+    let parent: OptionalSize
+}
+
 struct MeasureKey: Hashable {
     let node: Int
     let known: OptionalSize
@@ -141,6 +147,11 @@ struct Solver {
     var nodes: [FlatNode] = []
     var frames: [LayoutRect?] = []
     var cache: [MeasureKey: LayoutSize] = [:]
+    var baselines: [BaselineKey: Double?] = [:]
+    /// Set just before a container is laid out only to learn its baseline; the container
+    /// clears it on entry and reports the baseline in `lastBaseline`.
+    var wantsBaseline = false
+    var lastBaseline: Double?
     let context: LayoutContext
 
     init(root: LayoutNode, context: LayoutContext) {
@@ -169,6 +180,46 @@ struct Solver {
         }
         nodes[index].children = children
         return index
+    }
+
+    /// The first baseline of node `index` laid out at `size`, from its top edge, or `nil`
+    /// when it has none (the caller then uses its bottom edge). A leaf's baseline is its
+    /// content's; a container's is its first item's (CSS Flexbox §8.5).
+    mutating func baseline(_ index: Int, size: LayoutSize, parent: OptionalSize) throws -> Double? {
+        let key = BaselineKey(
+            node: index,
+            size: OptionalSize(width: size.width, height: size.height),
+            parent: parent
+        )
+        if let cached = baselines[key] { return cached }
+
+        let result: Double?
+        if nodes[index].children.isEmpty {
+            let own = ownSize(
+                index,
+                known: OptionalSize(width: size.width, height: size.height),
+                parent: parent
+            )
+            result = nodes[index].content.map {
+                own.padding.top + $0.baseline(width: max(0, size.width - own.paddingWidth))
+            }
+        } else {
+            wantsBaseline = true
+            _ = try flexLayout(
+                index,
+                known: OptionalSize(width: size.width, height: size.height),
+                parent: parent,
+                available: AvailableSize(
+                    width: .definite(size.width),
+                    height: .definite(size.height)
+                ),
+                mode: .size
+            )
+            result = lastBaseline
+            lastBaseline = nil
+        }
+        baselines[key] = result
+        return result
     }
 
     /// The style of node `index` for the width its parent gives it (`parentWidth`, the base

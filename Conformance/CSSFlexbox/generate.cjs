@@ -289,8 +289,12 @@ const cssName = (k) => k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 function css(style) {
   const out = [style.text ? 'display:block' : 'display:flex', 'box-sizing:border-box', 'position:relative'];
   if (style.text) out.push('font-size:0', 'line-height:0');
+  // A leaf is content, not a container: properties of a flex container mean nothing to it,
+  // and in the browser they would move its content inside it (and with it the baseline).
+  const containerOnly = ['flexDirection', 'flexWrap', 'justifyContent', 'alignItems', 'alignContent', 'rowGap', 'columnGap'];
   for (const [k, v] of Object.entries(style)) {
     if (k === 'content' || k === 'text') continue;
+    if ((style.text || style.content) && containerOnly.includes(k)) continue;
     if (k === 'padding' || k === 'margin') out.push(`${k}:${edges(v)}`);
     else if (['flexGrow', 'flexShrink', 'order', 'aspectRatio'].includes(k)) out.push(`${cssName(k)}:${v}`);
     else out.push(`${cssName(k)}:${px(v)}`);
@@ -311,7 +315,7 @@ function html(node) {
   if (node.style.text) {
     const [lineHeight, ...words] = node.style.text;
     content = words
-      .map((w) => `<span data-content style="display:inline-block;vertical-align:top;width:${w}px;height:${lineHeight}px"></span>`)
+      .map((w) => `<span data-content style="display:inline-block;width:${w}px;height:${lineHeight}px"></span>`)
       .join('');
   }
   return `<div id="${node.id}" style="${css(node.style)}">${content}${node.children.map(html).join('')}</div>`;
@@ -356,6 +360,26 @@ const textCases = [];
       n({ flexDirection: 'column', flexGrow: 1 }, n({ text: t(10, 40, 40, 40, 40) })),
       n({ flexDirection: 'column', width: 60 }, n({ text: t(10, 30, 30, 30) }))));
   });
+  group('baseline', () => {
+    add('row-text', n({ width: 300, height: 100, alignItems: 'baseline' },
+      n({ text: t(10, 40) }), n({ text: t(24, 30, 30) }), n({ padding: [6, 0, 0, 0], text: t(16, 50) })));
+    add('image-and-empty-box', n({ width: 300, height: 100, alignItems: 'baseline' },
+      n({ text: t(20, 40) }), n({ padding: [5, 0, 7, 0], content: [30, 15] }), n({ width: 20, height: 30 })));
+    add('wrapped-text-uses-first-line', n({ width: 300, height: 100, alignItems: 'baseline' },
+      n({ width: 60, text: t(10, 40, 40, 40) }), n({ text: t(30, 30) })));
+    add('nested-container', n({ width: 300, height: 120, alignItems: 'baseline' },
+      n({ text: t(12, 40) }),
+      n({ flexDirection: 'column', padding: [8, 0, 0, 0] }, n({ text: t(20, 50) }), n({ text: t(10, 50) })),
+      n({ padding: [4, 0, 0, 0] }, n({ text: t(16, 30) }))));
+    add('align-self-in-center', n({ width: 300, height: 100, alignItems: 'center' },
+      n({ alignSelf: 'baseline', text: t(10, 40) }), n({ alignSelf: 'baseline', text: t(30, 40) }), n({ text: t(20, 20) })));
+    add('wrap-per-line', n({ width: 120, height: 200, flexWrap: 'wrap', alignItems: 'baseline', alignContent: 'flex-start' },
+      n({ text: t(10, 50) }), n({ text: t(20, 50) }), n({ text: t(30, 50) }), n({ text: t(12, 50) })));
+    add('column-falls-back-to-start', n({ width: 200, height: 200, flexDirection: 'column', alignItems: 'baseline' },
+      n({ text: t(10, 40) }), n({ text: t(20, 60) })));
+    add('margins', n({ width: 300, height: 100, alignItems: 'baseline' },
+      n({ margin: [10, 0, 0, 0], text: t(10, 40) }), n({ text: t(20, 40) })));
+  });
   textCases.push(...cases.splice(saved));
 }
 
@@ -378,7 +402,7 @@ function mulberry32(seed) {
   };
 }
 
-function randomTree(rng, withText = false) {
+function randomTree(rng, withText = false, withBaseline = false) {
   const pick = (values) => values[Math.floor(rng() * values.length)];
   const chance = (p) => rng() < p;
 
@@ -392,7 +416,7 @@ function randomTree(rng, withText = false) {
     if (chance(0.5)) s.flexDirection = pick(directions);
     if (chance(0.3)) s.flexWrap = pick(['wrap', 'wrap-reverse']);
     if (chance(0.4)) s.justifyContent = pick(justifies);
-    if (chance(0.4)) s.alignItems = pick(['stretch', 'flex-start', 'flex-end', 'center']);
+    if (chance(0.4)) s.alignItems = pick(withBaseline ? ['stretch', 'baseline', 'flex-end', 'center'] : ['stretch', 'flex-start', 'flex-end', 'center']);
     if (chance(0.25)) s.alignContent = pick(alignContents);
     if (chance(0.3)) s.rowGap = pick([0, 4, 10]);
     if (chance(0.3)) s.columnGap = pick([0, 4, 10]);
@@ -409,7 +433,7 @@ function randomTree(rng, withText = false) {
       if (chance(0.15)) s.maxWidth = pick([40, 100, '50%']);
       if (chance(0.1)) s.minHeight = pick([0, 30]);
       if (chance(0.1)) s.maxHeight = pick([20, 60]);
-      if (chance(0.25)) s.alignSelf = pick(['auto', 'stretch', 'flex-start', 'flex-end', 'center']);
+      if (chance(0.25)) s.alignSelf = pick(withBaseline ? ['auto', 'stretch', 'baseline', 'flex-end', 'center'] : ['auto', 'stretch', 'flex-start', 'flex-end', 'center']);
       if (chance(0.25)) {
         s.margin = chance(0.3)
           ? pick([5, 'auto'])
@@ -450,6 +474,17 @@ const randomTextCases = [];
   for (let i = 0; i < randomTextCount; i++) {
     const name = `random-text/${String(i).padStart(4, '0')}`;
     randomTextCases.push({ name, group: 'random-text', root: randomTree(rng, true) });
+  }
+}
+
+const randomBaselineSeed = 11;
+const randomBaselineCount = 150;
+const randomBaselineCases = [];
+{
+  const rng = mulberry32(randomBaselineSeed);
+  for (let i = 0; i < randomBaselineCount; i++) {
+    const name = `random-baseline/${String(i).padStart(4, '0')}`;
+    randomBaselineCases.push({ name, group: 'random-baseline', root: randomTree(rng, true, true) });
   }
 }
 
@@ -504,6 +539,7 @@ async function render(browser, list, file, extra) {
   await render(browser, randomCases, 'random.json', { seed: randomSeed });
   await render(browser, textCases, 'text.json', {});
   await render(browser, randomTextCases, 'random-text.json', { seed: randomTextSeed });
+  await render(browser, randomBaselineCases, 'random-baseline.json', { seed: randomBaselineSeed });
   await browser.close();
 })().catch((error) => {
   console.error(error);

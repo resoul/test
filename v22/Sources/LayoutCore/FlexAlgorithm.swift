@@ -52,6 +52,8 @@ struct FlexItem {
     var cross = 0.0
     var mainPosition = 0.0
     var crossPosition = 0.0
+    /// First baseline from the top of the border box, for an item aligned by baseline.
+    var baseline: Double?
 
     var marginsMain: Double { marginMainStart + marginMainEnd }
     var marginsCross: Double { marginCrossStart + marginCrossEnd }
@@ -64,6 +66,9 @@ struct FlexLine {
     var items: [Int]
     var crossSize = 0.0
     var crossPosition = 0.0
+    /// Distance from the top of the line to the shared baseline of its baseline-aligned
+    /// items, when it has any.
+    var ascent: Double?
 }
 
 /// Everything a container derives from its own style before looking at its children.
@@ -128,6 +133,8 @@ extension Solver {
         definite: DefiniteAxes = .both
     ) throws -> LayoutSize {
         try context.checkpoint()
+        let reportsBaseline = wantsBaseline
+        wantsBaseline = false
         let node = nodes[index]
         let style = self.style(index, parentWidth: parent.width)
         let own = ownSize(
@@ -152,6 +159,7 @@ extension Solver {
                 definite: definite
             )
             let width = clamp(content.width, own.minWidth, own.maxWidth, own.paddingWidth)
+            wantsBaseline = reportsBaseline
             return try flexLayout(
                 index,
                 known: OptionalSize(width: width, height: known.height),
@@ -299,16 +307,46 @@ extension Solver {
             )
         }
 
+        // §8.3, §9.4 step 8: items aligned by baseline share the baseline of their line. A
+        // column's items have no baseline across the column, so it is synthesized at their
+        // cross-start edge: their start edges line up past the largest start margin. In
+        // `wrap-reverse` the cross axis runs upwards, so the baseline is kept as a distance
+        // from the item's bottom: the group sits at the bottom of its line.
+        for itemIndex in items.indices
+        where items[itemIndex].align == .baseline && !items[itemIndex].hasAutoCrossMargin {
+            let item = items[itemIndex]
+            guard isRow else {
+                items[itemIndex].baseline = 0
+                continue
+            }
+
+            let size = LayoutSize(width: item.target, height: item.hypotheticalCross)
+            let fromTop = try baseline(item.node, size: size, parent: itemParent) ?? size.height
+            items[itemIndex].baseline = axes.reversedCross ? size.height - fromTop : fromTop
+        }
+
         // §9.4 step 8: cross size of each line.
         let singleLine = wrap == .noWrap
         for lineIndex in lines.indices {
+            var outer = 0.0
+            var ascent: Double?
+            var descent = 0.0
+            for itemIndex in lines[lineIndex].items {
+                let item = items[itemIndex]
+                if let baseline = item.baseline {
+                    let above = baseline + item.marginCrossStart
+                    ascent = max(ascent ?? 0, above)
+                    descent = max(descent, item.hypotheticalCross + item.marginsCross - above)
+                } else {
+                    outer = max(outer, item.hypotheticalCross + item.marginsCross)
+                }
+            }
+            lines[lineIndex].ascent = ascent
+
             if singleLine, let definite = innerCrossDefinite {
                 lines[lineIndex].crossSize = definite
             } else {
-                lines[lineIndex].crossSize =
-                    lines[lineIndex].items.map {
-                        items[$0].hypotheticalCross + items[$0].marginsCross
-                    }.max() ?? 0
+                lines[lineIndex].crossSize = max(outer, (ascent ?? 0) + descent)
                 if singleLine {
                     lines[lineIndex].crossSize = max(
                         0,
@@ -391,7 +429,11 @@ extension Solver {
             for itemIndex in lines[lineIndex].items {
                 items[itemIndex].crossPosition =
                     lines[lineIndex].crossPosition
-                    + crossOffset(items[itemIndex], lineCross: lines[lineIndex].crossSize)
+                    + crossOffset(
+                        items[itemIndex],
+                        lineCross: lines[lineIndex].crossSize,
+                        ascent: lines[lineIndex].ascent
+                    )
             }
         }
 
@@ -400,6 +442,18 @@ extension Solver {
             height: isRow ? innerCross + axes.paddingCross : innerMain + axes.paddingMain
         )
         let result = LayoutSize(width: own.width ?? size.width, height: own.height ?? size.height)
+
+        if reportsBaseline {
+            lastBaseline = try containerBaseline(
+                lines: lines,
+                items: items,
+                axes: axes,
+                own: own,
+                innerMain: innerMain,
+                innerCross: innerCross,
+                itemParent: itemParent
+            )
+        }
 
         guard case let .layout(origin) = mode else { return result }
 
@@ -449,6 +503,46 @@ extension Solver {
             innerCross: innerCross
         )
         return result
+    }
+
+    /// §8.5: a container's first baseline is that of its first line's first baseline-aligned
+    /// item (a row), or else of its first item, offset by where that item sits; a container
+    /// without items has none.
+    private mutating func containerBaseline(
+        lines: [FlexLine],
+        items: [FlexItem],
+        axes: ContainerAxes,
+        own: OwnSize,
+        innerMain: Double,
+        innerCross: Double,
+        itemParent: OptionalSize
+    ) throws -> Double? {
+        // The line physically at the top: with `wrap-reverse` lines stack from the bottom,
+        // so it is the last one.
+        let top = axes.isRow && axes.reversedCross ? lines.last : lines.first
+        guard let line = top, let first = line.items.first else { return nil }
+
+        let chosen = axes.isRow ? line.items.first { items[$0].baseline != nil } ?? first : first
+        let item = items[chosen]
+        let size = LayoutSize(
+            width: axes.isRow ? item.target : item.cross,
+            height: axes.isRow ? item.cross : item.target
+        )
+        // `baseline` is the item's text baseline only in a row that is not `wrap-reverse`;
+        // otherwise it is the alignment edge the line uses.
+        let aligned = axes.isRow && !axes.reversedCross ? item.baseline : nil
+        let itemBaseline =
+            try aligned ?? baseline(item.node, size: size, parent: itemParent) ?? size.height
+        let offset: Double
+        if axes.isRow {
+            offset =
+                axes.reversedCross
+                ? innerCross - item.crossPosition - item.cross : item.crossPosition
+        } else {
+            offset =
+                axes.reversedMain ? innerMain - item.mainPosition - item.target : item.mainPosition
+        }
+        return own.padding.top + offset + itemBaseline
     }
 
     // MARK: - §9.2 Line length determination
@@ -858,7 +952,11 @@ extension Solver {
 
     // MARK: - §9.6 Cross-axis alignment
 
-    private func crossOffset(_ item: FlexItem, lineCross: Double) -> Double {
+    private func crossOffset(_ item: FlexItem, lineCross: Double, ascent: Double?) -> Double {
+        if let baseline = item.baseline, let ascent {
+            return ascent - baseline
+        }
+
         let free = lineCross - item.cross - item.marginsCross
         if item.hasAutoCrossMargin {
             guard free > epsilon else { return item.marginCrossStart }
