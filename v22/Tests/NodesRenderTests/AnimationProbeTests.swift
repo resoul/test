@@ -1,7 +1,7 @@
 #if canImport(QuartzCore)
     import LayoutCore
     import Nodes
-    import NodesRender
+    @testable import NodesRender
     import QuartzCore
     import Testing
 
@@ -106,9 +106,6 @@
 #endif
 
 #if canImport(QuartzCore)
-    @testable import NodesRender
-    import StateCore
-
     @MainActor
     private final class ProbeDot: Node {
         var width: Double {
