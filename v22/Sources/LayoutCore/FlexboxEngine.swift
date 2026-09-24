@@ -28,7 +28,8 @@ public enum FlexboxEngine {
         return LayoutResult(
             frames: solver.nodes.indices.compactMap { index in
                 solver.frames[index].map { (solver.nodes[index].id, $0) }
-            }
+            },
+            statistics: solver.statistics
         )
     }
 
@@ -122,6 +123,19 @@ struct FlatNode {
     let content: LeafContent?
     let direction: LayoutDirection
     var children: [Int]
+    /// The node or one of its width variants has an aspect ratio.
+    let hasAspectRatio: Bool
+    /// `order` of the base style, or `nil` when the base style takes the node out of flow.
+    let flowOrder: Int?
+
+    /// `order` of an in-flow node with `style`; `nil` for an absolute or `display: none` one.
+    static func flowOrder(_ style: FlexStyle) -> Int? {
+        style.position != .absolute && style.display != .none ? style.order : nil
+    }
+    /// The containing block changes this node's own result: it has a percentage size or width
+    /// variants. Otherwise the containing block is left out of its cache keys, so the same
+    /// request from different ancestors' passes is computed once.
+    let dependsOnParent: Bool
 }
 
 struct BaselineKey: Hashable {
@@ -137,6 +151,71 @@ struct MeasureKey: Hashable {
     let available: AvailableSize
     let contentOnly: Axis?
     let definite: DefiniteAxes
+
+    /// The key is hashed on every size request, so its fields are mixed into one word and the
+    /// hasher is fed once, instead of once per field and optional tag. Equality stays exact.
+    func hash(into hasher: inout Hasher) {
+        var mix = HashMix(UInt64(node))
+        mix.add(known.width)
+        mix.add(known.height)
+        mix.add(parent.width)
+        mix.add(parent.height)
+        mix.add(available.width)
+        mix.add(available.height)
+        let axis: UInt64 =
+            switch contentOnly {
+            case nil: 0
+            case .horizontal: 1
+            case .vertical: 2
+            }
+        mix.add(axis << 2 | (definite.width ? 2 : 0) | (definite.height ? 1 : 0))
+        hasher.combine(mix.value)
+    }
+}
+
+/// A fast mix of 64-bit words for hashing keys.
+struct HashMix {
+    private(set) var value: UInt64
+
+    init(_ seed: UInt64) {
+        value = seed
+    }
+
+    mutating func add(_ word: UInt64) {
+        value = (value ^ word) &* 0x9E37_79B9_7F4A_7C15
+        value ^= value >> 29
+    }
+
+    /// Equal doubles give equal words: `-0` mixes as `0`. `nil` has its own word.
+    mutating func add(_ number: Double?) {
+        guard let number else {
+            add(0x7FF4_0000_0000_0001)
+            return
+        }
+
+        add(number == 0 ? 0 : number.bitPattern)
+    }
+
+    mutating func add(_ space: AvailableSpace) {
+        switch space {
+        case let .definite(value): add(value)
+        case .minContent: add(0x7FF4_0000_0000_0002)
+        case .maxContent: add(0x7FF4_0000_0000_0003)
+        }
+    }
+}
+
+/// How much work one pass did: the measure of the engine's efficiency that does not depend on
+/// the machine.
+struct SolveStatistics: Equatable {
+    /// Size and layout requests for any node.
+    var requests = 0
+    /// Size requests answered from the cache.
+    var cacheHits = 0
+    /// Leaf sizes computed.
+    var leafSizes = 0
+    /// Flex algorithm runs of a container, for its size or its layout.
+    var containerRuns = 0
 }
 
 /// One pass over one tree. Nodes are flattened in pre-order so that every node has a stable
@@ -152,12 +231,14 @@ struct Solver {
     /// clears it on entry and reports the baseline in `lastBaseline`.
     var wantsBaseline = false
     var lastBaseline: Double?
+    var statistics = SolveStatistics()
     let context: LayoutContext
 
     init(root: LayoutNode, context: LayoutContext) {
         self.context = context
         flatten(root)
         frames = Array(repeating: nil, count: nodes.count)
+        cache.reserveCapacity(nodes.count * 2)
     }
 
     @discardableResult
@@ -170,7 +251,11 @@ struct Solver {
                 variants: node.variants,
                 content: node.content,
                 direction: node.direction,
-                children: []
+                children: [],
+                hasAspectRatio: node.style.aspectRatio != nil
+                    || node.variants.contains { $0.style.aspectRatio != nil },
+                flowOrder: FlatNode.flowOrder(node.style),
+                dependsOnParent: !node.variants.isEmpty || node.style.hasPercentageSize
             )
         )
         var children: [Int] = []
@@ -189,7 +274,7 @@ struct Solver {
         let key = BaselineKey(
             node: index,
             size: OptionalSize(width: size.width, height: size.height),
-            parent: parent
+            parent: nodes[index].dependsOnParent ? parent : OptionalSize()
         )
         if let cached = baselines[key] { return cached }
 
@@ -225,12 +310,14 @@ struct Solver {
     /// The style of node `index` for the width its parent gives it (`parentWidth`, the base
     /// of its percentages): its last variant whose minimum width that reaches, else its base
     /// style. Without a definite width the base style applies.
+    @inline(never)
     func style(_ index: Int, parentWidth: Double?) -> FlexStyle {
-        let node = nodes[index]
-        guard let width = parentWidth, !node.variants.isEmpty else { return node.style }
+        guard let width = parentWidth, !nodes[index].variants.isEmpty else {
+            return nodes[index].style
+        }
 
-        var chosen = node.style
-        for variant in node.variants where variant.minWidth <= width + 1e-9 {
+        var chosen = nodes[index].style
+        for variant in nodes[index].variants where variant.minWidth <= width + 1e-9 {
             chosen = variant.style
         }
         return chosen
@@ -242,6 +329,7 @@ struct Solver {
     /// result is the size of its content along it, which is what a min-content or max-content
     /// *size* means in CSS (as opposed to a contribution, which respects the node's own size
     /// properties). The other axis keeps its own sizes, since they can shape the content.
+    @inline(never)
     mutating func compute(
         _ index: Int,
         known: OptionalSize,
@@ -251,16 +339,20 @@ struct Solver {
         contentOnly: Axis? = nil,
         definite: DefiniteAxes = .both
     ) throws -> LayoutSize {
+        statistics.requests += 1
         if case .size = mode {
             let key = MeasureKey(
                 node: index,
                 known: known,
-                parent: parent,
+                parent: nodes[index].dependsOnParent ? parent : OptionalSize(),
                 available: available,
                 contentOnly: contentOnly,
                 definite: definite
             )
-            if let cached = cache[key] { return cached }
+            if let cached = cache[key] {
+                statistics.cacheHits += 1
+                return cached
+            }
 
             let size = try computeUncached(
                 index,
@@ -278,6 +370,7 @@ struct Solver {
         return try computeUncached(index, known, parent, available, mode, contentOnly, definite)
     }
 
+    @inline(never)
     private mutating func computeUncached(
         _ index: Int,
         _ known: OptionalSize,
@@ -292,6 +385,7 @@ struct Solver {
         }
 
         if nodes[index].children.isEmpty {
+            statistics.leafSizes += 1
             return leafSize(
                 index,
                 known: known,
@@ -301,6 +395,7 @@ struct Solver {
             )
         }
 
+        statistics.containerRuns += 1
         return try flexLayout(
             index,
             known: known,
@@ -317,6 +412,7 @@ struct Solver {
     /// content when that side's minimum is `auto` (CSS Sizing 4 §5.2.1), so content does not
     /// overflow a box that only got its size from the ratio. A content size (`contentOnly`)
     /// ignores the leaf's own width/height, but still follows the ratio from a known side.
+    @inline(never)
     private func leafSize(
         _ index: Int,
         known: OptionalSize,
@@ -324,10 +420,10 @@ struct Solver {
         available: AvailableSize,
         contentOnly: Axis?
     ) -> LayoutSize {
-        let node = nodes[index]
         let style = self.style(index, parentWidth: parent.width)
         let own = ownSize(
             index,
+            style: style,
             known: known,
             parent: parent,
             contentOnly: contentOnly,
@@ -335,7 +431,7 @@ struct Solver {
         )
         // Measured content (text) gets its width first — the known width, or the constraint
         // on the width — and its height from that width.
-        let content = (node.content ?? .size(.zero)).size(
+        let content = (nodes[index].content ?? .size(.zero)).size(
             knownWidth: own.width.map { max(0, $0 - own.paddingWidth) },
             available: available.width.shrunk(by: own.paddingWidth)
         )
@@ -379,9 +475,11 @@ struct Solver {
         }
 
         let finalWidth = width ?? clamp(contentWidth, own.minWidth, own.maxWidth, own.paddingWidth)
-        if height == nil, case .measured = node.content, abs(finalWidth - contentWidth) > 1e-9 {
+        if height == nil, case .measured = nodes[index].content,
+            abs(finalWidth - contentWidth) > 1e-9
+        {
             // The width was clamped or given: measured content wraps to the final width.
-            let wrapped = (node.content ?? .size(.zero)).size(
+            let wrapped = (nodes[index].content ?? .size(.zero)).size(
                 knownWidth: max(0, finalWidth - own.paddingWidth),
                 available: .definite(max(0, finalWidth - own.paddingWidth))
             )
@@ -401,6 +499,7 @@ struct Solver {
 
     /// A size that follows from the aspect ratio, raised to the content size when the axis has
     /// an automatic minimum (capped by the maximum), then clamped as usual.
+    @inline(never)
     private func ratioDependent(
         _ value: Double,
         content: Double,
@@ -416,6 +515,7 @@ struct Solver {
     /// A node's own sizes from `known` or its style (percentages against `parent`), with the
     /// aspect ratio transferred when exactly one side is definite. Min/max are border-box;
     /// an `auto` minimum is zero here — the flex item automatic minimum is the parent's job.
+    @inline(never)
     func ownSize(
         _ index: Int,
         known: OptionalSize,
@@ -424,9 +524,29 @@ struct Solver {
         transferRatio: Bool = true,
         definite: DefiniteAxes = .both
     ) -> OwnSize {
-        let node = nodes[index]
-        let style = self.style(index, parentWidth: parent.width)
-        let padding = style.padding.physical(node.direction)
+        ownSize(
+            index,
+            style: style(index, parentWidth: parent.width),
+            known: known,
+            parent: parent,
+            contentOnly: contentOnly,
+            transferRatio: transferRatio,
+            definite: definite
+        )
+    }
+
+    /// `ownSize` for a node whose style for this parent is already at hand.
+    @inline(never)
+    func ownSize(
+        _ index: Int,
+        style: FlexStyle,
+        known: OptionalSize,
+        parent: OptionalSize,
+        contentOnly: Axis? = nil,
+        transferRatio: Bool = true,
+        definite: DefiniteAxes = .both
+    ) -> OwnSize {
+        let padding = style.padding.physical(nodes[index].direction)
         let paddingWidth = max(0, padding.left) + max(0, padding.right)
         let paddingHeight = max(0, padding.top) + max(0, padding.bottom)
         // A content size ignores the node's own min/max as well as its own width/height.

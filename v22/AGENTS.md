@@ -58,6 +58,7 @@ cd v22
 swift build
 swift test                                                   # включая CSS conformance
 CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance   # записать новый baseline
+cd Benchmarks && swift run -c release LayoutBench            # скорость: новый движок против старого
 ```
 
 Эталоны CSS — `../Conformance/CSSFlexbox/` (генерация — `generate.cjs` через Chromium).

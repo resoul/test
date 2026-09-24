@@ -22,6 +22,14 @@ struct FlexItem {
     let sizeMain: Double?
     let sizeCross: Double?
     var minMain: Double
+    /// The content size along the main axis that gives the flex base size, until it is
+    /// measured.
+    var basisRequest: SizeRequest?
+    /// The min-content size along the main axis that gives the automatic minimum size, until
+    /// it is measured.
+    var minimumRequest: SizeRequest?
+    /// The automatic minimum waits until a line shrinks; see `appendItem`.
+    var defersMinimum = false
     let maxMain: Double
     let minCross: Double
     let maxCross: Double
@@ -60,6 +68,14 @@ struct FlexItem {
     var outerHypotheticalMain: Double { hypotheticalMain + marginsMain }
     var outerTarget: Double { target + marginsMain }
     var hasAutoCrossMargin: Bool { autoCrossStart || autoCrossEnd }
+}
+
+/// A size request for an item along its container's main axis, kept until it runs.
+struct SizeRequest {
+    let known: OptionalSize
+    let parent: OptionalSize
+    let available: AvailableSize
+    let definite: DefiniteAxes
 }
 
 struct FlexLine {
@@ -122,7 +138,44 @@ struct ContainerAxes {
     }
 }
 
+/// A container's own geometry and settings for one run of the algorithm, derived before its
+/// children are looked at. Every container being laid out keeps one on the stack while its
+/// descendants are, so it holds only what the later steps read, not the whole style.
+struct ContainerRun {
+    let index: Int
+    let own: OwnSize
+    let axes: ContainerAxes
+    /// `flex-wrap` as specified.
+    let styleWrap: FlexWrap
+    /// `flex-wrap` as lines are collected: while a column's width is still being found,
+    /// browsers size it as if its items did not wrap — its width is that of its widest item.
+    /// Wrapping into columns happens once the width is known.
+    let wrap: FlexWrap
+    let justifyContent: JustifyContent
+    let alignItems: AlignItems
+    let alignContent: AlignContent
+    let isReverse: Bool
+    let minMain: Double
+    let maxMain: Double
+    let minCross: Double
+    let maxCross: Double
+    /// The content box along each axis, when the container's size is known.
+    let innerMainDefinite: Double?
+    let innerCrossDefinite: Double?
+    /// The space available to the items (§9.2 step 2).
+    let itemsAvailableMain: AvailableSpace
+    let itemsAvailableCross: AvailableSpace
+    /// The containing block of the items for percentages.
+    let itemParent: OptionalSize
+
+    var isRow: Bool { axes.isRow }
+    var singleLine: Bool { wrap == .noWrap }
+}
+
 extension Solver {
+    /// Runs the algorithm over container `index`. The steps are separate functions so that
+    /// each keeps its temporaries in its own stack frame: this function is on the stack once
+    /// per nesting level, and only its few locals stay there while descendants are solved.
     mutating func flexLayout(
         _ index: Int,
         known: OptionalSize,
@@ -135,175 +188,314 @@ extension Solver {
         try context.checkpoint()
         let reportsBaseline = wantsBaseline
         wantsBaseline = false
-        let node = nodes[index]
+        if nodes[index].hasAspectRatio,
+            let size = try ratioLayout(
+                index,
+                known: known,
+                parent: parent,
+                available: available,
+                mode: mode,
+                contentOnly: contentOnly,
+                definite: definite,
+                reportsBaseline: reportsBaseline
+            )
+        {
+            return size
+        }
+
+        let run = beginContainer(
+            index,
+            known: known,
+            parent: parent,
+            available: available,
+            contentOnly: contentOnly,
+            definite: definite
+        )
+
+        let children = flowChildren(run)
+        var items: [FlexItem] = []
+        items.reserveCapacity(children.count)
+        for (offset, child) in children.enumerated() {
+            if offset > 0 && offset % 256 == 0 { try context.checkpoint() }
+            appendItem(child, run: run, to: &items)
+            try measureItem(&items, items.count - 1, axes: run.axes)
+        }
+
+        // §9.3: collect items into flex lines.
+        var lines = collectLines(
+            items,
+            wrap: run.wrap,
+            gap: run.axes.mainGap,
+            limit: run.innerMainDefinite ?? run.itemsAvailableMain.definiteValue,
+            minContent: run.innerMainDefinite == nil && run.itemsAvailableMain == .minContent
+        )
+        let innerMain = try innerMainSize(run, items: items, lines: lines)
+
+        // §9.7: resolve flexible lengths, line by line.
+        for line in lines {
+            try resolvePendingMinimums(
+                line.items,
+                &items,
+                axes: run.axes,
+                innerMain: innerMain,
+                gap: run.axes.mainGap
+            )
+            resolveFlexibleLengths(line.items, &items, innerMain: innerMain, gap: run.axes.mainGap)
+        }
+
+        try crossSizes(run, &items)
+        let innerCross = placeLines(run, &lines, &items, innerMain: innerMain)
+
+        let isRow = run.isRow
+        let axes = run.axes
+        let result = LayoutSize(
+            width: run.own.width
+                ?? (isRow ? innerMain + axes.paddingMain : innerCross + axes.paddingCross),
+            height: run.own.height
+                ?? (isRow ? innerCross + axes.paddingCross : innerMain + axes.paddingMain)
+        )
+
+        if reportsBaseline {
+            lastBaseline = try containerBaseline(
+                lines: lines,
+                items: items,
+                axes: axes,
+                own: run.own,
+                innerMain: innerMain,
+                innerCross: innerCross,
+                itemParent: run.itemParent
+            )
+        }
+
+        guard case let .layout(origin) = mode else { return result }
+
+        try layoutItems(run, items, origin: origin, innerMain: innerMain, innerCross: innerCross)
+        try layoutAbsoluteChildren(
+            run,
+            size: result,
+            origin: origin,
+            innerMain: innerMain,
+            innerCross: innerCross
+        )
+        return result
+    }
+
+    /// The container's own geometry.
+    @inline(never)
+    private func beginContainer(
+        _ index: Int,
+        known: OptionalSize,
+        parent: OptionalSize,
+        available: AvailableSize,
+        contentOnly: Axis?,
+        definite: DefiniteAxes
+    ) -> ContainerRun {
         let style = self.style(index, parentWidth: parent.width)
         let own = ownSize(
             index,
+            style: style,
             known: known,
             parent: parent,
             contentOnly: contentOnly,
             definite: definite
         )
-        if let ratio = style.aspectRatio, ratio > 0, own.width == nil, own.height == nil,
-            contentOnly != .horizontal
-        {
-            // Neither side is given: the width comes from the content (within min/max width),
-            // and the height follows from it through the ratio.
-            let content = try compute(
-                index,
-                known: known,
-                parent: parent,
-                available: available,
-                mode: .size,
-                contentOnly: .horizontal,
-                definite: definite
-            )
-            let width = clamp(content.width, own.minWidth, own.maxWidth, own.paddingWidth)
-            wantsBaseline = reportsBaseline
-            return try flexLayout(
-                index,
-                known: OptionalSize(width: width, height: known.height),
-                parent: parent,
-                available: available,
-                mode: mode,
-                contentOnly: contentOnly,
-                definite: DefiniteAxes(width: true, height: definite.height)
-            )
-        }
-
-        let axes = ContainerAxes(style: style, direction: node.direction, own: own)
+        let axes = ContainerAxes(style: style, direction: nodes[index].direction, own: own)
         let isRow = axes.isRow
         let ownMain = isRow ? own.width : own.height
         let ownCross = isRow ? own.height : own.width
-        let minMain = isRow ? own.minWidth : own.minHeight
-        let maxMain = isRow ? own.maxWidth : own.maxHeight
-        let minCross = isRow ? own.minHeight : own.minWidth
-        let maxCross = isRow ? own.maxHeight : own.maxWidth
 
         // §9.2 step 2: the space available to the items — the content box when the container
         // size is definite, otherwise the space offered to the container minus its padding.
         let innerMainDefinite = ownMain.map { max(0, $0 - axes.paddingMain) }
         let innerCrossDefinite = ownCross.map { max(0, $0 - axes.paddingCross) }
-        let itemsAvailableMain =
-            innerMainDefinite.map { AvailableSpace.definite($0) }
-            ?? (isRow ? available.width : available.height).shrunk(by: axes.paddingMain)
-        let itemsAvailableCross =
-            innerCrossDefinite.map { AvailableSpace.definite($0) }
-            ?? (isRow ? available.height : available.width).shrunk(by: axes.paddingCross)
         // The containing block of the items for percentages: the content box, where it is
         // definite. A size that is merely known (content-sized) does not count.
         let percentMain = (isRow ? own.definiteWidth : own.definiteHeight)
             .map { max(0, $0 - axes.paddingMain) }
         let percentCross = (isRow ? own.definiteHeight : own.definiteWidth)
             .map { max(0, $0 - axes.paddingCross) }
-        let itemParent = OptionalSize(main: percentMain, cross: percentCross, isRow: isRow)
 
-        // §9.1, §5.4: in-flow children in `order`, document order breaking ties.
-        let flowChildren = node.children.enumerated()
-            .filter {
-                let child = self.style($0.element, parentWidth: itemParent.width)
-                return child.position != .absolute && child.display != .none
-            }
-            .sorted { lhs, rhs in
-                let left = self.style(lhs.element, parentWidth: itemParent.width).order
-                let right = self.style(rhs.element, parentWidth: itemParent.width).order
-                return left != right ? left < right : lhs.offset < rhs.offset
-            }
-            .map(\.element)
-
-        var items: [FlexItem] = []
-        items.reserveCapacity(flowChildren.count)
-        for (offset, child) in flowChildren.enumerated() {
-            if offset > 0 && offset % 256 == 0 { try context.checkpoint() }
-            items.append(
-                try makeItem(
-                    child,
-                    container: style,
-                    axes: axes,
-                    itemParent: itemParent,
-                    availableMain: itemsAvailableMain,
-                    availableCross: itemsAvailableCross
-                )
-            )
-        }
-
-        // §9.3: collect items into flex lines.
-        // While a column's width is still being found, browsers size it as if its items did
-        // not wrap: its width is that of its widest item. Wrapping into columns happens once
-        // the width is known.
-        let wrap = !isRow && innerCrossDefinite == nil ? FlexWrap.noWrap : style.wrap
-        var lines = collectLines(
-            items,
-            wrap: wrap,
-            gap: axes.mainGap,
-            limit: innerMainDefinite ?? itemsAvailableMain.definiteValue,
-            minContent: innerMainDefinite == nil && itemsAvailableMain == .minContent
+        return ContainerRun(
+            index: index,
+            own: own,
+            axes: axes,
+            styleWrap: style.wrap,
+            wrap: !isRow && innerCrossDefinite == nil ? .noWrap : style.wrap,
+            justifyContent: style.justifyContent,
+            alignItems: style.alignItems,
+            alignContent: style.alignContent,
+            isReverse: style.direction.isReverse,
+            minMain: isRow ? own.minWidth : own.minHeight,
+            maxMain: isRow ? own.maxWidth : own.maxHeight,
+            minCross: isRow ? own.minHeight : own.minWidth,
+            maxCross: isRow ? own.maxHeight : own.maxWidth,
+            innerMainDefinite: innerMainDefinite,
+            innerCrossDefinite: innerCrossDefinite,
+            itemsAvailableMain: innerMainDefinite.map { AvailableSpace.definite($0) }
+                ?? (isRow ? available.width : available.height).shrunk(by: axes.paddingMain),
+            itemsAvailableCross: innerCrossDefinite.map { AvailableSpace.definite($0) }
+                ?? (isRow ? available.height : available.width).shrunk(by: axes.paddingCross),
+            itemParent: OptionalSize(main: percentMain, cross: percentCross, isRow: isRow)
         )
+    }
 
-        // §9.2 step 4 / §9.3: the container's inner main size.
-        let innerMain: Double
-        if let definite = innerMainDefinite {
-            innerMain = definite
-        } else {
-            var content: Double
-            if isRow {
-                // The intrinsic width of a row, as browsers compute it. An item contributes
-                // its width if it has one, else its content width — kept at its flex-basis when
-                // it could not grow or shrink to reach it — within its min/max. Max-content is
-                // the sum of those; min-content is their sum without wrapping, or the largest
-                // plain contribution with wrapping; max-content is never below min-content.
-                // Under a definite available width the result is fit-content.
-                let gaps = axes.mainGap * Double(max(0, items.count - 1))
-                var maxContent = gaps
-                var minContentSum = gaps
-                var minContentLargest = 0.0
-                for item in items {
-                    let maxRaw = try rawContribution(
-                        item,
-                        .maxContent,
-                        axes: axes,
-                        itemParent: itemParent
-                    )
-                    let minRaw = try rawContribution(
-                        item,
-                        .minContent,
-                        axes: axes,
-                        itemParent: itemParent
-                    )
-                    maxContent += flexedContribution(item, maxRaw)
-                    minContentSum += flexedContribution(item, minRaw)
-                    minContentLargest = max(minContentLargest, plainContribution(item, minRaw))
-                }
-                let minContent = style.wrap == .noWrap ? minContentSum : minContentLargest
-                maxContent = max(maxContent, minContent)
-                switch itemsAvailableMain {
-                case .maxContent: content = maxContent
-                case .minContent: content = minContent
-                case let .definite(space): content = min(maxContent, max(minContent, space))
-                }
+    /// A container with an aspect ratio and neither side given: the width comes from the
+    /// content (within min/max width), and the height follows from it through the ratio.
+    /// `nil` when a side is given, or the ratio does not apply.
+    @inline(never)
+    private mutating func ratioLayout(
+        _ index: Int,
+        known: OptionalSize,
+        parent: OptionalSize,
+        available: AvailableSize,
+        mode: RunMode,
+        contentOnly: Axis?,
+        definite: DefiniteAxes,
+        reportsBaseline: Bool
+    ) throws -> LayoutSize? {
+        let style = self.style(index, parentWidth: parent.width)
+        let own = ownSize(
+            index,
+            style: style,
+            known: known,
+            parent: parent,
+            contentOnly: contentOnly,
+            definite: definite
+        )
+        guard let ratio = style.aspectRatio, ratio > 0, own.width == nil, own.height == nil,
+            contentOnly != .horizontal
+        else { return nil }
+
+        let content = try compute(
+            index,
+            known: known,
+            parent: parent,
+            available: available,
+            mode: .size,
+            contentOnly: .horizontal,
+            definite: definite
+        )
+        let width = clamp(content.width, own.minWidth, own.maxWidth, own.paddingWidth)
+        wantsBaseline = reportsBaseline
+        return try flexLayout(
+            index,
+            known: OptionalSize(width: width, height: known.height),
+            parent: parent,
+            available: available,
+            mode: mode,
+            contentOnly: contentOnly,
+            definite: DefiniteAxes(width: true, height: definite.height)
+        )
+    }
+
+    /// §9.1, §5.4: in-flow children in `order`, document order breaking ties.
+    @inline(never)
+    private func flowChildren(_ run: ContainerRun) -> [Int] {
+        let children = nodes[run.index].children
+        var flow: [(child: Int, order: Int)] = []
+        flow.reserveCapacity(children.count)
+        var reordered = false
+        for child in children {
+            let order: Int?
+            if nodes[child].variants.isEmpty {
+                order = nodes[child].flowOrder
             } else {
-                content =
-                    lines.map { lineOuterHypothetical($0, items, gap: axes.mainGap) }.max() ?? 0
+                let childStyle = self.style(child, parentWidth: run.itemParent.width)
+                order = FlatNode.flowOrder(childStyle)
             }
-            innerMain = max(
-                0,
-                clamp(content + axes.paddingMain, minMain, maxMain) - axes.paddingMain
-            )
+            guard let order else { continue }
+
+            flow.append((child, order))
+            reordered = reordered || order != 0
+        }
+        if reordered {
+            // Children are indexed in document order, so the index breaks ties.
+            flow.sort { $0.order != $1.order ? $0.order < $1.order : $0.child < $1.child }
+        }
+        return flow.map(\.child)
+    }
+
+    /// §9.2 step 4 / §9.3: the container's inner main size.
+    @inline(never)
+    private mutating func innerMainSize(
+        _ run: ContainerRun,
+        items: [FlexItem],
+        lines: [FlexLine]
+    ) throws -> Double {
+        if let definite = run.innerMainDefinite { return definite }
+
+        let axes = run.axes
+        var content: Double
+        if run.isRow {
+            // The intrinsic width of a row, as browsers compute it. An item contributes its
+            // width if it has one, else its content width — kept at its flex-basis when it
+            // could not grow or shrink to reach it — within its min/max. Max-content is the
+            // sum of those; min-content is their sum without wrapping, or the largest plain
+            // contribution with wrapping; max-content is never below min-content. Under a
+            // definite available width the result is fit-content.
+            let gaps = axes.mainGap * Double(max(0, items.count - 1))
+            var maxContent = gaps
+            var minContentSum = gaps
+            var minContentLargest = 0.0
+            for item in items {
+                let maxRaw = try rawContribution(
+                    item,
+                    .maxContent,
+                    axes: axes,
+                    itemParent: run.itemParent
+                )
+                let minRaw = try rawContribution(
+                    item,
+                    .minContent,
+                    axes: axes,
+                    itemParent: run.itemParent
+                )
+                maxContent += flexedContribution(item, maxRaw)
+                minContentSum += flexedContribution(item, minRaw)
+                minContentLargest = max(minContentLargest, plainContribution(item, minRaw))
+            }
+            let minContent = run.styleWrap == .noWrap ? minContentSum : minContentLargest
+            maxContent = max(maxContent, minContent)
+            switch run.itemsAvailableMain {
+            case .maxContent: content = maxContent
+            case .minContent: content = minContent
+            case let .definite(space): content = min(maxContent, max(minContent, space))
+            }
+        } else {
+            content = lines.map { lineOuterHypothetical($0, items, gap: axes.mainGap) }.max() ?? 0
         }
 
-        // §9.7: resolve flexible lengths, line by line.
-        for line in lines {
-            resolveFlexibleLengths(line.items, &items, innerMain: innerMain, gap: axes.mainGap)
-        }
+        return max(
+            0,
+            clamp(content + axes.paddingMain, run.minMain, run.maxMain) - axes.paddingMain
+        )
+    }
 
-        // §9.4 step 7: hypothetical cross size of each item.
+    /// §9.4 steps 7–8: the hypothetical cross size of each item, and the baselines of items
+    /// aligned by baseline.
+    @inline(never)
+    private mutating func crossSizes(_ run: ContainerRun, _ items: inout [FlexItem]) throws {
+        // A stretched item of a single line whose cross size is already known will be as
+        // large as the line: measuring it at an unknown cross size would only be thrown away.
         for itemIndex in items.indices {
+            if itemIndex > 0 && itemIndex % 256 == 0 { try context.checkpoint() }
+            if run.singleLine, let lineCross = run.innerCrossDefinite, items[itemIndex].stretches {
+                let item = items[itemIndex]
+                items[itemIndex].hypotheticalCross = clamp(
+                    lineCross - item.marginsCross,
+                    item.minCross,
+                    item.maxCross,
+                    item.paddingCross
+                )
+                continue
+            }
+
             items[itemIndex].hypotheticalCross = try hypotheticalCross(
                 items[itemIndex],
-                axes: axes,
-                itemParent: itemParent,
-                innerCrossDefinite: innerCrossDefinite,
-                availableCross: itemsAvailableCross
+                axes: run.axes,
+                itemParent: run.itemParent,
+                innerCrossDefinite: run.innerCrossDefinite,
+                availableCross: run.itemsAvailableCross
             )
         }
 
@@ -314,19 +506,35 @@ extension Solver {
         // from the item's bottom: the group sits at the bottom of its line.
         for itemIndex in items.indices
         where items[itemIndex].align == .baseline && !items[itemIndex].hasAutoCrossMargin {
-            let item = items[itemIndex]
-            guard isRow else {
+            guard run.isRow else {
                 items[itemIndex].baseline = 0
                 continue
             }
 
-            let size = LayoutSize(width: item.target, height: item.hypotheticalCross)
-            let fromTop = try baseline(item.node, size: size, parent: itemParent) ?? size.height
-            items[itemIndex].baseline = axes.reversedCross ? size.height - fromTop : fromTop
+            let size = LayoutSize(
+                width: items[itemIndex].target,
+                height: items[itemIndex].hypotheticalCross
+            )
+            let fromTop =
+                try baseline(items[itemIndex].node, size: size, parent: run.itemParent)
+                ?? size.height
+            items[itemIndex].baseline = run.axes.reversedCross ? size.height - fromTop : fromTop
         }
+    }
+
+    /// §9.4 steps 8–15, §9.5, §9.6: line cross sizes, used cross sizes and every item's
+    /// position in the content box. Returns the container's inner cross size.
+    @inline(never)
+    private func placeLines(
+        _ run: ContainerRun,
+        _ lines: inout [FlexLine],
+        _ items: inout [FlexItem],
+        innerMain: Double
+    ) -> Double {
+        let axes = run.axes
+        let singleLine = run.singleLine
 
         // §9.4 step 8: cross size of each line.
-        let singleLine = wrap == .noWrap
         for lineIndex in lines.indices {
             var outer = 0.0
             var ascent: Double?
@@ -343,15 +551,18 @@ extension Solver {
             }
             lines[lineIndex].ascent = ascent
 
-            if singleLine, let definite = innerCrossDefinite {
+            if singleLine, let definite = run.innerCrossDefinite {
                 lines[lineIndex].crossSize = definite
             } else {
                 lines[lineIndex].crossSize = max(outer, (ascent ?? 0) + descent)
                 if singleLine {
                     lines[lineIndex].crossSize = max(
                         0,
-                        clamp(lines[lineIndex].crossSize + axes.paddingCross, minCross, maxCross)
-                            - axes.paddingCross
+                        clamp(
+                            lines[lineIndex].crossSize + axes.paddingCross,
+                            run.minCross,
+                            run.maxCross
+                        ) - axes.paddingCross
                     )
                 }
             }
@@ -360,20 +571,20 @@ extension Solver {
         // §9.4 step 15 (applied early: stretching needs it): the container's inner cross size.
         let crossGaps = axes.crossGap * Double(max(0, lines.count - 1))
         let innerCross =
-            innerCrossDefinite
+            run.innerCrossDefinite
             ?? max(
                 0,
                 clamp(
                     lines.reduce(0) { $0 + $1.crossSize } + crossGaps + axes.paddingCross,
-                    minCross,
-                    maxCross
+                    run.minCross,
+                    run.maxCross
                 )
                     - axes.paddingCross
             )
 
         // §9.4 step 9: `align-content: stretch` shares free cross space among the lines of a
         // multi-line container.
-        if !singleLine && style.alignContent == .stretch && !lines.isEmpty {
+        if !singleLine && run.alignContent == .stretch && !lines.isEmpty {
             let free = innerCross - lines.reduce(0) { $0 + $1.crossSize } - crossGaps
             if free > epsilon {
                 for lineIndex in lines.indices {
@@ -407,8 +618,8 @@ extension Solver {
                 &items,
                 innerMain: innerMain,
                 gap: axes.mainGap,
-                justify: style.justifyContent,
-                startIsFlexEnd: style.direction.isReverse
+                justify: run.justifyContent,
+                startIsFlexEnd: run.isReverse
             )
         }
 
@@ -416,11 +627,11 @@ extension Solver {
         // `align-self` within their line.
         let linesFree = innerCross - lines.reduce(0) { $0 + $1.crossSize } - crossGaps
         let lineOffsets = distribute(
-            singleLine ? .start : contentDistribution(style.alignContent),
+            singleLine ? .start : contentDistribution(run.alignContent),
             free: linesFree,
             count: lines.count,
             gap: axes.crossGap,
-            startIsFlexEnd: style.wrap == .wrapReverse
+            startIsFlexEnd: run.styleWrap == .wrapReverse
         )
         var lineCursor = lineOffsets.offset
         for lineIndex in lines.indices {
@@ -436,78 +647,78 @@ extension Solver {
                     )
             }
         }
+        return innerCross
+    }
 
-        let size = LayoutSize(
-            width: isRow ? innerMain + axes.paddingMain : innerCross + axes.paddingCross,
-            height: isRow ? innerCross + axes.paddingCross : innerMain + axes.paddingMain
-        )
-        let result = LayoutSize(width: own.width ?? size.width, height: own.height ?? size.height)
-
-        if reportsBaseline {
-            lastBaseline = try containerBaseline(
-                lines: lines,
-                items: items,
-                axes: axes,
-                own: own,
+    /// Writes the frames of the in-flow items — logical positions become physical x/y in the
+    /// content box — and lays each item out in its frame.
+    @inline(never)
+    private mutating func layoutItems(
+        _ run: ContainerRun,
+        _ items: [FlexItem],
+        origin: LayoutPoint,
+        innerMain: Double,
+        innerCross: Double
+    ) throws {
+        let axes = run.axes
+        let isRow = axes.isRow
+        for itemIndex in items.indices {
+            if itemIndex > 0 && itemIndex % 256 == 0 { try context.checkpoint() }
+            let frame = itemFrame(
+                items[itemIndex],
+                run: run,
+                origin: origin,
                 innerMain: innerMain,
-                innerCross: innerCross,
-                itemParent: itemParent
+                innerCross: innerCross
             )
-        }
-
-        guard case let .layout(origin) = mode else { return result }
-
-        // Write frames: logical positions become physical x/y in the content box.
-        for item in items {
-            let main =
-                axes.reversedMain ? innerMain - item.mainPosition - item.target : item.mainPosition
-            let cross =
-                axes.reversedCross
-                ? innerCross - item.crossPosition - item.cross : item.crossPosition
-            let frame = LayoutRect(
-                x: origin.x + own.padding.left + (isRow ? main : cross),
-                y: origin.y + own.padding.top + (isRow ? cross : main),
-                width: isRow ? item.target : item.cross,
-                height: isRow ? item.cross : item.target
-            )
-            frames[item.node] = frame
+            let node = items[itemIndex].node
+            frames[node] = frame
             // §9.8: the flexed main size is definite when the container's main size is; a
             // stretched cross size is definite; otherwise only specified sizes are.
-            let stretched = item.stretches
+            let mainIsDefinite = items[itemIndex].mainIsDefinite
+            let crossIsDefinite =
+                items[itemIndex].sizeCross != nil || items[itemIndex].stretches
+                || (items[itemIndex].ratio != nil && mainIsDefinite)
             _ = try compute(
-                item.node,
+                node,
                 known: OptionalSize(width: frame.size.width, height: frame.size.height),
-                parent: itemParent,
+                parent: run.itemParent,
                 available: AvailableSize(
                     width: .definite(frame.size.width),
                     height: .definite(frame.size.height)
                 ),
                 mode: .layout(frame.origin),
-                definite: DefiniteAxes(
-                    main: item.mainIsDefinite,
-                    cross: item.sizeCross != nil || stretched
-                        || (item.ratio != nil && item.mainIsDefinite),
-                    isRow: isRow
-                )
+                definite: DefiniteAxes(main: mainIsDefinite, cross: crossIsDefinite, isRow: isRow)
             )
         }
+    }
 
-        try layoutAbsoluteChildren(
-            index,
-            containerStyle: style,
-            size: result,
-            origin: origin,
-            own: own,
-            axes: axes,
-            innerMain: innerMain,
-            innerCross: innerCross
+    @inline(never)
+    private func itemFrame(
+        _ item: FlexItem,
+        run: ContainerRun,
+        origin: LayoutPoint,
+        innerMain: Double,
+        innerCross: Double
+    ) -> LayoutRect {
+        let axes = run.axes
+        let isRow = axes.isRow
+        let main =
+            axes.reversedMain ? innerMain - item.mainPosition - item.target : item.mainPosition
+        let cross =
+            axes.reversedCross ? innerCross - item.crossPosition - item.cross : item.crossPosition
+        return LayoutRect(
+            x: origin.x + run.own.padding.left + (isRow ? main : cross),
+            y: origin.y + run.own.padding.top + (isRow ? cross : main),
+            width: isRow ? item.target : item.cross,
+            height: isRow ? item.cross : item.target
         )
-        return result
     }
 
     /// §8.5: a container's first baseline is that of its first line's first baseline-aligned
     /// item (a row), or else of its first item, offset by where that item sits; a container
     /// without items has none.
+    @inline(never)
     private mutating func containerBaseline(
         lines: [FlexLine],
         items: [FlexItem],
@@ -547,22 +758,28 @@ extension Solver {
 
     // MARK: - §9.2 Line length determination
 
-    private mutating func makeItem(
-        _ child: Int,
-        container: FlexStyle,
-        axes: ContainerAxes,
-        itemParent: OptionalSize,
-        availableMain: AvailableSpace,
-        availableCross: AvailableSpace
-    ) throws -> FlexItem {
-        let node = nodes[child]
+    /// Appends the item of `child` with everything that follows from its style. The sizes
+    /// that need a pass over its subtree are left as requests for `measureItem`, so that this
+    /// frame, with the whole style in it, is not on the stack while the subtree is solved.
+    @inline(never)
+    private func appendItem(_ child: Int, run container: ContainerRun, to items: inout [FlexItem]) {
+        let axes = container.axes
+        let itemParent = container.itemParent
+        let availableMain = container.itemsAvailableMain
+        let availableCross = container.itemsAvailableCross
         let style = self.style(child, parentWidth: itemParent.width)
         let isRow = axes.isRow
         // Sizes as specified, without transferring the aspect ratio: a size that only follows
         // from the ratio is still `auto`, so the item can be stretched and its ratio applies
         // to the main size through the flex base size instead.
-        let own = ownSize(child, known: OptionalSize(), parent: itemParent, transferRatio: false)
-        let margin = style.margin.physical(node.direction)
+        let own = ownSize(
+            child,
+            style: style,
+            known: OptionalSize(),
+            parent: itemParent,
+            transferRatio: false
+        )
+        let margin = style.margin.physical(nodes[child].direction)
         let margins = Physical(
             top: margin.top.points,
             left: margin.left.points,
@@ -601,7 +818,7 @@ extension Solver {
         // §9.8 / §9.4 step 11: in a single-line container with a definite cross size, a
         // stretched item's cross size is definite before its main size is known.
         var crossForBasis = sizeCross
-        if crossForBasis == nil, container.wrap == .noWrap,
+        if crossForBasis == nil, container.styleWrap == .noWrap,
             let innerCross = isRow ? itemParent.height : itemParent.width,
             stretches
         {
@@ -644,6 +861,9 @@ extension Solver {
             ?? availableCross.shrunk(by: marginsCross)
 
         // §9.2 step 3: the flex base size.
+        // When it is the item's max-content size or its specified size, it is never below its
+        // automatic minimum.
+        var basisCoversMinimum = false
         let percentMainBase = isRow ? itemParent.width : itemParent.height
         let mainStyle = isRow ? style.width : style.height
         if let basis = style.basis.resolve(percentMainBase) {
@@ -652,12 +872,13 @@ extension Solver {
             // `flex-basis: auto` uses the main size property, unclamped. A percentage basis
             // that cannot be resolved behaves as `content` instead and skips this.
             item.basis = size
+            basisCoversMinimum = true
         } else if let ratio, let cross = crossForBasis {
             item.basis = cross * ratio  // B: aspect ratio with a definite cross size
         } else {
             // C–E: size the item as max-content (min-content under a min-content constraint).
-            let measured = try compute(
-                child,
+            basisCoversMinimum = true
+            item.basisRequest = SizeRequest(
                 known: OptionalSize(main: nil, cross: crossForBasis, isRow: isRow),
                 parent: itemParent,
                 available: AvailableSize(
@@ -665,41 +886,130 @@ extension Solver {
                     cross: crossAvailable,
                     isRow: isRow
                 ),
-                mode: .size,
-                contentOnly: isRow ? .horizontal : .vertical,
                 definite: measureDefinite
             )
-            item.basis = axes.main(measured)
         }
 
         // §4.5: automatic minimum size — the content size suggestion, capped by the specified
-        // size suggestion (or the ratio-transferred one) when there is one.
+        // size suggestion when there is one. It takes a min-content pass over the item's
+        // subtree, so when the base size is never below it, it waits until a line actually
+        // shrinks.
         let minMainStyle = isRow ? style.minWidth : style.minHeight
         if minMainStyle == .auto {
-            let minContent = try compute(
-                child,
+            item.minimumRequest = SizeRequest(
                 known: OptionalSize(main: nil, cross: crossForBasis, isRow: isRow),
                 parent: itemParent,
                 available: AvailableSize(main: .minContent, cross: crossAvailable, isRow: isRow),
-                mode: .size,
-                contentOnly: isRow ? .horizontal : .vertical,
                 definite: measureDefinite
             )
-            var suggestion = min(axes.main(minContent), item.maxMain)
-            if let specified = sizeMain {
-                suggestion = min(suggestion, specified)
-            }
-            item.minMain = suggestion
+            item.defersMinimum = basisCoversMinimum
+        }
+        items.append(item)
+    }
+
+    /// Runs the size requests of `items[index]` that cannot wait, then fixes its flex base
+    /// size and hypothetical main size.
+    @inline(never)
+    private mutating func measureItem(
+        _ items: inout [FlexItem],
+        _ index: Int,
+        axes: ContainerAxes
+    ) throws {
+        if let request = items[index].basisRequest {
+            let measured = try compute(
+                items[index].node,
+                known: request.known,
+                parent: request.parent,
+                available: request.available,
+                mode: .size,
+                contentOnly: axes.isRow ? .horizontal : .vertical,
+                definite: request.definite
+            )
+            items[index].basis = axes.main(measured)
+            items[index].basisRequest = nil
+        }
+        if !items[index].defersMinimum, let request = items[index].minimumRequest {
+            items[index].minMain = try automaticMinimum(
+                items[index].node,
+                request,
+                maxMain: items[index].maxMain,
+                sizeMain: items[index].sizeMain,
+                axes: axes
+            )
+            items[index].minimumRequest = nil
         }
 
         // In a border-box, the flex base size cannot be smaller than the padding.
-        item.basis = max(item.basis, item.paddingMain)
-        item.hypotheticalMain = clamp(item.basis, item.minMain, item.maxMain, item.paddingMain)
-        return item
+        let item = items[index]
+        items[index].basis = max(item.basis, item.paddingMain)
+        items[index].hypotheticalMain = clamp(
+            items[index].basis,
+            item.minMain,
+            item.maxMain,
+            item.paddingMain
+        )
+    }
+
+    /// The automatic minimum main size of item `node`: its min-content size along the main
+    /// axis, within its maximum and its specified size.
+    @inline(never)
+    private mutating func automaticMinimum(
+        _ node: Int,
+        _ request: SizeRequest,
+        maxMain: Double,
+        sizeMain: Double?,
+        axes: ContainerAxes
+    ) throws -> Double {
+        let minContent = try compute(
+            node,
+            known: request.known,
+            parent: request.parent,
+            available: request.available,
+            mode: .size,
+            contentOnly: axes.isRow ? .horizontal : .vertical,
+            definite: request.definite
+        )
+        var suggestion = min(axes.main(minContent), maxMain)
+        if let specified = sizeMain {
+            suggestion = min(suggestion, specified)
+        }
+        return suggestion
+    }
+
+    /// Computes the automatic minimums a line needs: those of its shrinkable items, when the
+    /// line overflows. Otherwise no item goes below its base size, and a deferred minimum is
+    /// never above it.
+    @inline(never)
+    private mutating func resolvePendingMinimums(
+        _ line: [Int],
+        _ items: inout [FlexItem],
+        axes: ContainerAxes,
+        innerMain: Double,
+        gap: Double
+    ) throws {
+        let gaps = gap * Double(max(0, line.count - 1))
+        let hypotheticalSum = line.reduce(0) { $0 + items[$1].outerHypotheticalMain } + gaps
+        guard hypotheticalSum > innerMain + epsilon else { return }
+
+        for index in line {
+            guard let request = items[index].minimumRequest, items[index].shrink > 0 else {
+                continue
+            }
+
+            items[index].minMain = try automaticMinimum(
+                items[index].node,
+                request,
+                maxMain: items[index].maxMain,
+                sizeMain: items[index].sizeMain,
+                axes: axes
+            )
+            items[index].minimumRequest = nil
+        }
     }
 
     /// An item's width under `constraint` before any clamping: its specified width, else its
     /// min-content or max-content width.
+    @inline(never)
     private mutating func rawContribution(
         _ item: FlexItem,
         _ constraint: AvailableSpace,
@@ -739,6 +1049,7 @@ extension Solver {
 
     // MARK: - §9.3 Main size determination
 
+    @inline(never)
     private func collectLines(
         _ items: [FlexItem],
         wrap: FlexWrap,
@@ -771,6 +1082,7 @@ extension Solver {
         return lines
     }
 
+    @inline(never)
     private func lineOuterHypothetical(_ line: FlexLine, _ items: [FlexItem], gap: Double) -> Double
     {
         line.items.reduce(0) { $0 + items[$1].outerHypotheticalMain } + gap
@@ -779,6 +1091,7 @@ extension Solver {
 
     // MARK: - §9.7 Resolving flexible lengths
 
+    @inline(never)
     private func resolveFlexibleLengths(
         _ line: [Int],
         _ items: inout [FlexItem],
@@ -878,6 +1191,7 @@ extension Solver {
 
     // MARK: - §9.4 Cross size determination
 
+    @inline(never)
     private mutating func hypotheticalCross(
         _ item: FlexItem,
         axes: ContainerAxes,
@@ -907,6 +1221,7 @@ extension Solver {
 
     // MARK: - §9.5 Main-axis alignment
 
+    @inline(never)
     private func alignMain(
         _ line: [Int],
         _ items: inout [FlexItem],
@@ -952,6 +1267,7 @@ extension Solver {
 
     // MARK: - §9.6 Cross-axis alignment
 
+    @inline(never)
     private func crossOffset(_ item: FlexItem, lineCross: Double, ascent: Double?) -> Double {
         if let baseline = item.baseline, let ascent {
             return ascent - baseline
@@ -1017,6 +1333,7 @@ func contentDistribution(_ value: AlignContent) -> Distribution {
 /// with not enough room aligns to the *writing-mode* start of the axis. That start is the
 /// flex-end side when the axis is reversed by `row-reverse`/`column-reverse` (main axis) or
 /// `wrap-reverse` (cross axis) — `startIsFlexEnd`. Plain `center` and `end` are not safe.
+@inline(never)
 func distribute(
     _ mode: Distribution,
     free: Double,

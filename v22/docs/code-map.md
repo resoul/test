@@ -18,6 +18,10 @@
 | `clamp(_:_:_:_:)` | min побеждает max; не меньше padding | закрывает Trellis #100; решение border-box — [10](10-layout-engine.md#как-ведётся-работа), п. 3 |
 | `DefiniteAxes`, `OwnSize.definiteWidth/Height` | ширина definite, как только известна; высота — по §9.8 | дефекты #109, #113 |
 | `Axis`, `compute(..., contentOnly:)` | размер содержимого по одной оси | дефекты #110, #115 |
+| `SolveStatistics`, `LayoutResult.statistics` | счётчики работы прохода для тестов | [10](10-layout-engine.md#статус-e3-производительность) |
+| `FlatNode.dependsOnParent`, `FlexStyle.hasPercentageSize` | размер родителя в ключе кэша только когда влияет | дефект #125 |
+| `MeasureKey.hash(into:)`, `HashMix` | хэш ключа — одно слово | [10](10-layout-engine.md#статус-e3-производительность) |
+| `@inline(never)` у шагов и помощников | кадры шагов не лежат на стеке при рекурсии | дефект #124 |
 | `Solver.baseline(_:size:parent:)`, `wantsBaseline`/`lastBaseline` | базовая линия узла при заданном размере; контейнер отдаёт её из того же прохода | CSS §8.5; [10](10-layout-engine.md#статус-e2-текст) |
 | `leafSize` / `ratioDependent` | пропорция: перенос min/max, автоминимум по зависимой оси | дефект #112 |
 
@@ -71,8 +75,8 @@
 |---|---|---|
 | `ContainerAxes.reversedMain/reversedCross` | логические координаты до самого конца | закрывает Trellis #102 (`wrap-reverse`) |
 | `FlexItem.marginMainStart…`, `outerHypotheticalMain`, `outerTarget` | внешний размер = размер + margin во всех шагах | закрывает Trellis #95, #96 |
-| `makeItem` — `crossForBasis` | stretch-размер definite до main-размера | CSS §9.8; закрывает Trellis #106 (aspect-ratio при stretch) |
-| `makeItem` — автоматический минимальный размер | `min-width: auto` | CSS §4.5; закрывает Trellis #101 |
+| `appendItem` — `crossForBasis` | stretch-размер definite до main-размера | CSS §9.8; закрывает Trellis #106 (aspect-ratio при stretch) |
+| `appendItem` — автоматический минимальный размер | `min-width: auto` | CSS §4.5; закрывает Trellis #101 |
 | `resolveFlexibleLengths` | цикл заморозки, сумма факторов < 1 | CSS §9.7; закрывает Trellis #98, #99 |
 | `flexLayout` — intrinsic row (`rawContribution`, `plainContribution`, `flexedContribution`) | собственная ширина row по вкладам детей, как в Blink | дефект #111 |
 | `flexLayout` — `wrap` без переноса при неизвестной ширине column | ширина column-wrap по самому широкому элементу | дефект #116 |
@@ -82,6 +86,11 @@
 | `flexLayout` — fit-content ветка inner main | контейнер без размера в definite-пространстве | [10](10-layout-engine.md#что-пишется-заново-алгоритм-по-шагам-css-9) |
 | `alignMain` | auto-margin, затем `justify-content`, курсор с margin | закрывает Trellis #95 и `unsupported` `margin: auto` |
 | `distribute` | safe-fallback к началу по направлению письма | CSS Box Alignment §5.1; дефект #107 |
+| `ContainerRun`, `flexLayout` как последовательность шагов (`beginContainer`, `innerMainSize`, `crossSizes`, `placeLines`, `layoutItems`) | в кадре на уровень — только компактное состояние контейнера | дефект #124 |
+| `appendItem` / `measureItem` | элемент собирается без рекурсии, замеры — в маленьком кадре | дефект #124 |
+| `crossSizes` — растягиваемый элемент одной строки с известным cross | гипотетический cross не меряется | дефект #125 |
+| `SizeRequest`, `defersMinimum`, `resolvePendingMinimums` | автоматический минимум — только при переполнении строки | CSS §4.5; дефект #125 |
+| checkpoints в `crossSizes`, `layoutItems` (каждые 256) | задержка отмены на длинной строке | [10](10-layout-engine.md#статус-e3-производительность) |
 | `flexLayout` — `FlexItem.baseline`, `FlexLine.ascent`, `crossOffset(_:lineCross:ascent:)` | выравнивание по базовой линии; column — синтезированная по краю; `wrap-reverse` — от низа | CSS §8.3, §9.4 шаг 8; дефекты #121, #122 |
 | `containerBaseline` | базовая линия контейнера: физически верхняя строка | CSS §8.5; дефект #120 |
 

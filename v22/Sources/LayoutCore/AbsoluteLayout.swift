@@ -3,33 +3,42 @@
 // parent's padding box. Absolute children never affect their parent's size.
 
 extension Solver {
+    @inline(never)
     mutating func layoutAbsoluteChildren(
-        _ index: Int,
-        containerStyle: FlexStyle,
+        _ run: ContainerRun,
         size: LayoutSize,
         origin: LayoutPoint,
-        own: OwnSize,
-        axes: ContainerAxes,
         innerMain: Double,
         innerCross: Double
     ) throws {
-        let node = nodes[index]
+        let index = run.index
+        let own = run.own
+        let axes = run.axes
         let containingBlock = OptionalSize(width: size.width, height: size.height)
+        let direction = nodes[index].direction
 
-        for child in node.children {
+        for child in nodes[index].children {
+            if nodes[child].variants.isEmpty && nodes[child].style.position != .absolute {
+                continue
+            }
+
             let style = self.style(child, parentWidth: size.width)
             guard style.position == .absolute, style.display != .none else { continue }
 
-            let childNode = nodes[child]
-            let childOwn = ownSize(child, known: OptionalSize(), parent: containingBlock)
-            let margin = style.margin.physical(childNode.direction)
+            let childOwn = ownSize(
+                child,
+                style: style,
+                known: OptionalSize(),
+                parent: containingBlock
+            )
+            let margin = style.margin.physical(nodes[child].direction)
             var margins = Physical(
                 top: margin.top.points,
                 left: margin.left.points,
                 bottom: margin.bottom.points,
                 right: margin.right.points
             )
-            let insets = style.insets.physical(childNode.direction)
+            let insets = style.insets.physical(nodes[child].direction)
 
             // Size: specified, else stretched between two insets, else shrink-to-fit.
             var width = childOwn.width
@@ -107,7 +116,7 @@ extension Solver {
                     if remaining >= 0 {
                         margins.left += remaining / 2
                         margins.right += remaining / 2
-                    } else if node.direction == .rightToLeft {
+                    } else if direction == .rightToLeft {
                         margins.left += remaining
                     } else {
                         margins.right += remaining
@@ -134,7 +143,7 @@ extension Solver {
                 size: childSize,
                 childStyle: style,
                 margins: margins,
-                container: containerStyle,
+                container: run,
                 own: own,
                 axes: axes,
                 innerMain: innerMain,
@@ -144,7 +153,7 @@ extension Solver {
             // Over-constrained (both insets and a width): the end inset gives way — `right` in
             // left-to-right, `left` in right-to-left.
             let x: Double
-            if let left = insets.left, insets.right == nil || node.direction == .leftToRight {
+            if let left = insets.left, insets.right == nil || direction == .leftToRight {
                 x = left + margins.left
             } else if let right = insets.right {
                 x = size.width - right - margins.right - childSize.width
@@ -182,12 +191,13 @@ extension Solver {
 
     /// §4.1: the static position of an absolute child is where it would be as the sole flex
     /// item of its parent — placed by `justify-content` and `align-self` in the content box.
+    @inline(never)
     private func absoluteStaticPosition(
         _ child: Int,
         size: LayoutSize,
         childStyle: FlexStyle,
         margins: Physical<Double>,
-        container: FlexStyle,
+        container: ContainerRun,
         own: OwnSize,
         axes: ContainerAxes,
         innerMain: Double,

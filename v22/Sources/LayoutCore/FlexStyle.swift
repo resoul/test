@@ -271,5 +271,13 @@ public struct FlexStyle: Sendable, Hashable {
     /// A style with every CSS default.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    /// Some size resolves against the containing block.
+    var hasPercentageSize: Bool {
+        [basis, width, height, minWidth, minHeight, maxWidth, maxHeight].contains {
+            if case .fraction = $0 { return true }
+            return false
+        }
+    }
+
     public init() {}
 }

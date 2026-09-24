@@ -90,10 +90,14 @@ public struct LayoutResult: Sendable {
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public let duplicateIDs: Set<LayoutID>
 
+    /// The work the pass did.
+    let statistics: SolveStatistics
+
     private let index: [LayoutID: Int]
 
-    init(frames: [(id: LayoutID, frame: LayoutRect)]) {
+    init(frames: [(id: LayoutID, frame: LayoutRect)], statistics: SolveStatistics = .init()) {
         self.frames = frames
+        self.statistics = statistics
         var index: [LayoutID: Int] = [:]
         var duplicates: Set<LayoutID> = []
         for (offset, entry) in frames.enumerated() {
