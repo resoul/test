@@ -43,6 +43,8 @@
         /// Layers of nodes that left in an animated render, fading out in place. They are
         /// dropped at the first render after their fade is over.
         private var leaving: [NodeID: CALayer] = [:]
+        /// Temporary: what the renderer does with animations, while defect #131 is open.
+        var trace: [String]?
 
         /// What a layer's contents were drawn from.
         private struct Drawing: Equatable {
@@ -92,6 +94,7 @@
             defer { CATransaction.commit() }
 
             var pass = Pass(animation: animation)
+            trace?.append("render animation=\(String(describing: animation))")
             let rootLayer = sync(root, parentIsNew: true, pass: &pass)
             if rootLayer.superlayer !== container {
                 container.addSublayer(rootLayer)
@@ -109,6 +112,11 @@
                 drawn[id] = nil
             }
             settle(pass.detached, gone: gone, animation: animation)
+            if trace != nil {
+                for (id, layer) in layers {
+                    trace?.append("end \(id) \(Unmanaged.passUnretained(layer).toOpaque()) \(layer.animationKeys() ?? [])")
+                }
+            }
         }
 
         private func sync(_ node: Node, parentIsNew: Bool, pass: inout Pass) -> CALayer {
@@ -161,6 +169,7 @@
                     animation
                 )
                 layer.add(fadeIn, forKey: "opacity")
+                trace?.append("fade in \(Unmanaged.passUnretained(layer).toOpaque()) -> \(layer.animationKeys() ?? [])")
             }
 
             var sublayers: [CALayer] = []
@@ -249,6 +258,7 @@
 
                 if let animation {
                     layer.add(makeAnimation(key, from: from, to: to, animation), forKey: key)
+                    trace?.append("add \(key) to \(Unmanaged.passUnretained(layer).toOpaque()) -> \(layer.animationKeys() ?? [])")
                 } else {
                     layer.removeAnimation(forKey: key)
                 }

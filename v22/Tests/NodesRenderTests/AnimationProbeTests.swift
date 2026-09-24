@@ -104,3 +104,62 @@
         print("PROBE\n" + lines.joined(separator: "\n"))
     }
 #endif
+
+#if canImport(QuartzCore)
+    @testable import NodesRender
+    import StateCore
+
+    @MainActor
+    private final class ProbeDot: Node {
+        var width: Double {
+            didSet { setNeedsLayout() }
+        }
+
+        init(width: Double) {
+            self.width = width
+        }
+
+        override var layoutContent: LeafContent? {
+            .size(LayoutSize(width: width, height: 10))
+        }
+    }
+
+    @MainActor
+    private final class ProbeRow: Node {
+        let spacer = ProbeDot(width: 20)
+        let dot = ProbeDot(width: 10)
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.row) { spacer; dot }
+                .alignItems(.start)
+        }
+    }
+
+    @Test @MainActor
+    func rendererProbe() {
+        let row = ProbeRow()
+        let host = NodeHost(root: row, size: LayoutSize(width: 200, height: 50))
+        host.layoutIfNeeded()
+        let renderer = LayerRenderer()
+        renderer.trace = []
+        let container = CALayer()
+        renderer.render(row, in: container)
+        host.didRender()
+
+        row.spacer.width = 60
+        host.layoutIfNeeded()
+        renderer.render(row, in: container, animation: .default)
+        let dot = renderer.layer(for: row.dot)
+        renderer.trace?.append("after commit dot \(dot.map { Unmanaged.passUnretained($0).toOpaque() }.debugDescription) \(dot?.animationKeys() ?? [])")
+
+        row.spacer.width = 100
+        host.layoutIfNeeded()
+        CATransaction.begin()
+        renderer.render(row, in: container, animation: .default)
+        renderer.trace?.append("inside outer transaction \(dot?.animationKeys() ?? [])")
+        CATransaction.commit()
+        renderer.trace?.append("after outer commit \(dot?.animationKeys() ?? [])")
+        print("RENDERER PROBE\n" + (renderer.trace ?? []).joined(separator: "\n"))
+        host.detach()
+    }
+#endif
