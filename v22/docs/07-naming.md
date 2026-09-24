@@ -7,6 +7,8 @@
 > Суффикс `Node` убирается везде, **кроме имён, которые совпадают со стандартной
 > библиотекой Swift**. Совпадения со SwiftUI допустимы.
 
+Единственное исключение сейчас — `CollectionNode`.
+
 Базовый класс остаётся `Node`. Бренд живёт в имени модуля, а не в имени типа (как в
 AGENTS.md Trellis).
 
@@ -25,7 +27,7 @@ AGENTS.md Trellis).
 | `TabsNode` | `Tabs` | |
 | `TabbedScrollNode` | `TabbedScroll` | |
 | `Pager` | `Pager` | уже без суффикса |
-| `CollectionNode` | **открыто** | `Collection` — протокол стандартной библиотеки Swift, использовать нельзя. Варианты: оставить `CollectionNode` исключением, `Feed`, `ItemList` |
+| `CollectionNode` | `CollectionNode` | **согласовано**: остаётся с суффиксом — `Collection` это протокол стандартной библиотеки Swift |
 
 ## Следствия совпадений со SwiftUI
 
