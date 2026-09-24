@@ -91,7 +91,10 @@
         scene.render()
 
         let dot = try #require(scene.layer(scene.row.dot))
-        let move = try #require(dot.animation(forKey: "position") as? CABasicAnimation)
+        let move = try #require(
+            dot.animation(forKey: "position") as? CABasicAnimation,
+            "dot: \(dot.animationKeys() ?? []), spacer: \(scene.layer(scene.row.spacer)?.animationKeys() ?? [])"
+        )
         #expect(move.fromValue as? CGPoint == CGPoint(x: 25, y: 5))
         #expect(move.toValue as? CGPoint == CGPoint(x: 65, y: 5))
         #expect(move.duration == 0.25)
@@ -162,7 +165,10 @@
         #expect(scene.layer(scene.row.badge) == nil)
         #expect(badge.superlayer === scene.layer(scene.row))
         #expect(badge.opacity == 0)
-        let fade = try #require(badge.animation(forKey: "opacity") as? CABasicAnimation)
+        let fade = try #require(
+            badge.animation(forKey: "opacity") as? CABasicAnimation,
+            "badge: \(badge.animationKeys() ?? [])"
+        )
         #expect(fade.fromValue as? Float == 1)
         #expect(fade.toValue as? Float == 0)
 
@@ -229,7 +235,10 @@
         scene.render()
 
         let dot = try #require(scene.layer(scene.row.dot))
-        let color = try #require(dot.animation(forKey: "backgroundColor") as? CABasicAnimation)
+        let color = try #require(
+            dot.animation(forKey: "backgroundColor") as? CABasicAnimation,
+            "dot: \(dot.animationKeys() ?? [])"
+        )
         let from = color.fromValue as! CGColor
         #expect(from.alpha == 0)
         #expect(dot.animation(forKey: "cornerRadius") != nil)
