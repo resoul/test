@@ -1,7 +1,7 @@
 # FlexboxEngine против CSS
 
 Эталон: chromium 141.0.7390.37. Допуск: 0.05 pt.
-Сгенерировано `TRELLIS_CSS_RECORD=1 swift test --filter cssFlexboxConformance`.
+Сгенерировано `CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance`.
 
 | Итог | Кейсов |
 |---|---|

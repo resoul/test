@@ -9,13 +9,14 @@ import Testing
 //
 // A case ends in one of three outcomes: `pass`, `fail` (a frame differs), or `unsupported`
 // (the case uses CSS the engine cannot express at all — `margin: auto`, `order`, …). The
-// known outcome of every case is recorded in Conformance/CSSFlexbox/expectations/
-// trellis.json, so this test fails on any change in either direction: a regression, or a
-// case that started passing and needs its expectation updated. Record a new baseline with
+// known outcome of every case is recorded in
+// Conformance/CSSFlexbox/expectations/engine-legacy.json, so this test fails on any change in
+// either direction: a regression, or a case that started passing and needs its expectation
+// updated. Record a new baseline with
 //
-//     TRELLIS_CSS_RECORD=1 swift test --filter cssFlexboxConformance
+//     CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance
 //
-// which rewrites the expectations and Conformance/CSSFlexbox/reports/trellis.md.
+// which rewrites the expectations and Conformance/CSSFlexbox/reports/engine-legacy.md.
 
 private let conformanceTolerance = 0.05
 
@@ -426,7 +427,7 @@ private func cssReport(
         "# FlexboxEngine против CSS",
         "",
         "Эталон: \(fixture.browser). Допуск: \(conformanceTolerance) pt.",
-        "Сгенерировано `TRELLIS_CSS_RECORD=1 swift test --filter cssFlexboxConformance`.",
+        "Сгенерировано `CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance`.",
         "",
         "| Итог | Кейсов |",
         "|---|---|",
@@ -458,14 +459,14 @@ private func cssReport(
 @Test
 func cssFlexboxConformance() throws {
     let fixtureURL = conformanceRoot.appendingPathComponent("fixtures/flexbox.json")
-    let expectationsURL = conformanceRoot.appendingPathComponent("expectations/trellis.json")
-    let reportURL = conformanceRoot.appendingPathComponent("reports/trellis.md")
+    let expectationsURL = conformanceRoot.appendingPathComponent("expectations/engine-legacy.json")
+    let reportURL = conformanceRoot.appendingPathComponent("reports/engine-legacy.md")
 
     let fixture = try JSONDecoder().decode(CSSFixture.self, from: Data(contentsOf: fixtureURL))
     let outcomes = fixture.cases.map { (name: $0.name, outcome: runCSSCase($0)) }
     #expect(!outcomes.isEmpty)
 
-    if ProcessInfo.processInfo.environment["TRELLIS_CSS_RECORD"] == "1" {
+    if ProcessInfo.processInfo.environment["CSS_CONFORMANCE_RECORD"] == "1" {
         let pairs = outcomes.map { ($0.name, $0.outcome.name) }
         let expectations = Dictionary(uniqueKeysWithValues: pairs)
         let encoder = JSONEncoder()
@@ -485,7 +486,7 @@ func cssFlexboxConformance() throws {
     }
 
     guard let data = try? Data(contentsOf: expectationsURL) else {
-        let hint = "TRELLIS_CSS_RECORD=1 swift test --filter cssFlexboxConformance"
+        let hint = "CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance"
         Issue.record("No CSS conformance baseline at \(expectationsURL.path); record: \(hint)")
         return
     }

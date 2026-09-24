@@ -1,6 +1,6 @@
 import Testing
 
-@testable import V22Layout
+@testable import LayoutCore
 
 @Test
 func cancelledPassThrowsAndReturnsNothing() {

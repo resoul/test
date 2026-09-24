@@ -48,8 +48,8 @@
 ## Первый шаг
 
 **Статус: выполнен.** Baseline старого движка:
-[expectations/trellis.json](../../Conformance/CSSFlexbox/expectations/trellis.json),
-отчёт — [reports/trellis.md](../../Conformance/CSSFlexbox/reports/trellis.md):
+[expectations/engine-legacy.json](../../Conformance/CSSFlexbox/expectations/engine-legacy.json),
+отчёт — [reports/engine-legacy.md](../../Conformance/CSSFlexbox/reports/engine-legacy.md):
 **107 pass, 29 fail, 6 unsupported из 142.** Все 29 падений покрыты дефектами #95–#106
 (шесть не сверенных вручную — остальные варианты `wrap-reverse`, #102).
 

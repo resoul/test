@@ -26,11 +26,21 @@ D09», «см. ADR 0007», «по плану, этап E1», «дефект #95�
 Пути к данным, которые код читает (например, фикстуры в `Conformance/`), — не ссылки на
 документацию, а часть поведения; их упоминать можно.
 
+## Имена
+
+**Имена модулей, папок, файлов, типов и переменных окружения описывают содержимое** и не
+содержат названия продукта (`Trellis`) или кодового имени версии (`v22`): продукт может
+получить другое имя, версия — другой номер. Так: модуль `LayoutCore`, тесты
+`LayoutCoreTests`, baseline `expectations/engine.json`, переменная
+`CSS_CONFORMANCE_RECORD`.
+
+Исключение пока одно — корневая папка рабочего пространства `v22/`, до решения о названии.
+
 ## Остальные правила
 
 - **Изоляция.** `@unchecked Sendable`, `nonisolated(unsafe)` и `@preconcurrency` запрещены.
   Модуль раскладки — чистые функции над иммутабельными `Sendable`-значениями.
-- **Платформа.** `V22Layout` импортирует только Foundation и собирается на Linux. `#if os(...)`
+- **Платформа.** `LayoutCore` импортирует только Foundation и собирается на Linux. `#if os(...)`
   запрещён.
 - **Документация публичного API.** Каждое `public` объявление несёт `Ownership:`,
   `Isolation:`, `Errors:`, `Cancellation:`.
@@ -47,7 +57,7 @@ D09», «см. ADR 0007», «по плану, этап E1», «дефект #95�
 cd v22
 swift build
 swift test                                                   # включая CSS conformance
-V22_CSS_RECORD=1 swift test --filter cssFlexboxConformance   # записать новый baseline
+CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance   # записать новый baseline
 ```
 
 Эталоны CSS — `../Conformance/CSSFlexbox/` (генерация — `generate.cjs` через Chromium).

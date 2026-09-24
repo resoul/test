@@ -124,9 +124,9 @@
 
 **Критерий выполнен (2026-09-24): 142 из 142**, `unsupported` нет — `margin: auto` и
 `order` поддержаны. Для сравнения: старый движок Trellis — 107 / 29 fail / 6 unsupported.
-Код — `v22/Sources/V22Layout`, прогон — `v22/Tests/V22LayoutTests`, baseline —
-[expectations/v22.json](../../Conformance/CSSFlexbox/expectations/v22.json), отчёт —
-[reports/v22.md](../../Conformance/CSSFlexbox/reports/v22.md). Собирается и проходит на
+Код — `v22/Sources/LayoutCore`, прогон — `v22/Tests/LayoutCoreTests`, baseline —
+[expectations/engine.json](../../Conformance/CSSFlexbox/expectations/engine.json), отчёт —
+[reports/engine.md](../../Conformance/CSSFlexbox/reports/engine.md). Собирается и проходит на
 Linux (Swift 6.4); на Mac не прогонялось.
 
 Честная оговорка: алгоритм писался при известном наборе из 142 кейсов, поэтому 142/142 —
@@ -135,7 +135,7 @@ Linux (Swift 6.4); на Mac не прогонялось.
 сверенными с Chromium).
 
 Найдено по ходу:
-- модуль не может называться `Layout` — это протокол SwiftUI; рабочее имя `V22Layout`;
+- модуль не может называться `Layout` — это протокол SwiftUI; модуль назван `LayoutCore`;
 - тип длины не может называться `Dimension` — это класс Foundation; назван `Length`.
 
 ## Диагностика

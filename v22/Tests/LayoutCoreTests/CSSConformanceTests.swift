@@ -1,17 +1,17 @@
 import Foundation
 import Testing
 
-@testable import V22Layout
+@testable import LayoutCore
 
 // Compares FlexboxEngine with CSS Flexbox as rendered by Chromium. Every case in
 // Conformance/CSSFlexbox/fixtures/flexbox.json is a tree with the frame Chromium gave each
 // node; the test lays out the same tree and compares every frame within `tolerance`.
 //
 // The known outcome of every case (pass / fail / unsupported) is stored in
-// Conformance/CSSFlexbox/expectations/v22.json, and any change in either direction fails the
+// Conformance/CSSFlexbox/expectations/engine.json, and any change in either direction fails the
 // test. Record a new baseline, together with a readable report next to it, with
 //
-//     V22_CSS_RECORD=1 swift test --filter cssFlexboxConformance
+//     CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance
 
 private let tolerance = 0.05
 
@@ -362,7 +362,7 @@ private func run(_ testCase: Case) -> Outcome {
 // MARK: - Baseline
 
 private let conformanceRoot = URL(fileURLWithPath: #filePath)
-    .deletingLastPathComponent()  // V22LayoutTests
+    .deletingLastPathComponent()  // LayoutCoreTests
     .deletingLastPathComponent()  // Tests
     .deletingLastPathComponent()  // v22
     .deletingLastPathComponent()  // repository root
@@ -374,7 +374,7 @@ private func report(_ fixture: Fixture, _ outcomes: [(name: String, outcome: Out
         "# v22 FlexboxEngine против CSS",
         "",
         "Эталон: \(fixture.browser). Допуск: \(tolerance) pt.",
-        "Сгенерировано `V22_CSS_RECORD=1 swift test --filter cssFlexboxConformance` в `v22/`.",
+        "Сгенерировано `CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance` в `v22/`.",
         "",
         "| Итог | Кейсов |",
         "|---|---|",
@@ -406,14 +406,14 @@ private func report(_ fixture: Fixture, _ outcomes: [(name: String, outcome: Out
 @Test
 func cssFlexboxConformance() throws {
     let fixtureURL = conformanceRoot.appendingPathComponent("fixtures/flexbox.json")
-    let expectationsURL = conformanceRoot.appendingPathComponent("expectations/v22.json")
-    let reportURL = conformanceRoot.appendingPathComponent("reports/v22.md")
+    let expectationsURL = conformanceRoot.appendingPathComponent("expectations/engine.json")
+    let reportURL = conformanceRoot.appendingPathComponent("reports/engine.md")
 
     let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: fixtureURL))
     let outcomes = fixture.cases.map { (name: $0.name, outcome: run($0)) }
     #expect(!outcomes.isEmpty)
 
-    if ProcessInfo.processInfo.environment["V22_CSS_RECORD"] == "1" {
+    if ProcessInfo.processInfo.environment["CSS_CONFORMANCE_RECORD"] == "1" {
         let expectations = Dictionary(
             uniqueKeysWithValues: outcomes.map { ($0.name, $0.outcome.name) }
         )
@@ -425,7 +425,7 @@ func cssFlexboxConformance() throws {
     }
 
     guard let data = try? Data(contentsOf: expectationsURL) else {
-        let hint = "V22_CSS_RECORD=1 swift test --filter cssFlexboxConformance"
+        let hint = "CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance"
         Issue.record("No v22 CSS conformance baseline at \(expectationsURL.path); record: \(hint)")
         return
     }

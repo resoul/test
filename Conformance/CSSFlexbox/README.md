@@ -25,7 +25,7 @@ Chromium (как хост даёт bounds корню) и сравнивает fr
 | `fail` | хотя бы один frame отличается — ошибка математики |
 | `unsupported` | кейс использует CSS, который движок не может выразить (`margin: auto`, `order`, проценты в отступах) — пробел в словаре стилей, а не ошибка математики |
 
-Тест сравнивает итоги с `expectations/trellis.json` и падает при **любом** изменении:
+Тест сравнивает итоги с `expectations/engine-legacy.json` и падает при **любом** изменении:
 и при регрессии, и когда кейс начал проходить (тогда baseline надо обновить осознанно).
 
 ## Команды
@@ -39,7 +39,7 @@ NODE_PATH="$(npm root -g)" node Conformance/CSSFlexbox/generate.cjs
 Записать baseline и отчёт для текущего движка:
 
 ```sh
-TRELLIS_CSS_RECORD=1 swift test --filter cssFlexboxConformance
+CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance
 ```
 
 Обычная проверка (входит в `swift test`):
@@ -48,12 +48,12 @@ TRELLIS_CSS_RECORD=1 swift test --filter cssFlexboxConformance
 swift test --filter cssFlexboxConformance
 ```
 
-Движок v22 (отдельный пакет, baseline `expectations/v22.json`, отчёт `reports/v22.md`):
+Движок v22 (отдельный пакет, baseline `expectations/engine.json`, отчёт `reports/engine.md`):
 
 ```sh
 cd v22
 swift test --filter cssFlexboxConformance
-V22_CSS_RECORD=1 swift test --filter cssFlexboxConformance
+CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance
 ```
 
 ## Общие правила кейсов
