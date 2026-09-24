@@ -4,8 +4,8 @@ import Testing
 @testable import LayoutCore
 
 // Compares FlexboxEngine with CSS Flexbox as rendered by Chromium. Every case in
-// Conformance/CSSFlexbox/fixtures/flexbox.json is a tree with the frame Chromium gave each
-// node; the test lays out the same tree and compares every frame within `tolerance`.
+// Conformance/CSSFlexbox/fixtures/ (hand-written flexbox.json and seeded random.json) is a
+// tree with the frame Chromium gave each node; the test lays out the same tree and compares every frame within `tolerance`.
 //
 // The known outcome of every case (pass / fail / unsupported) is stored in
 // Conformance/CSSFlexbox/expectations/engine.json, and any change in either direction fails the
@@ -405,11 +405,18 @@ private func report(_ fixture: Fixture, _ outcomes: [(name: String, outcome: Out
 
 @Test
 func cssFlexboxConformance() throws {
-    let fixtureURL = conformanceRoot.appendingPathComponent("fixtures/flexbox.json")
+    // Hand-written cases, then seeded random trees; both rendered by the same browser.
+    let fixtureFiles = ["fixtures/flexbox.json", "fixtures/random.json"]
     let expectationsURL = conformanceRoot.appendingPathComponent("expectations/engine.json")
     let reportURL = conformanceRoot.appendingPathComponent("reports/engine.md")
 
-    let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: fixtureURL))
+    let fixtures = try fixtureFiles.map { file in
+        try JSONDecoder().decode(
+            Fixture.self,
+            from: Data(contentsOf: conformanceRoot.appendingPathComponent(file))
+        )
+    }
+    let fixture = Fixture(browser: fixtures[0].browser, cases: fixtures.flatMap(\.cases))
     let outcomes = fixture.cases.map { (name: $0.name, outcome: run($0)) }
     #expect(!outcomes.isEmpty)
 

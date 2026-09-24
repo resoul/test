@@ -309,13 +309,101 @@ function html(node) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Random trees
+//
+// Hand-written cases only check what their author thought of. Random trees combine the same
+// vocabulary in ways nobody wrote down; a fixed seed keeps the set reproducible. Properties
+// the engine is known not to model yet are left out (baseline alignment, percentage padding
+// and margins, text).
+
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function randomTree(rng) {
+  const pick = (values) => values[Math.floor(rng() * values.length)];
+  const chance = (p) => rng() < p;
+
+  function node(depth, isRoot) {
+    const s = {};
+    if (isRoot) {
+      s.width = pick([200, 300, 360]);
+      s.height = pick([100, 200, 300]);
+      if (chance(0.15)) s.direction = 'rtl';
+    }
+    if (chance(0.5)) s.flexDirection = pick(directions);
+    if (chance(0.3)) s.flexWrap = pick(['wrap', 'wrap-reverse']);
+    if (chance(0.4)) s.justifyContent = pick(justifies);
+    if (chance(0.4)) s.alignItems = pick(['stretch', 'flex-start', 'flex-end', 'center']);
+    if (chance(0.25)) s.alignContent = pick(alignContents);
+    if (chance(0.3)) s.rowGap = pick([0, 4, 10]);
+    if (chance(0.3)) s.columnGap = pick([0, 4, 10]);
+    if (chance(0.3)) {
+      s.padding = chance(0.5) ? pick([4, 10]) : [pick([0, 5]), pick([0, 10]), pick([0, 5]), pick([0, 15])];
+    }
+    if (!isRoot) {
+      if (chance(0.35)) s.flexGrow = pick([0, 1, 2, 0.5]);
+      if (chance(0.25)) s.flexShrink = pick([0, 1, 3]);
+      if (chance(0.25)) s.flexBasis = pick([0, 20, 60, '50%', 'auto']);
+      if (chance(0.5)) s.width = pick([20, 40, 80, 120, '50%', '25%']);
+      if (chance(0.5)) s.height = pick([10, 20, 40, 80, '50%']);
+      if (chance(0.15)) s.minWidth = pick([0, 30, 60]);
+      if (chance(0.15)) s.maxWidth = pick([40, 100, '50%']);
+      if (chance(0.1)) s.minHeight = pick([0, 30]);
+      if (chance(0.1)) s.maxHeight = pick([20, 60]);
+      if (chance(0.25)) s.alignSelf = pick(['auto', 'stretch', 'flex-start', 'flex-end', 'center']);
+      if (chance(0.25)) {
+        s.margin = chance(0.3)
+          ? pick([5, 'auto'])
+          : [pick([0, 5, 'auto']), pick([0, 10, 'auto']), pick([0, 5]), pick([0, 10, 'auto'])];
+      }
+      if (chance(0.08)) s.aspectRatio = pick([1, 2, 0.5]);
+      if (chance(0.1)) s.order = pick([-1, 1, 2]);
+      if (chance(0.08)) {
+        s.position = 'absolute';
+        for (const side of ['top', 'right', 'bottom', 'left']) {
+          if (chance(0.4)) s[side] = pick([0, 5, 20]);
+        }
+      }
+    }
+    const children = [];
+    if (depth < 3 && (isRoot || chance(0.45))) {
+      const count = isRoot ? 1 + Math.floor(rng() * 5) : 1 + Math.floor(rng() * 3);
+      for (let i = 0; i < count; i++) children.push(node(depth + 1, false));
+    } else if (!isRoot && chance(0.5)) {
+      s.content = [pick([10, 30, 50, 90]), pick([10, 20, 30])];
+    }
+    return n(s, ...children);
+  }
+
+  return node(0, true);
+}
+
+const randomSeed = 2026;
+const randomCount = 400;
+const randomCases = [];
+{
+  const rng = mulberry32(randomSeed);
+  for (let i = 0; i < randomCount; i++) {
+    const name = `random/${String(i).padStart(4, '0')}`;
+    randomCases.push({ name, group: 'random', root: randomTree(rng) });
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
 // Render
 
-(async () => {
-  const browser = await chromium.launch();
+async function render(browser, list, file, extra) {
   const page = await browser.newPage({ deviceScaleFactor: 1 });
   const out = [];
-  for (const c of cases) {
+  for (const c of list) {
     assignIDs(c.root);
     await page.setContent(
       `<!doctype html><html><body style="margin:0"><div style="position:absolute;left:0;top:0">${html(c.root)}</div></body></html>`,
@@ -329,17 +417,25 @@ function html(node) {
     });
     out.push({ name: c.name, group: c.group, root: c.root, expected: frames });
   }
+  await page.close();
   const fixture = {
     generator: 'Conformance/CSSFlexbox/generate.cjs',
     browser: `chromium ${browser.version()}`,
+    ...extra,
     caseCount: out.length,
     cases: out,
   };
+  const target = path.join(__dirname, 'fixtures', file);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, `${JSON.stringify(fixture, null, 1)}\n`);
+  console.log(`wrote ${out.length} cases to ${path.relative(process.cwd(), target)}`);
+}
+
+(async () => {
+  const browser = await chromium.launch();
+  await render(browser, cases, 'flexbox.json', {});
+  await render(browser, randomCases, 'random.json', { seed: randomSeed });
   await browser.close();
-  const file = path.join(__dirname, 'fixtures', 'flexbox.json');
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(fixture, null, 1)}\n`);
-  console.log(`wrote ${out.length} cases to ${path.relative(process.cwd(), file)}`);
 })().catch((error) => {
   console.error(error);
   process.exit(1);
