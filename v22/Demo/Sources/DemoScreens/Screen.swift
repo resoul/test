@@ -23,7 +23,8 @@
         }
     }
 
-    /// A colored circle.
+    /// A colored circle. Its size is set where it is placed (`.size(56)`): in a column,
+    /// an item without a width is stretched across it, as in CSS.
     @MainActor
     final class Avatar: Node {
         init(color: Color) {
@@ -97,7 +98,7 @@
             FlexContainer(.column) {
                 Breakpoint(from: 460) {
                     FlexContainer(.row) {
-                        avatar
+                        avatar.size(56)
                         FlexContainer(.column) {
                             name; handle; bio
                         }
@@ -109,7 +110,7 @@
                     .gap(16)
                 } otherwise: {
                     FlexContainer(.column) {
-                        avatar
+                        avatar.size(56)
                         name
                         handle
                         bio
