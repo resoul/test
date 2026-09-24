@@ -58,8 +58,8 @@
         }
 
         override func focusChanged(_ isFocused: Bool) {
-            appearance.scale = isFocused ? 1.15 : 1
-            appearance.shadow = isFocused ? Shadow(opacity: 0.25, radius: 10, y: 6) : nil
+            appearance.scale = isFocused ? 1.25 : 1
+            appearance.shadow = isFocused ? Shadow(opacity: 0.45, radius: 14, y: 10) : nil
         }
 
         override func update() {

@@ -332,7 +332,10 @@
 
         var preferredFocusEnvironments: [any UIFocusEnvironment] { [] }
         var parentFocusEnvironment: (any UIFocusEnvironment)? { view }
-        var focusItemContainer: (any UIFocusItemContainer)? { view }
+        /// The container of the item's own children, not of the item: a node is focused as a
+        /// whole, so there are none. The view here made the focus engine find the item's
+        /// siblings as its children, and the remote could not move the focus.
+        var focusItemContainer: (any UIFocusItemContainer)? { nil }
 
         func setNeedsFocusUpdate() {
             UIFocusSystem.focusSystem(for: self)?.requestFocusUpdate(to: self)
