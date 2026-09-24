@@ -165,7 +165,9 @@
                 title
                 hint
                 for card in cards { card }
-                rename.alignSelf(.start)
+                // At the end, under the Follow badges: the Apple TV remote moves the focus
+                // only to what lies in the direction pressed.
+                rename.alignSelf(.end)
             }
             .gap(16)
             .padding(24)

@@ -3,10 +3,6 @@
     import Nodes
     import NodesRender
     import UIKit
-    import os
-
-    /// Temporary: the focus handshake with tvOS, while defect #134 is open.
-    private let focusLog = Logger(subsystem: "dev.layout.nodes", category: "focus")
 
     /// A view that shows a tree of nodes: it lays the tree out in its bounds and draws it into
     /// its layer. Outside, it is an ordinary view — frames, Auto Layout (through
@@ -149,20 +145,7 @@
         /// Ownership: the view keeps the items. Isolation: MainActor. Errors: none.
         /// Cancellation: none.
         public override func focusItems(in rect: CGRect) -> [any UIFocusItem] {
-            let own = super.focusItems(in: rect)
-            let nodes = focusOrder.filter { $0.frame.intersects(rect) }
-            focusLog.notice(
-                "focusItems(in: \(String(describing: rect))) own=\(own.count) nodes=\(nodes.map(\.logLabel))"
-            )
-            return own + nodes
-        }
-
-        public override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
-            let result = super.shouldUpdateFocus(in: context)
-            focusLog.notice(
-                "shouldUpdateFocus \(String(describing: context.previouslyFocusedItem)) -> \(String(describing: context.nextFocusedItem)) heading=\(context.focusHeading.rawValue) result=\(result)"
-            )
-            return result
+            super.focusItems(in: rect) + focusOrder.filter { $0.frame.intersects(rect) }
         }
 
         /// The focused node's item, so a focus update keeps the focus where it is.
@@ -185,9 +168,6 @@
             with coordinator: UIFocusAnimationCoordinator
         ) {
             super.didUpdateFocus(in: context, with: coordinator)
-            focusLog.notice(
-                "didUpdateFocus \(String(describing: context.previouslyFocusedItem)) -> \(String(describing: context.nextFocusedItem)) heading=\(context.focusHeading.rawValue)"
-            )
             if let next = context.nextFocusedItem as? NodeFocusItem, next.view === self {
                 host.focus(next.node)
             } else if host.focusedNode != nil {
@@ -214,9 +194,6 @@
         ///
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-            focusLog.notice(
-                "pressesBegan \(presses.map { $0.type.rawValue }) firstResponder=\(self.isFirstResponder)"
-            )
             if presses.contains(where: { $0.type == .select }), host.selectBegan() {
                 isSelecting = true
             } else {
@@ -271,9 +248,6 @@
                 $0.isFocused && kept[$0.node] == nil
             }
             focusItemsByNode = kept
-            focusLog.notice(
-                "focus items \(self.focusOrder.map(\.logLabel)) in bounds \(String(describing: self.bounds))"
-            )
             if lostFocus || (!hadItems && !focusOrder.isEmpty) {
                 setNeedsFocusUpdate()
             }
@@ -355,10 +329,6 @@
         }
 
         var canBecomeFocused: Bool { true }
-
-        var logLabel: String {
-            "\(node) \(String(describing: frame))"
-        }
 
         var preferredFocusEnvironments: [any UIFocusEnvironment] { [] }
         var parentFocusEnvironment: (any UIFocusEnvironment)? { view }
