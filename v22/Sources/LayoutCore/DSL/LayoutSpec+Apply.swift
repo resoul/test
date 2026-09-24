@@ -204,9 +204,11 @@ struct LayoutTree {
             let key = ObjectIdentifier(element)
             if !expanding.contains(key), let embedded = element.embeddedLayout {
                 // The element is a flex container: the embedded layout's own style, then the
-                // modifiers of the element's place in its parent.
+                // modifiers of the element's place in its parent. A layout that is not a
+                // container (a single item, a `Breakpoint`) goes into a column, so it spans
+                // the element's width as a block does.
                 var own = embedded
-                if case .container = own.content {} else { own = LayoutSpec { embedded } }
+                if case .container = own.content {} else { own = LayoutSpec(.column) { embedded } }
                 own.patches += spec.patches
                 let (ownStyle, ownVariants) = own.resolvedStyle(spacing)
                 guard case let .container(items) = own.content else { return [] }

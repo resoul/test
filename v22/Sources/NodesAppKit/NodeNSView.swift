@@ -61,6 +61,15 @@
         /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
         public override var isFlipped: Bool { true }
 
+        /// A new size needs a new layout; AppKit asks for one by itself only for views laid
+        /// out by constraints.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func setFrameSize(_ newSize: NSSize) {
+            super.setFrameSize(newSize)
+            needsLayout = true
+        }
+
         /// Lays the tree out in the bounds and draws it.
         ///
         /// Ownership: updates the tree and the layers. Isolation: MainActor. Errors: none.

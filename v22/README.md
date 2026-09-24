@@ -26,6 +26,9 @@
   `LayoutAdapterTests` (только macOS).
 - `StateCore` (синхронное состояние с отслеживанием чтений) и `StateFlux` (мост к
   [Flux](https://github.com/resoul/flux) ≥ 1.2.1) — тесты `StateCoreTests`, `StateFluxTests`.
+- `Nodes`, `NodesRender`, `NodesUIKit`, `NodesAppKit` — дерево нод, отрисовка в
+  `CALayer`, текст на CoreText, `view.addSubnode(node)`.
+- `Demo/` — окно на нодах для Mac: `cd Demo && swift run`.
 - `Benchmarks/` — отдельный пакет: скорость движка рядом со старым движком Trellis на тех
   же деревьях.
 - [AGENTS.md](AGENTS.md) — правила кода v22, в том числе: **комментарии не ссылаются на
