@@ -1026,6 +1026,13 @@ commit, связывает состояние через `bindState`, ведёт
 общей кривой страниц и индикатора, один `PagerProgress`, `PageStateRestoring` для состояния
 вытесненных страниц и `RowSwipeContextKey = false` для страниц.
 
+**R14 — ADR 0037** ([tabbed-scroll-coordination.md](adr/0037-tabbed-scroll-coordination.md))
+фиксирует решения пользователя (2026-09-23, вариант Telegram): внешний вертикальный `ScrollNode`
+с шапкой и блоком «вкладки + pager» в высоту viewport ниже линии закрепления; прокрутка
+страниц выключена до закрепления; при раскрытии шапки наверх возвращается только выбранная
+страница; выбор глубокой страницы закрепляет вкладки. Уточнение ADR 0029: односторонняя передача
+инерции внешний → выбранная страница только в точке закрепления, вторым этапом R14.
+
 Прототип ([TransitionOverlayPrototypeTests.swift](../Tests/TrellisRenderTests/TransitionOverlayPrototypeTests.swift),
 4 теста, только `QuartzCore`/`Foundation`+`AppKit`/`UIKit`, без `TrellisCore`/
 `TrellisRender`) подтвердил реальным `CALayer`/`CABasicAnimation` (`speed = 0` +

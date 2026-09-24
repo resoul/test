@@ -33,7 +33,13 @@
             var isTrellisUserInteractionEnabled = true
 
             override func scrollWheel(with event: NSEvent) {
-                guard isTrellisUserInteractionEnabled else { return }
+                // A disabled scroll view acts as if it were not there: the event goes up the
+                // responder chain to an enclosing scroll view (ADR 0037 §3 — a locked page
+                // leaves the wheel to the outer scroll).
+                guard isTrellisUserInteractionEnabled else {
+                    nextResponder?.scrollWheel(with: event)
+                    return
+                }
 
                 super.scrollWheel(with: event)
             }

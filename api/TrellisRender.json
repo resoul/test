@@ -1434,6 +1434,17 @@
     {
       "accessLevel": "public",
       "availability": [],
+      "declaration": "@MainActor func applyScrollConfiguration(of node: ScrollNode)",
+      "identifier": "s:13TrellisRender14NodeHostBridgeC24applyScrollConfiguration2ofy0A4Core0gC0C_tF",
+      "kind": "swift.method",
+      "pathComponents": [
+        "NodeHostBridge",
+        "applyScrollConfiguration(of:)"
+      ]
+    },
+    {
+      "accessLevel": "public",
+      "availability": [],
       "declaration": "@MainActor var metadataOnlyPublishCount: Int { get }",
       "identifier": "s:13TrellisRender14NodeHostBridgeC24metadataOnlyPublishCountSivp",
       "kind": "swift.property",

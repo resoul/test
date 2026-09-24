@@ -134,13 +134,15 @@ private final class ExpandTransitionHarness {
 
 @Test @MainActor
 func m12_gestureGrabbingAnInFlightOpenContinuesProgressWithoutResettingOrJumping() async throws {
-    let harness = ExpandTransitionHarness()
+    // A duration no machine load can outrun (defect #60): with 2 s, a busy full-suite run kept
+    // the main actor away long enough for the automatic open to finish before the grab.
+    let harness = ExpandTransitionHarness(duration: .seconds(60))
     await harness.waitForCommit()
     #expect(harness.bridge.presentTransition(harness.request))
     #expect(harness.bridge.transitionSession?.state == .opening)
 
     let overlay = try #require(harness.bridge.transitionSession?.overlayLayer)
-    // Let real automatic playback advance partway through a long (2s) duration.
+    // Let real automatic playback advance partway through the long duration.
     try await Task.sleep(for: .milliseconds(150))
     let beforeGrab =
         (overlay.presentation()?.value(forKeyPath: "position.x") as? CGFloat)

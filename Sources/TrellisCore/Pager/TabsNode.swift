@@ -78,6 +78,10 @@ public final class TabsNode<ID: Hashable & Sendable>: Node, HostedContainer {
         didSet { if tabsAppearance != oldValue { rebuild() } }
     }
 
+    /// Asked before a button selects its page; `true` means the activation was handled
+    /// (`TabbedScrollNode` handles a tap on the selected tab, ADR 0037 §6).
+    var handlesActivation: (@MainActor (ID) -> Bool)?
+
     private let row = Node()
     private let indicator = Node()
     private var buttons: [(id: ID, button: ControlNode, title: TextNode)] = []
@@ -186,7 +190,10 @@ public final class TabsNode<ID: Hashable & Sendable>: Node, HostedContainer {
             button.accessibility.identifier = "tab-\(tab.id)"
             let id = tab.id
             button.activation = { [weak self] in
-                self?.pager.select(id)
+                guard let self else { return }
+                guard self.handlesActivation?(id) != true else { return }
+
+                self.pager.select(id)
             }
             row.addSubnode(button)
             buttons.append((id, button, title))

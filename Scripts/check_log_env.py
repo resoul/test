@@ -22,12 +22,13 @@ def write_consumer():
     source = WORKDIR / "Sources" / "LogSmoke"
     source.mkdir(parents=True, exist_ok=True)
     package_path = json.dumps(str(ROOT))
+    # `name:` keeps `package: "Trellis"` independent of the checkout directory's name (#94).
     (WORKDIR / "Package.swift").write_text('''// swift-tools-version: 6.0
 import PackageDescription
 let package = Package(
     name: "TrellisLogSmoke",
     platforms: [.macOS(.v14)],
-    dependencies: [.package(path: ''' + package_path + ''')],
+    dependencies: [.package(name: "Trellis", path: ''' + package_path + ''')],
     targets: [.executableTarget(name: "LogSmoke", dependencies: [
         .product(name: "TrellisCore", package: "Trellis")
     ])],

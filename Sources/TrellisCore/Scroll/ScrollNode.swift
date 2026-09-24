@@ -25,7 +25,9 @@ open class ScrollNode: Node {
     /// This node's scroll configuration. Assigning an equal value is a no-op; changing it does
     /// not by itself request a flush — a host bridge reads the new value at its next commit
     /// (`scroll-configuration.md` §4's per-field timing table is the adapter's responsibility,
-    /// not this node's).
+    /// not this node's). A container that needs it at once — before the next touch, from an
+    /// offset tick that does not commit — calls `ContainerHost.applyScrollConfiguration(of:)`
+    /// (ADR 0037, #93).
     ///
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: not
     /// applicable.

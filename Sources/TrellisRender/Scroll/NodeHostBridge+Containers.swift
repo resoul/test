@@ -82,6 +82,23 @@ extension NodeHostBridge: ContainerHost {
         renderer.scrollBacking(for: node.id)?.presentedContentOffset
     }
 
+    /// Pushes `node.configuration` to its native backing without waiting for a commit (ADR
+    /// 0037 §3); the next commit applies the same value again.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func applyScrollConfiguration(of node: ScrollNode) {
+        guard let backing = renderer.scrollBacking(for: node.id) else { return }
+
+        backing.apply(configuration: node.configuration)
+        Log.on(
+            .event,
+            "scroll-configuration-applied",
+            host: hostID,
+            node: node.id,
+            "interaction=\(node.configuration.userInteractionEnabled)"
+        )
+    }
+
     /// Applies queued shifts to native backings. Called right after the renderer committed
     /// geometry and content sizes, before hit-test and scroll-state publication read offsets.
     func applyPendingOffsetAdjustments(root: Node) {
