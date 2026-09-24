@@ -1,4 +1,4 @@
-#if canImport(AppKit)
+#if canImport(CoreText)
     import LayoutCore
     import Nodes
     import NodesRender
@@ -153,6 +153,46 @@
             }
             .gap(16)
             .padding(24)
+        }
+    }
+
+    /// The demo: two profiles and the screen showing them. Mac and iOS apps only host
+    /// `screen` in a node view.
+    ///
+    /// Ownership: the caller owns the model; the model owns the screen. Isolation: MainActor.
+    /// Errors: none. Cancellation: not applicable.
+    @MainActor
+    public final class DemoModel {
+        private let profiles = [
+            Profile(
+                name: "Ada Lovelace",
+                bio: "Wrote the first program for a machine that did not exist yet.",
+                color: Color(red: 0.93, green: 0.45, blue: 0.35)
+            ),
+            Profile(
+                name: "Grace Hopper",
+                bio: "Built the first compiler, and found the first actual bug.",
+                color: Color(red: 0.36, green: 0.66, blue: 0.47)
+            ),
+        ]
+        private let names = ["Ada Lovelace", "Augusta Ada King", "Countess of Lovelace"]
+        private var nameIndex = 0
+
+        /// The root node to show.
+        ///
+        /// Ownership: owned by the model. Isolation: MainActor. Errors: none. Cancellation:
+        /// not applicable.
+        public private(set) lazy var screen: Node = Screen(profiles: profiles) { [weak self] in
+            self?.renameAda()
+        }
+
+        /// Ownership: the caller owns the model. Isolation: MainActor. Errors: none.
+        /// Cancellation: not applicable.
+        public init() {}
+
+        private func renameAda() {
+            nameIndex = (nameIndex + 1) % names.count
+            profiles[0].name.value = names[nameIndex]
         }
     }
 #endif

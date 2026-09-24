@@ -1,32 +1,17 @@
 #if canImport(AppKit)
     import AppKit
-    import Nodes
+    import DemoScreens
     import NodesAppKit
 
-    /// Opens the window: the node screen above a bar of buttons that change its state.
+    /// Opens a window showing the demo screen.
     @MainActor
     final class DemoApp: NSObject, NSApplicationDelegate {
         private var window: NSWindow?
-        private let profiles = [
-            Profile(
-                name: "Ada Lovelace",
-                bio: "Wrote the first program for a machine that did not exist yet.",
-                color: Color(red: 0.93, green: 0.45, blue: 0.35)
-            ),
-            Profile(
-                name: "Grace Hopper",
-                bio: "Built the first compiler, and found the first actual bug.",
-                color: Color(red: 0.36, green: 0.66, blue: 0.47)
-            ),
-        ]
-        private let names = ["Ada Lovelace", "Augusta Ada King", "Countess of Lovelace"]
-        private var nameIndex = 0
+        private let model = DemoModel()
 
         func applicationDidFinishLaunching(_ notification: Notification) {
             let content = NSView(frame: NSRect(x: 0, y: 0, width: 640, height: 560))
-            let screen = content.addSubnode(
-                Screen(profiles: profiles) { [weak self] in self?.renameAda() }
-            )
+            let screen = content.addSubnode(model.screen)
             screen.frame = content.bounds
             screen.autoresizingMask = [.width, .height]
             screen.host.solvesInBackground = true
@@ -46,11 +31,6 @@
 
         func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
             true
-        }
-
-        private func renameAda() {
-            nameIndex = (nameIndex + 1) % names.count
-            profiles[0].name.value = names[nameIndex]
         }
     }
 

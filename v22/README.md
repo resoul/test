@@ -28,7 +28,9 @@
   [Flux](https://github.com/resoul/flux) ≥ 1.2.1) — тесты `StateCoreTests`, `StateFluxTests`.
 - `Nodes`, `NodesRender`, `NodesUIKit`, `NodesAppKit` — дерево нод, отрисовка в
   `CALayer`, текст на CoreText, `view.addSubnode(node)`.
-- `Demo/` — окно на нодах для Mac: `cd Demo && swift run`.
+- `Demo/` — экран на нодах (`DemoScreens`) и окно для Mac: `cd Demo && swift run`.
+- `DemoiOS.swiftpm` — тот же экран на iPhone/iPad: открыть папку в Xcode, запустить на
+  симуляторе.
 - `Benchmarks/` — отдельный пакет: скорость движка рядом со старым движком Trellis на тех
   же деревьях.
 - [AGENTS.md](AGENTS.md) — правила кода v22, в том числе: **комментарии не ссылаются на
