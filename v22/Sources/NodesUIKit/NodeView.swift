@@ -152,7 +152,7 @@
             let own = super.focusItems(in: rect)
             let nodes = focusOrder.filter { $0.frame.intersects(rect) }
             focusLog.notice(
-                "focusItems(in: \(String(describing: rect))) own=\(own.count) nodes=\(nodes.map(\.debugDescription))"
+                "focusItems(in: \(String(describing: rect))) own=\(own.count) nodes=\(nodes.map(\.logLabel))"
             )
             return own + nodes
         }
@@ -272,7 +272,7 @@
             }
             focusItemsByNode = kept
             focusLog.notice(
-                "focus items \(self.focusOrder.map(\.debugDescription)) in bounds \(String(describing: self.bounds))"
+                "focus items \(self.focusOrder.map(\.logLabel)) in bounds \(String(describing: self.bounds))"
             )
             if lostFocus || (!hadItems && !focusOrder.isEmpty) {
                 setNeedsFocusUpdate()
@@ -356,7 +356,7 @@
 
         var canBecomeFocused: Bool { true }
 
-        override var debugDescription: String {
+        var logLabel: String {
             "\(node) \(String(describing: frame))"
         }
 
