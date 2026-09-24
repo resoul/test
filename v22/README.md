@@ -24,6 +24,8 @@
 - `Package.swift` — отдельный пакет: `LayoutCore` (движок и DSL, собирается и на Linux),
   `LayoutUIKit`, `LayoutAppKit` (адаптеры view); тесты `LayoutCoreTests`,
   `LayoutAdapterTests` (только macOS).
+- `StateCore` (синхронное состояние с отслеживанием чтений) и `StateFlux` (мост к
+  [Flux](https://github.com/resoul/flux) ≥ 1.3.0) — тесты `StateCoreTests`, `StateFluxTests`.
 - `Benchmarks/` — отдельный пакет: скорость движка рядом со старым движком Trellis на тех
   же деревьях.
 - [AGENTS.md](AGENTS.md) — правила кода v22, в том числе: **комментарии не ссылаются на
