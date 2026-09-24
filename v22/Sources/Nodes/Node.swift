@@ -82,6 +82,24 @@ open class Node: LayoutElement {
         didSet { if appearance != oldValue { host?.setNeedsRender() } }
     }
 
+    /// How the node presents itself to assistive technologies; see `Accessibility`.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var accessibility = Accessibility() {
+        didSet { if accessibility != oldValue { host?.setNeedsRender() } }
+    }
+
+    /// What the node's content says to assistive technologies by itself — text, for a node
+    /// showing text. The default is `nil`.
+    ///
+    /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
+    open var accessibilityContentLabel: String? { nil }
+
+    /// Traits of the node's content by itself — `.staticText` for text. The default is none.
+    ///
+    /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
+    open var accessibilityContentTraits: AccessibilityTraits { [] }
+
     /// What a tap on the node, or on a subnode without a tap action of its own, does.
     ///
     /// Ownership: the node keeps the closure; it must not keep the node. Isolation:

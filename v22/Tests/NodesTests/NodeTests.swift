@@ -562,3 +562,93 @@ func contentMeasuredOnlyOnTheMainThreadIsSolvedThere() {
     #expect(host.passes == 2)
     host.detach()
 }
+
+// MARK: - Accessibility
+
+@MainActor
+private final class Label: Node {
+    let text: String
+
+    init(_ text: String) {
+        self.text = text
+    }
+
+    override var layoutContent: LeafContent? { .size(width: 60, height: 20) }
+    override var accessibilityContentLabel: String? { text }
+    override var accessibilityContentTraits: AccessibilityTraits { .staticText }
+}
+
+@MainActor
+private final class ProfileRow: Node {
+    let avatar = Box(40, 40)
+    let name = Label("Ada")
+    let bio = Label("Wrote the first program")
+    let badge = Badge()
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.row) {
+            avatar
+            FlexContainer(.column) {
+                name; bio
+            }
+            badge
+        }
+        .padding(10)
+    }
+}
+
+@MainActor
+private final class Badge: Node {
+    let label = Label("Follow")
+    var taps = 0
+
+    override init() {
+        super.init()
+        onTap = { [unowned self] in taps += 1 }
+    }
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer { label }.padding(5)
+    }
+}
+
+@Test @MainActor
+func textAndTappableNodesBecomeElementsInReadingOrder() {
+    let row = ProfileRow()
+    let host = host(row)
+
+    let items = host.accessibilityItems()
+
+    #expect(items.map(\.label) == ["Ada", "Wrote the first program", "Follow"])
+    #expect(items.map(\.traits) == [.staticText, .staticText, .button])
+    #expect(items[0].frame == LayoutRect(x: 50, y: 10, width: 60, height: 20))
+    #expect(items[2].node == row.badge.id)
+    host.detach()
+}
+
+@Test @MainActor
+func accessibilitySettingsOverrideWhatNodesSayByThemselves() {
+    let row = ProfileRow()
+    row.avatar.accessibility.label = "Portrait of Ada"
+    row.avatar.accessibility.traits = .image
+    row.bio.accessibility.isElement = false
+    row.badge.accessibility.label = "Follow Ada"
+    let host = host(row)
+
+    let items = host.accessibilityItems()
+
+    #expect(items.map(\.label) == ["Portrait of Ada", "Ada", "Follow Ada"])
+    #expect(items[0].traits == .image)
+    host.detach()
+}
+
+@Test @MainActor
+func activatingAnElementTapsItsNode() {
+    let row = ProfileRow()
+    let host = host(row)
+
+    #expect(host.activate(row.badge.id))
+    #expect(!host.activate(row.name.id))
+    #expect(row.badge.taps == 1)
+    host.detach()
+}

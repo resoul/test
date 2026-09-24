@@ -296,6 +296,89 @@ public final class NodeHost {
         target.pressChanged(false)
     }
 
+    // MARK: - Accessibility
+
+    /// The accessibility elements of the tree at its last layout, in reading order.
+    ///
+    /// Ownership: returns values. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    public func accessibilityItems() -> [AccessibilityItem] {
+        var items: [AccessibilityItem] = []
+        collect(root, origin: .zero, into: &items)
+        return items
+    }
+
+    /// Performs the default action of the element for `node` — its tap. Returns whether it
+    /// had one.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    @discardableResult
+    public func activate(_ node: NodeID) -> Bool {
+        guard let action = mounted[node]?.onTap else { return false }
+
+        action()
+        return true
+    }
+
+    private func collect(_ node: Node, origin: LayoutPoint, into items: inout [AccessibilityItem]) {
+        guard !node.isHidden, node.appearance.opacity > 0 else { return }
+
+        let frame = LayoutRect(
+            x: origin.x + node.frame.origin.x,
+            y: origin.y + node.frame.origin.y,
+            width: node.frame.size.width,
+            height: node.frame.size.height
+        )
+        let settings = node.accessibility
+        let ownLabel = settings.label ?? node.accessibilityContentLabel
+        let isElement =
+            settings.isElement ?? (node.onTap != nil || (ownLabel.map { !$0.isEmpty } ?? false))
+        guard isElement else {
+            for subnode in node.subnodes {
+                collect(subnode, origin: frame.origin, into: &items)
+            }
+            return
+        }
+
+        var traits = node.accessibilityContentTraits.union(settings.traits)
+        if node.onTap != nil {
+            traits.insert(.button)
+            traits.remove(.staticText)
+        }
+        items.append(
+            AccessibilityItem(
+                node: node.id,
+                frame: frame,
+                label: ownLabel ?? spokenText(inside: node),
+                value: settings.value,
+                hint: settings.hint,
+                traits: traits
+            )
+        )
+    }
+
+    /// The labels of the visible nodes inside `node`, in order — the name of an element made
+    /// of several nodes.
+    private func spokenText(inside node: Node) -> String {
+        var parts: [String] = []
+        func visit(_ node: Node) {
+            guard !node.isHidden, node.appearance.opacity > 0,
+                node.accessibility.isElement != false
+            else { return }
+
+            if let label = node.accessibility.label ?? node.accessibilityContentLabel,
+                !label.isEmpty
+            {
+                parts.append(label)
+                return
+            }
+
+            node.subnodes.forEach(visit)
+        }
+        node.subnodes.forEach(visit)
+        return parts.joined(separator: ", ")
+    }
+
     /// Unmounts the whole tree and lets go of the root's host role. The host does nothing
     /// afterwards.
     ///

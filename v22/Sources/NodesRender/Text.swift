@@ -119,6 +119,12 @@
             TextLayout(text: text, style: style).draw(in: context, size: size)
         }
 
+        /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override var accessibilityContentLabel: String? { text }
+
+        /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override var accessibilityContentTraits: AccessibilityTraits { .staticText }
+
         private func contentChanged() {
             drawingRevision &+= 1
             setNeedsLayout()

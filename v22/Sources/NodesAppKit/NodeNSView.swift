@@ -22,6 +22,7 @@
         private let renderer = LayerRenderer()
         private let hostedLayer = CALayer()
         private var isLayingOut = false
+        private var accessibilityCache: [NSAccessibilityElement]?
 
         /// A view showing `root`.
         ///
@@ -88,6 +89,8 @@
             if host.needsRender {
                 renderer.render(host.root, in: hostedLayer, scale: host.scale)
                 host.didRender()
+                accessibilityCache = nil
+                NSAccessibility.post(element: self, notification: .layoutChanged)
             }
             if widthChanged {
                 // The height the tree wants depends on the width it has.
@@ -96,6 +99,28 @@
         }
 
         /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
+        /// The view is a container: its elements are the tree's.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func isAccessibilityElement() -> Bool {
+            false
+        }
+
+        /// The tree's accessibility elements (`NodeHost.accessibilityItems()`), rebuilt after
+        /// every drawing.
+        ///
+        /// Ownership: the view keeps the elements. Isolation: MainActor. Errors: none.
+        /// Cancellation: none.
+        public override func accessibilityChildren() -> [Any]? {
+            if let accessibilityCache { return accessibilityCache }
+
+            let elements = host.accessibilityItems().map {
+                NodeAccessibilityElement(parent: self, item: $0)
+            }
+            accessibilityCache = elements
+            return elements
+        }
+
         /// No width of its own — the surroundings give it one (constraints, SwiftUI, a
         /// frame), as for a paragraph of text — and the height the tree takes at the current
         /// width. A tree's widest content is a poor width to ask for: one long line of text
@@ -158,6 +183,46 @@
             let view = NodeNSView(root: node)
             addSubview(view)
             return view
+        }
+    }
+
+    /// One accessibility element of a node tree. It keeps the node's identity and asks the
+    /// host to act on it; it never holds the node itself.
+    @MainActor
+    final class NodeAccessibilityElement: NSAccessibilityElement {
+        private let node: NodeID
+        private weak var host: NodeHost?
+
+        init(parent: NodeNSView, item: AccessibilityItem) {
+            node = item.node
+            host = parent.host
+            super.init()
+            setAccessibilityParent(parent)
+            setAccessibilityLabel(item.label)
+            setAccessibilityValue(item.value)
+            setAccessibilityHelp(item.hint)
+            setAccessibilityRole(NodeAccessibilityElement.role(item.traits))
+            setAccessibilitySelected(item.traits.contains(.selected))
+            setAccessibilityEnabled(!item.traits.contains(.notEnabled))
+            setAccessibilityFrameInParentSpace(
+                NSRect(
+                    x: item.frame.origin.x,
+                    y: item.frame.origin.y,
+                    width: item.frame.size.width,
+                    height: item.frame.size.height
+                )
+            )
+        }
+
+        override func accessibilityPerformPress() -> Bool {
+            host?.activate(node) ?? false
+        }
+
+        private static func role(_ traits: AccessibilityTraits) -> NSAccessibility.Role {
+            if traits.contains(.button) { return .button }
+            if traits.contains(.image) { return .image }
+            if traits.contains(.staticText) || traits.contains(.header) { return .staticText }
+            return .group
         }
     }
 #endif
