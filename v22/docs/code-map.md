@@ -16,6 +16,9 @@
 | `Solver.cache` / `MeasureKey` | кэш измерений на один проход, без предела | Trellis ADR 0007, дефект #13 |
 | `Solver.compute(..., contentOnly:)` | размер содержимого без собственных `width`/`height` узла | CSS §4.5 (content size suggestion); закрывает Trellis #101 |
 | `clamp(_:_:_:_:)` | min побеждает max; не меньше padding | закрывает Trellis #100; решение border-box — [10](10-layout-engine.md#как-ведётся-работа), п. 3 |
+| `DefiniteAxes`, `OwnSize.definiteWidth/Height` | ширина definite, как только известна; высота — по §9.8 | дефекты #109, #113 |
+| `Axis`, `compute(..., contentOnly:)` | размер содержимого по одной оси | дефекты #110, #115 |
+| `leafSize` / `ratioDependent` | пропорция: перенос min/max, автоминимум по зависимой оси | дефект #112 |
 
 ## `Sources/LayoutCore/LayoutNode.swift`
 
@@ -46,10 +49,14 @@
 | `makeItem` — `crossForBasis` | stretch-размер definite до main-размера | CSS §9.8; закрывает Trellis #106 (aspect-ratio при stretch) |
 | `makeItem` — автоматический минимальный размер | `min-width: auto` | CSS §4.5; закрывает Trellis #101 |
 | `resolveFlexibleLengths` | цикл заморозки, сумма факторов < 1 | CSS §9.7; закрывает Trellis #98, #99 |
+| `flexLayout` — intrinsic row (`rawContribution`, `plainContribution`, `flexedContribution`) | собственная ширина row по вкладам детей, как в Blink | дефект #111 |
+| `flexLayout` — `wrap` без переноса при неизвестной ширине column | ширина column-wrap по самому широкому элементу | дефект #116 |
+| `flexLayout` — пропорция без размеров | ширина по содержимому, высота из пропорции | дефект #115 |
+| `FlexItem.stretches`, `mainIsDefinite` | stretch только при `auto`; definite после flex | дефекты #108, #114 |
 | `flexLayout` — used cross size | stretch минус cross-margin, затем min/max | закрывает Trellis #96, #97 |
 | `flexLayout` — fit-content ветка inner main | контейнер без размера в definite-пространстве | [10](10-layout-engine.md#что-пишется-заново-алгоритм-по-шагам-css-9) |
 | `alignMain` | auto-margin, затем `justify-content`, курсор с margin | закрывает Trellis #95 и `unsupported` `margin: auto` |
-| `distribute` | fallback при отрицательном свободном месте | CSS §8.2, §8.4 |
+| `distribute` | safe-fallback к началу по направлению письма | CSS Box Alignment §5.1; дефект #107 |
 
 ## `Sources/LayoutCore/AbsoluteLayout.swift`
 
@@ -57,7 +64,8 @@
 |---|---|---|
 | `layoutAbsoluteChildren` — containing block = padding box | | закрывает Trellis #104 |
 | растяжение между `leading`+`trailing` / `top`+`bottom` | | закрывает Trellis #103 |
-| `absoluteStaticPosition` | статическая позиция по `justify-content`/`align-self` | CSS §4.1; закрывает Trellis #105 |
+| `absoluteStaticPosition` | статическая позиция по `justify-content`/`align-self` | CSS §4.1; закрывает Trellis #105; дефект #117 |
+| auto-margin при обоих отступах, RTL при переопределении, `heightIsDefinite` | | дефект #117 |
 
 ## `Tests/LayoutCoreTests`
 

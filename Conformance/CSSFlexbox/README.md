@@ -8,7 +8,8 @@
 
 ```
 generate.cjs            кейсы (JS DSL) → HTML → Chromium → эталонные frame
-fixtures/flexbox.json   сгенерированные кейсы + эталон; коммитится, Swift-сторона только читает
+fixtures/flexbox.json   ручные кейсы + эталон; коммитится, Swift-сторона только читает
+fixtures/random.json    400 случайных деревьев (seed 2026) из того же набора свойств
 expectations/*.json     известный итог каждого кейса для конкретного движка (baseline)
 reports/*.md            отчёт последней записи baseline: сводка и все расхождения
 ```
