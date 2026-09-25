@@ -173,3 +173,27 @@ func fortyNestedContainersFitInOneMebibyteOfStack() async throws {
         try FlexboxEngine.layout(root, size: LayoutSize(width: 800, height: 100_000)).frames.count
     }
 }
+
+@Test
+func aTreeTooDeepForItsBudgetThrowsRatherThanCrashing() async throws {
+    // A 256 KiB thread holds only a few dozen levels in an unoptimized build: without a
+    // budget, 300 levels would crash it.
+    var tree = Tree()
+    let deep = tree.chain(depth: 300)
+    let shallow = tree.chain(depth: 3)
+    let size = LayoutSize(width: 800, height: 100_000)
+
+    let (deepThrew, shallowFrames) = try await onThread(stackSize: 256 << 10) {
+        let context = LayoutContext(stackBudget: LayoutContext.currentThreadStackBudget)
+        var threw = false
+        do {
+            _ = try FlexboxEngine.layout(deep, size: size, context: context)
+        } catch is LayoutStackExhausted {
+            threw = true
+        }
+        return (threw, try FlexboxEngine.layout(shallow, size: size, context: context).frames.count)
+    }
+
+    #expect(deepThrew)
+    #expect(shallowFrames == 2 + 5 * 3)
+}

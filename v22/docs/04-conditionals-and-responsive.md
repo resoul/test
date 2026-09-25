@@ -42,7 +42,7 @@ FlexContainer(.row) {
 **Статус: согласовано.**
 
 ```swift
-override func layoutSpec() -> Layout {
+override func layoutSpec() -> LayoutSpec? {
     guard let user else { return placeholderLayout }
     let compact = environment.sizeClass == .compact
     return FlexContainer(compact ? .column : .row) { … }
@@ -75,15 +75,22 @@ title.if(isHighlighted) { $0.padding(16).alignSelf(.center) }
 значение, пересобираемое на каждом проходе, identity ноды держит свойство класса.
 
 Рекомендация пользователю: для одного параметра — значение (`.padding(compact ? 8 : 16)`);
-модификаторы принимают опционалы (`.padding(nil)` — ничего не делать); `.if` — когда
+модификаторы принимают опционалы (`nil` — ничего не делать: `.padding(isCompact ? nil : 16)`); `.if` — когда
 условно применяется несколько модификаторов. Цепочек `.if … .else` нет.
+
+**Реализовано (2026-09-25):** `.if(_:_:)` в `LayoutCore`; все модификаторы с одним значением
+принимают опционал, `nil` возвращает спеку без изменений: `.padding(isCompact ? nil : 16)`,
+`.gap(optionalGap)`, `.alignSelf(alignment)`. У `padding`/`margin`/`gap` два типа значения —
+число и шаг шкалы (`.s4`), поэтому голый литерал `.padding(nil)` неоднозначен и не
+компилируется; он и не нужен — ничего не делает. Тернарник и переменная типа `Double?` /
+`Spacing?` выбирают перегрузку сами.
 
 ### 5. `Breakpoint` — смена структуры по размеру
 
 **Статус: согласовано.**
 
 ```swift
-override func layoutSpec() -> Layout {
+override func layoutSpec() -> LayoutSpec? {
     Breakpoint(from: .sm) {
         FlexContainer(.row) { avatar.size(48); texts; follow }       // широко
     } otherwise: {
@@ -105,8 +112,10 @@ override func layoutSpec() -> Layout {
 **Правило неопределённой ширины** (как `container-type: inline-size` в CSS): `Breakpoint`
 смотрит только на ширину, данную снаружи. Если снаружи ширина не определена (например,
 flex-элемент без `grow` в строке, чей размер зависит от содержимого), возникает круговая
-зависимость «ветка ↔ ширина». Тогда берётся ветка `otherwise`, и это пишется в лог через
-`Log.on`, а не угадывается. **Статус правила: предложено.**
+зависимость «ветка ↔ ширина». Тогда берётся ветка `otherwise`, а не угадывается. Движок
+так и делает: без определённой ширины варианты по ширине не применяются, а узел попадает
+в `LayoutResult.variantsWithoutWidth` и в `widthless=` отчёта прохода ноды (реализовано
+2026-09-25). **Статус правила: предложено.**
 
 Ветки больше двух (`from: .sm`, `from: .md`, …) — **открыто**: вложенные
 `Breakpoint` или список порогов.
@@ -155,7 +164,7 @@ FlexContainer(.row) { … }
 Свои пороги приложение добавляет через `extension` с именем по смыслу:
 
 ```swift
-extension Breakpoint.Width {
+extension BreakpointWidth {
     static let sidebar: Self = 280
 }
 ```
@@ -199,6 +208,10 @@ FlexContainer(.column) {
 
 По CSS контейнер без детей сохраняет `padding` и занимает место. `.collapsesWhenEmpty()` —
 аналог `:empty { display: none }` — убирает пустую плашку.
+
+**Реализовано (2026-09-25).** Пустота считается по списку элементов, как в CSS: ложный `if` и
+`nil` элемента не добавляют ничего, скрытый (`hidden`) элемент — есть, и контейнер остаётся.
+На элементе (ноде со своей `layoutSpec()`) модификатор ничего не делает.
 
 ## Чего нет сознательно
 

@@ -100,8 +100,19 @@ func time(_ layouts: [PreparedLayout], iterations: Int) -> (Samples, Int) {
     return (samples, frames)
 }
 
-/// Time from cancelling a running solve to its task finishing, in milliseconds. The cancel
-/// comes a quarter of a typical solve after the start.
+/// Stack of the thread a cancelled solve runs on. The solver recurses once per nesting level,
+/// and a pool thread's stack (512 KiB on Apple platforms) does not hold the deepest trees;
+/// a background layout in the app runs on a thread of this size too.
+let solverStackSize = 8 << 20
+
+/// What the solving thread reports back.
+enum SolveEvent: Sendable {
+    case started
+    case finished(ContinuousClock.Instant)
+}
+
+/// Time from cancelling a running solve to its thread finishing, in milliseconds. The cancel
+/// comes a quarter of a typical solve after the thread starts running.
 func cancelLatency(_ layout: PreparedLayout, solve: Double, iterations: Int) async -> (
     Samples, finishedFirst: Int
 ) {
@@ -109,14 +120,24 @@ func cancelLatency(_ layout: PreparedLayout, solve: Double, iterations: Int) asy
     var samples = Samples()
     var finishedFirst = 0
     for _ in 0..<iterations {
-        let task = Task.detached { () -> ContinuousClock.Instant in
-            _ = try? layout.run { Task.isCancelled }
-            return clock.now
+        let (events, report) = AsyncStream.makeStream(of: SolveEvent.self)
+        let thread = Thread {
+            report.yield(.started)
+            _ = try? layout.run { Thread.current.isCancelled }
+            report.yield(.finished(clock.now))
+            report.finish()
         }
+        thread.stackSize = solverStackSize
+        thread.start()
+        var reports = events.makeAsyncIterator()
+        // A thread cancelled before its body starts never runs it, so the cancel waits until
+        // the body is certainly running.
+        _ = await reports.next()
         try? await Task.sleep(for: .microseconds(max(50, Int(solve * 250))))
         let cancelled = clock.now
-        task.cancel()
-        let finished = await task.value
+        thread.cancel()
+        guard case let .finished(finished) = await reports.next() else { continue }
+
         if finished > cancelled {
             samples.add(milliseconds(finished - cancelled))
         } else {
@@ -191,7 +212,7 @@ print("|---|---|---|---|---|---|---|")
 solveRows.forEach { print($0) }
 if !cancelRows.isEmpty {
     print()
-    print("Cancellation: from `cancel()` to the solving task finishing, ms.")
+    print("Cancellation: from `cancel()` to the solving thread finishing, ms.")
     print()
     print(
         "| Fixture | Engine | solve p50 | latency p50 | latency p95 | latency max | finished before cancel |"

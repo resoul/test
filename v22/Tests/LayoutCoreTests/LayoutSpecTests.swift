@@ -229,6 +229,170 @@ func invisibleKeepsItsSpace() {
 
 @MainActor
 @Test
+func ifAppliesItsModifiersOnlyWhileTheConditionHolds() {
+    let title = Box(20, 10)
+    let next = Box(10, 10)
+    func spec(_ isHighlighted: Bool) -> LayoutSpec {
+        FlexContainer(.row) {
+            title.if(isHighlighted) { $0.margin(8) }
+            next
+        }
+    }
+
+    spec(true).apply(in: LayoutRect(x: 0, y: 0, width: 100, height: 40))
+    #expect(title.frame?.minX == 8)
+    #expect(next.frame?.minX == 36)
+
+    spec(false).apply(in: LayoutRect(x: 0, y: 0, width: 100, height: 40))
+    #expect(title.frame?.minX == 0)
+    #expect(next.frame?.minX == 20)
+}
+
+@MainActor
+@Test
+func anEmptyContainerCollapsesOnlyWhenAsked() {
+    let after = Box(10, 10)
+    func spec(badge: Box?, collapses: Bool) -> LayoutSpec {
+        let badges = FlexContainer(.row) { badge }.padding(6)
+        return FlexContainer(.row) {
+            collapses ? badges.collapsesWhenEmpty() : badges
+            after
+        }
+    }
+
+    // CSS keeps the padding of an empty container.
+    spec(badge: nil, collapses: false).apply(in: LayoutRect(x: 0, y: 0, width: 100, height: 20))
+    #expect(after.frame?.minX == 12)
+
+    spec(badge: nil, collapses: true).apply(in: LayoutRect(x: 0, y: 0, width: 100, height: 20))
+    #expect(after.frame?.minX == 0)
+
+    // An item that is present keeps the container, even while it is hidden.
+    let badge = Box(10, 10)
+    spec(badge: badge, collapses: true).apply(in: LayoutRect(x: 0, y: 0, width: 100, height: 20))
+    #expect(badge.frame?.minX == 6)
+    #expect(after.frame?.minX == 22)
+
+    FlexContainer(.row) {
+        FlexContainer(.row) { badge.hidden() }.padding(6).collapsesWhenEmpty()
+        after
+    }
+    .apply(in: LayoutRect(x: 0, y: 0, width: 100, height: 20))
+    #expect(after.frame?.minX == 12)
+}
+
+@MainActor
+@Test
+func anElementLaidOutInTwoPlacesIsReported() throws {
+    let badge = Box(10, 10)
+    let other = Box(10, 10)
+    let rect = LayoutRect(x: 0, y: 0, width: 100, height: 20)
+    func check(_ spec: LayoutSpec) throws -> [ObjectIdentifier] {
+        let prepared = spec.prepare()
+        let result = try FlexboxEngine.layout(prepared.input, size: rect.size)
+        return prepared.elementsPlacedMoreThanOnce(in: result).map { ObjectIdentifier($0) }
+    }
+
+    #expect(
+        try check(
+            FlexContainer(.row) {
+                badge; other; badge; badge
+            }
+        ) == [ObjectIdentifier(badge)]
+    )
+    // Both branches mention it; only one is laid out.
+    #expect(
+        try check(
+            Breakpoint(from: 50) {
+                badge
+            } otherwise: {
+                badge
+            }
+        ).isEmpty
+    )
+    // A hidden place has no frame.
+    #expect(
+        try check(
+            FlexContainer(.row) {
+                badge; badge.hidden()
+            }
+        ).isEmpty
+    )
+}
+
+@MainActor
+@Test
+func idsLeadBackToTheirElements() {
+    let first = Box(10, 10)
+    let second = Box(10, 10)
+    let prepared = FlexContainer(.row) {
+        first
+        second
+        first
+    }
+    .prepare()
+
+    let ids = prepared.ids(of: first)
+    #expect(ids.count == 2)
+    #expect(ids.allSatisfy { prepared.element(for: $0) === first })
+    #expect(prepared.element(for: prepared.input.id) == nil)
+}
+
+@MainActor
+@Test
+func nilArgumentsLeaveTheSpecAsItWas() {
+    let a = Box(10, 10)
+    let b = Box(10, 10)
+    let rect = LayoutRect(x: 0, y: 0, width: 100, height: 40)
+    let noPoints: Double? = nil
+    let noStep: Spacing? = nil
+    let isCompact = true
+    func frames(_ spec: LayoutSpec) -> [LayoutRect?] {
+        spec.apply(in: rect)
+        return [a.frame, b.frame]
+    }
+
+    let plain = frames(
+        FlexContainer(.row) {
+            a; b
+        }
+    )
+    let withNils = frames(
+        FlexContainer(.row) {
+            a.padding(noPoints).margin(noStep).size(nil).alignSelf(nil).order(nil)
+                .aspectRatio(nil).width(nil).height(nil)
+            b.padding(isCompact ? nil : 16).margin(isCompact ? nil : .s4)
+        }
+        .gap(noPoints).gap(isCompact ? nil : .s2).direction(nil).justifyContent(nil)
+        .alignItems(nil).alignContent(nil).wrap(nil).padding(noStep)
+    )
+    #expect(withNils == plain)
+
+    // The same forms with values apply them: a 10 wide, a gap of 6, then 4 of padding.
+    let spaced = frames(
+        FlexContainer(.row) {
+            a; b.padding(isCompact ? 4 : nil)
+        }.gap(isCompact ? 6 : nil)
+    )
+    #expect(spaced[1]?.minX == 20)
+}
+
+@MainActor
+@Test
+func paddingWithEverySideNilChangesNothing() {
+    let plain = Box(10, 10)
+    let padded = Box(10, 10)
+    let rect = LayoutRect(x: 0, y: 0, width: 100, height: 40)
+
+    FlexContainer(.row) { plain.alignSelf(.center) }.apply(in: rect)
+    let none: Double? = nil
+    FlexContainer(.row) { padded.alignSelf(.center).padding(top: none) }.apply(in: rect)
+
+    #expect(padded.frame == plain.frame)
+}
+
+@MainActor
+@Test
 func breakpointAtTheRootChoosesByTheWidth() {
     let avatar = Box()
     let text = Box(50, 10)

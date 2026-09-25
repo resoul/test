@@ -32,7 +32,15 @@
 | `LayoutID` | непрозрачный id, сопоставляет адаптер | [10](10-layout-engine.md#вход-и-выход): модуль не знает про ноды |
 | `LayoutResult.duplicateIDs` | дубликаты id — диагностика в результате | Trellis weave-analysis §3.1; AGENTS.md v22 «Печать» |
 | `LayoutContext` / `LayoutCancelled` | отмена через `throws`, без частичного результата | Trellis D09, D10 |
+| `LayoutContext.stackBudget`, `currentThreadStackBudget`, `LayoutStackExhausted`, `Solver.checkStack`/`stackAddress`, проверка в `flatten` и `flexLayout` | бюджет стека вместо падения | дефект #124; [10](10-layout-engine.md#статус-e3-производительность) |
 | `LayoutContext.checkpoint()` и вызовы в `flexLayout` (каждый контейнер, каждые 256 item) | точки отмены | Trellis D09, дефект #16 |
+| `LayoutResult.variantsWithoutWidth`, `Solver.variantsWithoutWidth` (`NodeSet`), запись в `Solver.style` | вариант выбран без определённой ширины | [04](04-conditionals-and-responsive.md#5-breakpoint--смена-структуры-по-размеру), [10](10-layout-engine.md#диагностика) |
+
+## `Sources/LayoutCore/LayoutTrace.swift`
+
+| Код | Что | Основание |
+|---|---|---|
+| `LayoutTraceRequest`, `LayoutTraceEvent`, `LayoutContext.trace`, `LayoutResult.trace`, `Solver.traceMeasure` | трассировка — значение в результате, не объект | [10](10-layout-engine.md#диагностика): решение 2026-09-25 (нет `Mutex` на macOS 14) |
 
 ## `Sources/LayoutCore/LeafContent.swift`
 
@@ -50,8 +58,14 @@
 | `padding` на элементе — обёртка `init(insetting:)` | порядок модификаторов как в SwiftUI | [03](03-layout-api.md#метод-раскладки) |
 | `apply(in:direction:scale:spacing:)` | привязка краёв к пикселям, шкала отступов | [05](05-platform-adapters.md#что-адаптер-обязан-закрыть), [09](09-theme.md) |
 | `StylePatch`, `resolvedStyle(_:)`, `from:` у модификаторов | правки по порядку, варианты по ширине | [04](04-conditionals-and-responsive.md#6-адаптивные-значения--смена-параметра-по-размеру) |
+| `LayoutTree.nodes(for:place:)`, `Frame`, `visit`, `finish` | сборка спеки явным стеком, в порядке рекурсии | дефект #139 |
 | `LayoutTree`, `.alternatives` | `Breakpoint`: обе ветки в списке родителя, каждая видна по свою сторону порога | [04](04-conditionals-and-responsive.md#5-breakpoint--смена-структуры-по-размеру) |
 | `hidden`, `invisible`, `applyLayoutVisibility` | видимость | [04](04-conditionals-and-responsive.md#3-видимость) |
+| `PreparedLayout.elementsPlacedMoreThanOnce(in:)` | кадр в двух местах — ошибка спеки | [03](03-layout-api.md#управление-subnodes): проход отклоняется |
+| `PreparedLayout.element(for:)`, `ids(of:)`, `ids(where:)`, `LayoutTree.owners` | id движка ↔ элемент, контейнер ↔ его владелец | отчёт и трассировка по нодам |
+| модификаторы с опциональным значением, `nil` — спека без изменений; `padding(top:…)` без сторон не оборачивает элемент | опционалы | [04](04-conditionals-and-responsive.md#4-условный-модификатор); дефект #137 |
+| `if(_:_:)` | условный модификатор | [04](04-conditionals-and-responsive.md#4-условный-модификатор) |
+| `collapsesWhenEmpty()` — `display: none` при пустом списке элементов | пустой контейнер | [04](04-conditionals-and-responsive.md#8-пустой-контейнер) |
 | `Tokens.swift` | `Spacing`, `SpacingScale`, `BreakpointWidth` | [09](09-theme.md), [04](04-conditionals-and-responsive.md#именованные-пороги) |
 | `Display`, `StyleVariant`, `Solver.style(_:parentWidth:)` | движок: `display: none`, выбор варианта по ширине родителя | [10](10-layout-engine.md#этапы) (E4) |
 | `UIView`/`NSView: LayoutElement`, `ViewMeasurer` | измерение view | [05](05-platform-adapters.md#что-адаптер-обязан-закрыть) |
@@ -170,6 +184,8 @@
 | `NodeCache`, `NodeHost.passGeneration` | нода на id модели; ушедшие отпускаются на следующем проходе | [04](04-conditionals-and-responsive.md#7-кэш-нод-для-динамических-списков) |
 | `LayoutSpec.prepare`, `PreparedLayout` | подготовка (MainActor) / расчёт (где угодно) / применение (MainActor) | фоновый расчёт |
 | `ContentMeasurer.requiresMainThread` | view меряются только на главном: такая раскладка решается там | `ViewMeasurer` |
+| `NodeHost.mainThreadStackBudget`, `SolveOutcome`, `reject`; `LayoutReport.Stack` | проход не поместился в стек главного — на поток хоста или отклонён | дефект #124 |
+| `Node.pendingHost`, `NodeHost.pending`/`releasePending` | изменение ноды, которую монтирует проход в полёте | дефект #138 |
 | `NodeHost.solvesInBackground`, `solve`, `adopt` | поток со стеком 8 МиБ; поток регистрируется изнутри тела; обогнанный расчёт отменяется и выбрасывается | дефекты #124, #22 (Trellis) |
 | `Accessibility`, `NodeHost.accessibilityItems`, `activate` | элементы доступности из дерева: текст, кнопки с подписью из текста внутри | как UIKit: `UIButton` читается подписью |
 | `NodeAccessibilityElement` (UIKit, AppKit) | хранит `NodeID` и слабый хост, не ноду | правило Trellis о нативных AX-объектах |
@@ -189,4 +205,6 @@
 | `NodeNSView` `keyDown/keyUp`, `becomeFirstResponder` | AppKit без фокус-элементов: клавиатуру ведёт view; фокус при входе только от Tab | — |
 | `NodeView` на iPad: `usesFocus`, `selects` | система фокуса iPadOS с клавиатурой; групп фокуса нет — свойство недоступно на tvOS | дефект #135 |
 | `NodeView.zoom`, `contentLayer`, `zoomed` | дерево раскладывается в `bounds / zoom`, слой содержимого увеличен от левого верхнего угла; `host.scale` = экран × zoom, чтобы текст был чётким; `nil` — 2 на TV, 1 иначе | интерфейс для TV: размеры под телефон с 2–3 м читаются примерно вдвое крупнее |
+| `LayoutReport`, `NodeHost.onLayoutReport`, `number`, `traceAreas`, `tracedNodes`; `finish` — отклонение прохода | отчёт прохода, дубликаты | [03](03-layout-api.md#управление-subnodes), [10](10-layout-engine.md#диагностика) |
+| `NodeView`/`NodeNSView` — `onLayoutReport` в `DEBUG`, `os.Logger` | вывод решает адаптер | [10](10-layout-engine.md#диагностика) |
 | `DemotvOS/` | tvOS-приложение с демо-экраном (`project.pbxproj` написан вручную, по образцу `Playground`) | — |

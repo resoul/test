@@ -5,6 +5,10 @@
 // Every modifier takes `from:`: without it the change always applies; with it, only while
 // the width the parent gives this item reaches that value. Changes apply in the order they
 // are written, so `.gap(8).gap(16, from: .md)` is 8, and 16 from `.md` on.
+//
+// Every value is optional, and `nil` leaves the spec exactly as it was: a value that exists
+// only in some states is written in place (`.padding(isCompact ? nil : 16)`) instead of
+// around the modifier.
 
 extension LayoutSpecConvertible {
     func patched(
@@ -38,22 +42,28 @@ extension LayoutSpecConvertible {
     /// Cross-axis alignment of this item, overriding the container's `alignItems`.
     ///
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
-    public func alignSelf(_ alignment: AlignSelf, from: BreakpointWidth? = nil) -> LayoutSpec {
-        patched(from: from) { style, _ in style.alignSelf = alignment }
+    public func alignSelf(_ alignment: AlignSelf?, from: BreakpointWidth? = nil) -> LayoutSpec {
+        guard let alignment else { return asLayoutSpec }
+
+        return patched(from: from) { style, _ in style.alignSelf = alignment }
     }
 
     /// Layout order among siblings; lower first, document order breaks ties.
     ///
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
-    public func order(_ order: Int, from: BreakpointWidth? = nil) -> LayoutSpec {
-        patched(from: from) { style, _ in style.order = order }
+    public func order(_ order: Int?, from: BreakpointWidth? = nil) -> LayoutSpec {
+        guard let order else { return asLayoutSpec }
+
+        return patched(from: from) { style, _ in style.order = order }
     }
 
     /// A square size.
     ///
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
-    public func size(_ side: Double, from: BreakpointWidth? = nil) -> LayoutSpec {
-        patched(from: from) { style, _ in
+    public func size(_ side: Double?, from: BreakpointWidth? = nil) -> LayoutSpec {
+        guard let side else { return asLayoutSpec }
+
+        return patched(from: from) { style, _ in
             style.width = .points(side)
             style.height = .points(side)
         }
@@ -74,13 +84,17 @@ extension LayoutSpecConvertible {
     }
 
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
-    public func width(_ width: Length, from: BreakpointWidth? = nil) -> LayoutSpec {
-        patched(from: from) { style, _ in style.width = width }
+    public func width(_ width: Length?, from: BreakpointWidth? = nil) -> LayoutSpec {
+        guard let width else { return asLayoutSpec }
+
+        return patched(from: from) { style, _ in style.width = width }
     }
 
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
-    public func height(_ height: Length, from: BreakpointWidth? = nil) -> LayoutSpec {
-        patched(from: from) { style, _ in style.height = height }
+    public func height(_ height: Length?, from: BreakpointWidth? = nil) -> LayoutSpec {
+        guard let height else { return asLayoutSpec }
+
+        return patched(from: from) { style, _ in style.height = height }
     }
 
     /// Minimum and maximum sizes; `nil` keeps the current value.
@@ -104,8 +118,10 @@ extension LayoutSpecConvertible {
     /// Width divided by height.
     ///
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
-    public func aspectRatio(_ ratio: Double, from: BreakpointWidth? = nil) -> LayoutSpec {
-        patched(from: from) { style, _ in style.aspectRatio = ratio }
+    public func aspectRatio(_ ratio: Double?, from: BreakpointWidth? = nil) -> LayoutSpec {
+        guard let ratio else { return asLayoutSpec }
+
+        return patched(from: from) { style, _ in style.aspectRatio = ratio }
     }
 
     /// Takes the item out of the flow and pins it to its container's padding box. A side
@@ -131,15 +147,20 @@ extension LayoutSpecConvertible {
     /// The same margin on every side; `.auto` absorbs free space.
     ///
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
-    public func margin(_ all: Margin, from: BreakpointWidth? = nil) -> LayoutSpec {
-        patched(from: from) { style, _ in style.margin = Edges(all: all) }
+    public func margin(_ all: Margin?, from: BreakpointWidth? = nil) -> LayoutSpec {
+        guard let all else { return asLayoutSpec }
+
+        return patched(from: from) { style, _ in style.margin = Edges(all: all) }
     }
 
     /// The same margin on every side, from the spacing scale.
     ///
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
-    public func margin(_ all: Spacing, from: BreakpointWidth? = nil) -> LayoutSpec {
-        patched(from: from) { style, scale in style.margin = Edges(all: .points(scale.points(all)))
+    public func margin(_ all: Spacing?, from: BreakpointWidth? = nil) -> LayoutSpec {
+        guard let all else { return asLayoutSpec }
+
+        return patched(from: from) { style, scale in
+            style.margin = Edges(all: .points(scale.points(all)))
         }
     }
 
@@ -206,14 +227,14 @@ extension LayoutSpecConvertible {
     /// 48 points and the avatar 32.
     ///
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
-    public func padding(_ all: Double, from: BreakpointWidth? = nil) -> LayoutSpec {
+    public func padding(_ all: Double?, from: BreakpointWidth? = nil) -> LayoutSpec {
         padding(top: all, leading: all, bottom: all, trailing: all, from: from)
     }
 
     /// Padding on every side from the spacing scale.
     ///
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
-    public func padding(_ all: Spacing, from: BreakpointWidth? = nil) -> LayoutSpec {
+    public func padding(_ all: Spacing?, from: BreakpointWidth? = nil) -> LayoutSpec {
         padding(top: all, leading: all, bottom: all, trailing: all, from: from)
     }
 
@@ -280,6 +301,12 @@ extension LayoutSpecConvertible {
         trailing: Spacing? = nil,
         from: BreakpointWidth? = nil
     ) -> LayoutSpec {
+        // With no side given there is nothing to add; wrapping an element anyway would
+        // move the modifiers written before into the inset box and change its layout.
+        guard top != nil || leading != nil || bottom != nil || trailing != nil else {
+            return asLayoutSpec
+        }
+
         var spec = asLayoutSpec
         if spec.isElement {
             spec = LayoutSpec(insetting: spec)
@@ -318,27 +345,61 @@ extension LayoutSpecConvertible {
         return spec
     }
 
+    // MARK: Conditions
+
+    /// Applies `transform` when `condition` holds and leaves the item as it is otherwise —
+    /// for several modifiers that come and go together. A single value is simpler as a value
+    /// (`.padding(isCompact ? 8 : 16)`). The spec is rebuilt on every pass and the element
+    /// keeps its identity, so switching the condition only changes the item's place.
+    ///
+    ///     title.if(isHighlighted) { $0.padding(16).alignSelf(.center) }
+    ///
+    /// Ownership: returns a value; `transform` is not kept. Isolation: MainActor.
+    /// Errors: none. Cancellation: none.
+    public func `if`(
+        _ condition: Bool,
+        _ transform: (LayoutSpec) -> LayoutSpec
+    ) -> LayoutSpec {
+        condition ? transform(asLayoutSpec) : asLayoutSpec
+    }
+
     // MARK: Container
+
+    /// Takes a container with no items out of the layout, padding and all, as CSS
+    /// `:empty { display: none }` does. Items are counted as written: an `if` that is false
+    /// or a `nil` element adds none, a hidden item still counts. Has no effect on an element.
+    ///
+    /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
+    public func collapsesWhenEmpty() -> LayoutSpec {
+        let spec = asLayoutSpec
+        guard case let .container(items) = spec.content, items.isEmpty else { return spec }
+
+        return spec.patched(from: nil) { style, _ in style.display = .none }
+    }
 
     /// The main axis of a container.
     ///
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
-    public func direction(_ direction: FlexDirection, from: BreakpointWidth? = nil) -> LayoutSpec {
-        patched(from: from) { style, _ in style.direction = direction }
+    public func direction(_ direction: FlexDirection?, from: BreakpointWidth? = nil) -> LayoutSpec {
+        guard let direction else { return asLayoutSpec }
+
+        return patched(from: from) { style, _ in style.direction = direction }
     }
 
     /// The same gap between rows and between columns.
     ///
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
-    public func gap(_ gap: Double, from: BreakpointWidth? = nil) -> LayoutSpec {
-        self.gap(.points(gap), from: from)
+    public func gap(_ gap: Double?, from: BreakpointWidth? = nil) -> LayoutSpec {
+        self.gap(gap.map(Spacing.points), from: from)
     }
 
     /// The same gap between rows and between columns, from the spacing scale.
     ///
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
-    public func gap(_ gap: Spacing, from: BreakpointWidth? = nil) -> LayoutSpec {
-        patched(from: from) { style, scale in
+    public func gap(_ gap: Spacing?, from: BreakpointWidth? = nil) -> LayoutSpec {
+        guard let gap else { return asLayoutSpec }
+
+        return patched(from: from) { style, scale in
             style.rowGap = scale.points(gap)
             style.columnGap = scale.points(gap)
         }
@@ -367,24 +428,33 @@ extension LayoutSpecConvertible {
     }
 
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
-    public func justifyContent(_ value: JustifyContent, from: BreakpointWidth? = nil) -> LayoutSpec
+    public func justifyContent(_ value: JustifyContent?, from: BreakpointWidth? = nil)
+        -> LayoutSpec
     {
-        patched(from: from) { style, _ in style.justifyContent = value }
+        guard let value else { return asLayoutSpec }
+
+        return patched(from: from) { style, _ in style.justifyContent = value }
     }
 
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
-    public func alignItems(_ value: AlignItems, from: BreakpointWidth? = nil) -> LayoutSpec {
-        patched(from: from) { style, _ in style.alignItems = value }
+    public func alignItems(_ value: AlignItems?, from: BreakpointWidth? = nil) -> LayoutSpec {
+        guard let value else { return asLayoutSpec }
+
+        return patched(from: from) { style, _ in style.alignItems = value }
     }
 
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
-    public func alignContent(_ value: AlignContent, from: BreakpointWidth? = nil) -> LayoutSpec {
-        patched(from: from) { style, _ in style.alignContent = value }
+    public func alignContent(_ value: AlignContent?, from: BreakpointWidth? = nil) -> LayoutSpec {
+        guard let value else { return asLayoutSpec }
+
+        return patched(from: from) { style, _ in style.alignContent = value }
     }
 
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
-    public func wrap(_ value: FlexWrap = .wrap, from: BreakpointWidth? = nil) -> LayoutSpec {
-        patched(from: from) { style, _ in style.wrap = value }
+    public func wrap(_ value: FlexWrap? = .wrap, from: BreakpointWidth? = nil) -> LayoutSpec {
+        guard let value else { return asLayoutSpec }
+
+        return patched(from: from) { style, _ in style.wrap = value }
     }
 }
 

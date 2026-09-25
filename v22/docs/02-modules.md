@@ -17,12 +17,13 @@ LayoutCore      чистая математика и описание раскл
 LayoutUIKit     та же раскладка для UIView (в layoutSubviews)
 LayoutAppKit    та же раскладка для NSView (в layout())
 Nodes           дерево нод: Node, NodeHost; раскладка всего дерева одним проходом,
-                подписка по чтению в layoutSpec()/update(). Использует LayoutCore, StateCore.
+                подписка по чтению в layoutSpec()/update(); расчёт в фоне
+                (NodeHost.solvesInBackground). Использует LayoutCore, StateCore.
 NodesRender     дерево нод → дерево CALayer (QuartzCore), общий для UIKit и AppKit.
-                (Снимок и фоновый расчёт — следующие срезы.)
 NodesUIKit      встраивание нод в UIKit: view.addSubnode(node)
 NodesAppKit     встраивание нод в AppKit
-Theme           тема: шкала отступов, цвета, типографика; тема по умолчанию (см. 09)
+Theme           (ещё не создан) тема: шкала отступов, цвета, типографика; тема по
+                умолчанию (см. 09). Шкала отступов пока живёт в LayoutCore.
 StateCore       синхронное состояние на MainActor с отслеживанием чтений: State, Computed,
                 Observer, Effect (см. 08). Только стандартная библиотека.
 StateFlux       адаптер Flux ↔ StateCore (Flux ≥ 1.2.1)
@@ -31,15 +32,15 @@ StateFlux       адаптер Flux ↔ StateCore (Flux ≥ 1.2.1)
 Зависимости направлены только вниз:
 
 ```
-NodesUIKit ──► Nodes ──► LayoutCore ◄── LayoutUIKit
-NodesAppKit ─┘                      ◄── LayoutAppKit
-Nodes ──► Theme ──► LayoutCore
+NodesUIKit ──► NodesRender ──► Nodes ──► LayoutCore ◄── LayoutUIKit
+NodesAppKit ─┘                                      ◄── LayoutAppKit
 StateFlux ──► StateCore ◄── Nodes   (Nodes отслеживает чтения в layoutSpec()/update())
+Nodes ──► Theme ──► LayoutCore      (план: модуля Theme ещё нет, см. 09)
 ```
 
 ## Правила
 
-1. **`Layout` не знает слова «нода».** Он оперирует *элементом раскладки*: элемент умеет
+1. **`LayoutCore` не знает слова «нода».** Он оперирует *элементом раскладки*: элемент умеет
    измерить себя под ограничение и принять итоговый frame. Элементом может быть `Node`,
    `UIView`, `NSView` или тестовая заглушка.
 2. **Движок один.** «Layout для UIKit/AppKit» — не второй и не третий движок, а адаптер,
@@ -50,7 +51,7 @@ StateFlux ──► StateCore ◄── Nodes   (Nodes отслеживает ч
    - Ноды измеряются через `Sendable`-измеритель (CoreText), поэтому их раскладка
      по-прежнему считается в фоне по снимку, с отменой (D09 Trellis).
    Движок — одна и та же чистая функция в обоих случаях.
-4. **Flux не протекает в `Layout` и `Nodes`.** Как и в Trellis, внешняя зависимость
+4. **Flux не протекает в `LayoutCore` и `Nodes`.** Как и в Trellis, внешняя зависимость
    живёт только в своём адаптерном модуле.
 5. **Платформенные импорты** — только в `*UIKit`/`*AppKit`, под `#if canImport(...)` в
    файлах адаптеров. `#if os(...)` запрещён (как в Trellis).
@@ -59,8 +60,8 @@ StateFlux ──► StateCore ◄── Nodes   (Nodes отслеживает ч
 
 | Нужно | Подключить |
 |---|---|
-| Flex-раскладка обычных UIView без нод | `Layout` + `LayoutUIKit` |
-| То же на macOS | `Layout` + `LayoutAppKit` |
+| Flex-раскладка обычных UIView без нод | `LayoutCore` + `LayoutUIKit` |
+| То же на macOS | `LayoutCore` + `LayoutAppKit` |
 | Экран на нодах в UIKit-приложении | `Nodes` + `NodesUIKit` |
 | Ноды + реактивные данные из Flux | `Nodes` + `NodesUIKit` + `StateCore` + `StateFlux` |
-| Тесты математики раскладки без платформы | `Layout` |
+| Тесты математики раскладки без платформы | `LayoutCore` |

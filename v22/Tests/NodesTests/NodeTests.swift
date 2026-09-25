@@ -524,8 +524,29 @@ func aDeepTreeIsSolvedOnAThreadWithRoomForIt() async {
     host.layoutIfNeeded()
     await host.layoutFinished()
 
-    #expect(host.passes == 2)
+    // Two hundred levels do not fit the main thread's stack budget, so even the first
+    // layout went to the host's thread; the change overtook it, and one pass was applied.
+    #expect(host.passes == 1)
     #expect(root.deepest.leaf.frame.size.height == 7)
+    host.detach()
+}
+
+@Test @MainActor
+func aNodeChangedWhileItsFirstLayoutIsSolvedIsLaidOutAgain() async {
+    let screen = Screen()
+    screen.card.showsFollow.value = false
+    let host = host(screen)
+    host.solvesInBackground = true
+
+    // `follow` comes back in a layout solved in the background, and changes before it lands.
+    screen.card.showsFollow.value = true
+    host.layoutIfNeeded()
+    screen.card.follow.contentSize = LayoutSize(width: 90, height: 30)
+    host.layoutIfNeeded()
+    await host.layoutFinished()
+
+    #expect(screen.card.follow.isMounted)
+    #expect(screen.card.follow.frame.size.width == 90)
     host.detach()
 }
 
@@ -851,7 +872,9 @@ private final class Rows: Node {
     }
 
     override func layoutSpec() -> LayoutSpec? {
-        FlexContainer(.column) { first; second; plain }
+        FlexContainer(.column) {
+            first; second; plain
+        }
     }
 }
 
@@ -887,8 +910,12 @@ private final class Grid: Node {
 
     override func layoutSpec() -> LayoutSpec? {
         FlexContainer(.column) {
-            FlexContainer(.row) { cells[0]; cells[1] }.gap(10)
-            FlexContainer(.row) { cells[2]; cells[3] }.gap(10)
+            FlexContainer(.row) {
+                cells[0]; cells[1]
+            }.gap(10)
+            FlexContainer(.row) {
+                cells[2]; cells[3]
+            }.gap(10)
         }
         .gap(10)
         .alignItems(.start)
@@ -966,4 +993,192 @@ func aFocusRequestGoesToTheAdapterOrFocusesAtOnce() {
     #expect(requested == [row.badge.id])
     #expect(host.focusedNode == nil)
     host.detach()
+}
+
+// MARK: - Reports
+
+@MainActor
+private final class Twice: Node {
+    let badge = Box(10, 10)
+    let repeats = State(false)
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.row) {
+            badge
+            if repeats.value { badge }
+        }
+    }
+}
+
+@Test @MainActor
+func aNodeLaidOutTwiceRejectsThePass() {
+    let root = Twice()
+    let host = NodeHost(root: root, size: LayoutSize(width: 100, height: 50))
+    var reports: [LayoutReport] = []
+    host.onLayoutReport = { reports.append($0) }
+    host.layoutIfNeeded()
+    let frame = root.badge.frame
+
+    root.repeats.value = true
+    host.layoutIfNeeded()
+
+    #expect(reports.count == 2)
+    #expect(reports[0].isRejected == false)
+    #expect(reports[1].isRejected)
+    #expect(reports[1].duplicates == [root.badge.id])
+    #expect(host.passes == 1)
+    #expect(root.badge.frame == frame)
+    #expect(root.subnodes.map(\.id) == [root.badge.id])
+    host.detach()
+}
+
+@MainActor
+private final class BranchedBox: Node {
+    let item = Box(10, 10)
+
+    override func layoutSpec() -> LayoutSpec? {
+        Breakpoint(from: 100) {
+            item
+        } otherwise: {
+            item.size(20)
+        }
+    }
+}
+
+@MainActor
+private final class AdaptiveRow: Node {
+    let branched = BranchedBox()
+    let grows = State(false)
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.row) { branched.flex(grow: grows.value ? 1 : 0) }
+    }
+}
+
+@Test @MainActor
+func aBreakpointWithoutAWidthIsReported() {
+    let root = AdaptiveRow()
+    let host = NodeHost(root: root, size: LayoutSize(width: 300, height: 50))
+    var last: LayoutReport?
+    host.onLayoutReport = { last = $0 }
+    host.layoutIfNeeded()
+
+    // The row sizes `branched` to its content: there is no width to choose a branch by.
+    #expect(last?.variantsWithoutWidth == [root.branched.item.id])
+    #expect(last?.hasProblems == true)
+    host.detach()
+}
+
+@Test @MainActor
+func aTraceFollowsTheNodesAskedFor() throws {
+    let screen = Screen()
+    let host = NodeHost(root: screen, size: LayoutSize(width: 400, height: 300))
+    var last: LayoutReport?
+    host.onLayoutReport = { last = $0 }
+    host.traceAreas = [.place]
+    host.tracedNodes = [screen.card.id]
+    host.layoutIfNeeded()
+
+    let report = try #require(last)
+    #expect(report.trace.map(\.node) == [screen.card.id])
+    #expect(
+        report.trace.first?.event
+            == .placed(
+                try #require(report.trace.first?.event.id),
+                frame: LayoutRect(x: 20, y: 20, width: 360, height: 60)
+            )
+    )
+    #expect(report.hasProblems == false)
+
+    let lines = report.lines
+    #expect(lines.count == 2)
+    #expect(lines[0].hasPrefix("[layout] pass host=\(host.number) gen=1 elements="))
+    #expect(lines[0].hasSuffix("rejected=no stack=enough duplicates=none widthless=none"))
+    #expect(
+        lines[1]
+            == "[layout] place host=\(host.number) gen=1 \(screen.card.id) x=20 y=20 size=360x60"
+    )
+    host.detach()
+}
+
+// MARK: - Stack
+
+/// Content that can only be measured on the main thread, as a view's.
+private struct MainThreadContent: ContentMeasurer {
+    var requiresMainThread: Bool { true }
+    func minContentWidth() -> Double { 10 }
+    func maxContentWidth() -> Double { 10 }
+    func height(forWidth width: Double) -> Double { 10 }
+}
+
+@MainActor
+private final class MainThreadLeaf: Node {
+    override var layoutContent: LeafContent? { .measured(MainThreadContent()) }
+}
+
+/// `depth` nodes, each a padded column around the next.
+@MainActor
+private final class Nest: Node {
+    let inner: Node
+
+    init(depth: Int, leaf: @MainActor () -> Node) {
+        inner = depth > 0 ? Nest(depth: depth - 1, leaf: leaf) : leaf()
+    }
+
+    var deepest: Node { (inner as? Nest)?.deepest ?? inner }
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.column) { inner }.padding(1)
+    }
+}
+
+@Test @MainActor
+func aTreeTooDeepForTheMainThreadIsSolvedOnTheHostsThread() async {
+    let root = Nest(depth: 60) { Box(10, 10) }
+    let host = NodeHost(root: root, size: LayoutSize(width: 300, height: 600))
+    host.mainThreadStackBudget = 16 << 10
+    var reports: [LayoutReport] = []
+    host.onLayoutReport = { reports.append($0) }
+
+    host.layoutIfNeeded()
+    #expect(reports.isEmpty)
+    #expect(!root.deepest.isMounted)
+
+    await host.layoutFinished()
+    #expect(reports.map(\.stack) == [.moved])
+    #expect(reports.first?.hasProblems == true)
+    #expect(host.passes == 1)
+    #expect(root.deepest.isMounted)
+    #expect(root.deepest.frame.size == LayoutSize(width: 178, height: 10))
+    host.detach()
+}
+
+@Test @MainActor
+func aTreeWithViewsTooDeepForTheMainThreadIsRejected() {
+    let root = Nest(depth: 60) { MainThreadLeaf() }
+    let host = NodeHost(root: root, size: LayoutSize(width: 300, height: 600))
+    host.mainThreadStackBudget = 16 << 10
+    var reports: [LayoutReport] = []
+    host.onLayoutReport = { reports.append($0) }
+
+    host.layoutIfNeeded()
+
+    #expect(reports.map(\.stack) == [.exhausted])
+    #expect(reports.first?.isRejected == true)
+    #expect(host.passes == 0)
+    #expect(!root.deepest.isMounted)
+    host.detach()
+}
+
+@Test @MainActor
+func aDeepTreeOfNodesIsPreparedWithoutRunningOutOfStack() {
+    // Preparing a layout calls every node's `layoutSpec()`, so it runs on the main thread;
+    // walked recursively, three thousand levels would overflow even the 8 MiB main thread
+    // of a Mac in an unoptimized build.
+    let root = Nest(depth: 3000) { Box(10, 10) }
+
+    let prepared = root.asLayoutSpec.prepare()
+
+    #expect(prepared.elementCount == 3002)
+    #expect(prepared.ids(of: root.deepest).count == 1)
 }

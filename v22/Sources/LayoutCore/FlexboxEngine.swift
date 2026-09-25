@@ -2,21 +2,23 @@
 /// Level 1, §9). A pure function of its input: no shared state, no platform objects, no
 /// output besides the returned value — safe to run on any task.
 ///
-/// Ownership: stateless. Isolation: none. Errors: `LayoutCancelled` only. Cancellation:
-/// through `LayoutContext`; a cancelled pass returns nothing.
+/// Ownership: stateless. Isolation: none. Errors: `LayoutCancelled`, and
+/// `LayoutStackExhausted` over `LayoutContext.stackBudget`. Cancellation: through
+/// `LayoutContext`; a pass that throws returns nothing.
 public enum FlexboxEngine {
     /// Lays out `root` as if a host gave it exactly `size`, and returns every node's frame in
     /// the root's coordinate space (the root itself is at the origin).
     ///
     /// Ownership: returns a new value. Isolation: none. Errors: throws `LayoutCancelled` when
-    /// `context` reports cancellation. Cancellation: checked at every container and every 256
-    /// items; nothing partial is returned.
+    /// `context` reports cancellation, `LayoutStackExhausted` when the tree is too deep for
+    /// `context.stackBudget`. Cancellation: checked at every container and every 256 items;
+    /// nothing partial is returned.
     public static func layout(
         _ root: LayoutNode,
         size: LayoutSize,
         context: LayoutContext = LayoutContext()
     ) throws -> LayoutResult {
-        var solver = Solver(root: root, context: context)
+        var solver = try Solver(root: root, context: context)
         solver.frames[0] = LayoutRect(origin: .zero, size: size)
         _ = try solver.compute(
             0,
@@ -25,10 +27,21 @@ public enum FlexboxEngine {
             available: AvailableSize(width: .definite(size.width), height: .definite(size.height)),
             mode: .layout(.zero)
         )
+        let frames = solver.nodes.indices.compactMap { index in
+            solver.frames[index].map { (id: solver.nodes[index].id, frame: $0) }
+        }
+        var trace = solver.trace
+        if let request = context.trace {
+            for (id, frame) in frames where request.includes(.place, id) {
+                trace.append(.placed(id, frame: frame))
+            }
+        }
         return LayoutResult(
-            frames: solver.nodes.indices.compactMap { index in
-                solver.frames[index].map { (solver.nodes[index].id, $0) }
-            },
+            frames: frames,
+            variantsWithoutWidth: Set(
+                solver.variantsWithoutWidth.indices.map { solver.nodes[$0].id }
+            ),
+            trace: trace,
             statistics: solver.statistics
         )
     }
@@ -36,15 +49,15 @@ public enum FlexboxEngine {
     /// The size `root` takes under the given available space when nothing else fixes it —
     /// what a host asks for `sizeThatFits`/`intrinsicContentSize`.
     ///
-    /// Ownership: returns a new value. Isolation: none. Errors: throws `LayoutCancelled`.
-    /// Cancellation: as `layout`.
+    /// Ownership: returns a new value. Isolation: none. Errors: as `layout`. Cancellation:
+    /// as `layout`.
     public static func measure(
         _ root: LayoutNode,
         width: AvailableSpace,
         height: AvailableSpace,
         context: LayoutContext = LayoutContext()
     ) throws -> LayoutSize {
-        var solver = Solver(root: root, context: context)
+        var solver = try Solver(root: root, context: context)
         return try solver.compute(
             0,
             known: OptionalSize(),
@@ -205,6 +218,12 @@ struct HashMix {
     }
 }
 
+/// Node indices one pass collects. It belongs to that pass alone and never leaves the thread
+/// the pass runs on.
+final class NodeSet {
+    var indices: Set<Int> = []
+}
+
 /// How much work one pass did: the measure of the engine's efficiency that does not depend on
 /// the machine.
 struct SolveStatistics: Equatable {
@@ -232,17 +251,31 @@ struct Solver {
     var wantsBaseline = false
     var lastBaseline: Double?
     var statistics = SolveStatistics()
+    /// Nodes whose width variants were chosen without a definite parent width. Choosing a
+    /// style is a read that most steps do without mutating the solver, so the record is kept
+    /// in an object of the pass instead of in the solver's own fields.
+    let variantsWithoutWidth = NodeSet()
+    var trace: [LayoutTraceEvent] = []
     let context: LayoutContext
+    /// Where the pass started on the stack, and how far below it it may go.
+    let stackOrigin: UInt
+    let stackBudget: UInt?
 
-    init(root: LayoutNode, context: LayoutContext) {
+    init(root: LayoutNode, context: LayoutContext) throws {
         self.context = context
-        flatten(root)
+        stackOrigin = Solver.stackAddress()
+        stackBudget = context.stackBudget.map { UInt(max(0, $0)) }
+        try flatten(root)
         frames = Array(repeating: nil, count: nodes.count)
         cache.reserveCapacity(nodes.count * 2)
     }
 
+    /// Flattens the tree in pre-order. It recurses once per level like the solver, so it
+    /// checks the stack budget too: a tree too deep for the thread fails here before it
+    /// crashes it.
     @discardableResult
-    private mutating func flatten(_ node: LayoutNode) -> Int {
+    private mutating func flatten(_ node: LayoutNode) throws -> Int {
+        try checkStack()
         let index = nodes.count
         nodes.append(
             FlatNode(
@@ -261,10 +294,27 @@ struct Solver {
         var children: [Int] = []
         children.reserveCapacity(node.children.count)
         for child in node.children {
-            children.append(flatten(child))
+            children.append(try flatten(child))
         }
         nodes[index].children = children
         return index
+    }
+
+    /// Throws when the pass has gone deeper into the stack than its budget allows. The
+    /// distance is taken either way, so it does not matter which way the stack grows.
+    func checkStack() throws {
+        guard let stackBudget else { return }
+
+        let here = Solver.stackAddress()
+        let used = here > stackOrigin ? here - stackOrigin : stackOrigin - here
+        if used > stackBudget { throw LayoutStackExhausted() }
+    }
+
+    /// An address in the caller's frame.
+    @inline(never)
+    static func stackAddress() -> UInt {
+        var marker: UInt8 = 0
+        return withUnsafeMutablePointer(to: &marker) { UInt(bitPattern: $0) }
     }
 
     /// The first baseline of node `index` laid out at `size`, from its top edge, or `nil`
@@ -312,7 +362,10 @@ struct Solver {
     /// style. Without a definite width the base style applies.
     @inline(never)
     func style(_ index: Int, parentWidth: Double?) -> FlexStyle {
-        guard let width = parentWidth, !nodes[index].variants.isEmpty else {
+        guard !nodes[index].variants.isEmpty else { return nodes[index].style }
+
+        guard let width = parentWidth else {
+            variantsWithoutWidth.indices.insert(index)
             return nodes[index].style
         }
 
@@ -351,6 +404,9 @@ struct Solver {
             )
             if let cached = cache[key] {
                 statistics.cacheHits += 1
+                if context.trace != nil {
+                    traceMeasure(index, known, available, cached, cached: true)
+                }
                 return cached
             }
 
@@ -364,6 +420,9 @@ struct Solver {
                 definite
             )
             cache[key] = size
+            if context.trace != nil {
+                traceMeasure(index, known, available, size, cached: false)
+            }
             return size
         }
 
@@ -404,6 +463,27 @@ struct Solver {
             mode: mode,
             contentOnly: contentOnly,
             definite: definite
+        )
+    }
+
+    private mutating func traceMeasure(
+        _ index: Int,
+        _ known: OptionalSize,
+        _ available: AvailableSize,
+        _ size: LayoutSize,
+        cached: Bool
+    ) {
+        let id = nodes[index].id
+        guard let request = context.trace, request.includes(.measure, id) else { return }
+
+        trace.append(
+            .measured(
+                id,
+                width: known.width.map { .definite($0) } ?? available.width,
+                height: known.height.map { .definite($0) } ?? available.height,
+                size: size,
+                cached: cached
+            )
         )
     }
 

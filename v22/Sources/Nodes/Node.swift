@@ -136,6 +136,10 @@ open class Node: LayoutElement {
     public private(set) var isMounted = false
 
     weak var hostOfRoot: NodeHost?
+    /// The host whose layout, still being solved off the main thread, is going to mount this
+    /// node. Until then the node hangs from nothing, and a change to it must still reach
+    /// that host, or the layout would show what the node was when the solve began.
+    weak var pendingHost: NodeHost?
     private var layoutObserver: Observer?
     private var updateObserver: Observer?
     private var isInFirstUpdate = false
@@ -260,7 +264,7 @@ open class Node: LayoutElement {
         // what it changes is already in this layout.
         guard !isInFirstUpdate else { return }
 
-        host?.setNeedsLayout()
+        (host ?? pendingHost)?.setNeedsLayout()
     }
 
     var canBecomeFocused: Bool {
