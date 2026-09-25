@@ -724,23 +724,17 @@ public final class NodeHost {
     }
 
     private func collectFocus(_ node: Node, origin: LayoutPoint, into items: inout [FocusItem]) {
-        guard !node.isHidden, node.appearance.opacity > 0 else { return }
+        node.walkVisible(from: origin) { node, origin in
+            guard node.canBecomeFocused else { return true }
 
-        let frame = LayoutRect(
-            x: origin.x + node.frame.origin.x,
-            y: origin.y + node.frame.origin.y,
-            width: node.frame.size.width,
-            height: node.frame.size.height
-        )
-        if node.canBecomeFocused {
             items.append(
-                FocusItem(node: node.id, frame: frame, cornerRadius: node.appearance.cornerRadius)
+                FocusItem(
+                    node: node.id,
+                    frame: node.frame(from: origin),
+                    cornerRadius: node.appearance.cornerRadius
+                )
             )
-            return
-        }
-
-        for subnode in node.subnodes {
-            collectFocus(subnode, origin: frame.origin, into: &items)
+            return false
         }
     }
 
@@ -749,24 +743,21 @@ public final class NodeHost {
         origin: LayoutPoint,
         into sections: inout [FocusSection]
     ) {
-        guard !node.isHidden, node.appearance.opacity > 0 else { return }
-
-        let frame = LayoutRect(
-            x: origin.x + node.frame.origin.x,
-            y: origin.y + node.frame.origin.y,
-            width: node.frame.size.width,
-            height: node.frame.size.height
-        )
-        if node.isFocusSection {
-            var items: [FocusItem] = []
-            collectFocus(node, origin: origin, into: &items)
-            if !items.isEmpty {
-                sections.append(FocusSection(node: node.id, frame: frame, items: items.map(\.node)))
+        node.walkVisible(from: origin) { node, origin in
+            if node.isFocusSection {
+                var items: [FocusItem] = []
+                collectFocus(node, origin: origin, into: &items)
+                if !items.isEmpty {
+                    sections.append(
+                        FocusSection(
+                            node: node.id,
+                            frame: node.frame(from: origin),
+                            items: items.map(\.node)
+                        )
+                    )
+                }
             }
-        }
-
-        for subnode in node.subnodes {
-            collectSections(subnode, origin: frame.origin, into: &sections)
+            return true
         }
     }
 
@@ -795,61 +786,50 @@ public final class NodeHost {
     }
 
     private func collect(_ node: Node, origin: LayoutPoint, into items: inout [AccessibilityItem]) {
-        guard !node.isHidden, node.appearance.opacity > 0 else { return }
+        node.walkVisible(from: origin) { node, origin in
+            let settings = node.accessibility
+            let ownLabel = settings.label ?? node.accessibilityContentLabel
+            let isElement =
+                settings.isElement
+                ?? (node.onTap != nil || (ownLabel.map { !$0.isEmpty } ?? false))
+            guard isElement else { return true }
 
-        let frame = LayoutRect(
-            x: origin.x + node.frame.origin.x,
-            y: origin.y + node.frame.origin.y,
-            width: node.frame.size.width,
-            height: node.frame.size.height
-        )
-        let settings = node.accessibility
-        let ownLabel = settings.label ?? node.accessibilityContentLabel
-        let isElement =
-            settings.isElement ?? (node.onTap != nil || (ownLabel.map { !$0.isEmpty } ?? false))
-        guard isElement else {
-            for subnode in node.subnodes {
-                collect(subnode, origin: frame.origin, into: &items)
+            var traits = node.accessibilityContentTraits.union(settings.traits)
+            if node.onTap != nil {
+                traits.insert(.button)
+                traits.remove(.staticText)
             }
-            return
-        }
-
-        var traits = node.accessibilityContentTraits.union(settings.traits)
-        if node.onTap != nil {
-            traits.insert(.button)
-            traits.remove(.staticText)
-        }
-        items.append(
-            AccessibilityItem(
-                node: node.id,
-                frame: frame,
-                label: ownLabel ?? spokenText(inside: node),
-                value: settings.value,
-                hint: settings.hint,
-                traits: traits
+            items.append(
+                AccessibilityItem(
+                    node: node.id,
+                    frame: node.frame(from: origin),
+                    label: ownLabel ?? spokenText(inside: node),
+                    value: settings.value,
+                    hint: settings.hint,
+                    traits: traits
+                )
             )
-        )
+            return false
+        }
     }
 
     /// The labels of the visible nodes inside `node`, in order — the name of an element made
     /// of several nodes.
     private func spokenText(inside node: Node) -> String {
         var parts: [String] = []
-        func visit(_ node: Node) {
-            guard !node.isHidden, node.appearance.opacity > 0,
-                node.accessibility.isElement != false
-            else { return }
+        node.walkVisible(from: .zero) { inner, _ in
+            // The node itself only leads to its subnodes.
+            guard inner !== node else { return true }
+            guard inner.accessibility.isElement != false else { return false }
 
-            if let label = node.accessibility.label ?? node.accessibilityContentLabel,
+            if let label = inner.accessibility.label ?? inner.accessibilityContentLabel,
                 !label.isEmpty
             {
                 parts.append(label)
-                return
+                return false
             }
-
-            node.subnodes.forEach(visit)
+            return true
         }
-        node.subnodes.forEach(visit)
         return parts.joined(separator: ", ")
     }
 

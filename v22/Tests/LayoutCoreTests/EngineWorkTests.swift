@@ -197,3 +197,19 @@ func aTreeTooDeepForItsBudgetThrowsRatherThanCrashing() async throws {
     #expect(deepThrew)
     #expect(shallowFrames == 2 + 5 * 3)
 }
+
+@Test
+func aVeryDeepTreeIsReleasedLevelByLevel() async throws {
+    // Released at once, a hundred thousand nested levels would take the runtime a frame per
+    // level — far more than the 256 KiB this thread has.
+    let released = try await onThread(stackSize: 256 << 10) {
+        var tree = LayoutNode(id: LayoutID(0))
+        for index in 1...100_000 {
+            tree = LayoutNode(id: LayoutID(UInt64(index)), children: [tree])
+        }
+        LayoutNode.dismantle(consume tree)
+        return true
+    }
+
+    #expect(released)
+}

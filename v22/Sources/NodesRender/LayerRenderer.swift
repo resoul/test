@@ -92,7 +92,7 @@
             defer { CATransaction.commit() }
 
             var pass = Pass(animation: animation)
-            let rootLayer = sync(root, parentIsNew: true, pass: &pass)
+            let rootLayer = sync(root, pass: &pass)
             if rootLayer.superlayer !== container {
                 container.addSublayer(rootLayer)
             }
@@ -111,7 +111,45 @@
             settle(pass.detached, gone: gone, animation: animation)
         }
 
-        private func sync(_ node: Node, parentIsNew: Bool, pass: inout Pass) -> CALayer {
+        /// A node whose layer is in line, while the layers of its subnodes are brought in line.
+        private struct Level {
+            let layer: CALayer
+            let subnodes: [Node]
+            /// The subnodes' layers appear with this one: they do not fade in by themselves.
+            let subnodesAreNew: Bool
+            var next = 0
+            var sublayers: [CALayer] = []
+        }
+
+        /// Brings the layers of `root` and everything under it in line with the nodes, and
+        /// returns the root's layer. A loop over an explicit stack rather than recursion: it
+        /// runs on the main thread, whose stack is small on a phone, and a tree can be deeper
+        /// than it allows. Each node is handled before its subnodes and its sublayers are set
+        /// after them, as a recursive walk would.
+        private func sync(_ root: Node, pass: inout Pass) -> CALayer {
+            var levels = [enter(root, parentIsNew: true, pass: &pass)]
+            while true {
+                let top = levels.count - 1
+                if levels[top].next < levels[top].subnodes.count {
+                    let subnode = levels[top].subnodes[levels[top].next]
+                    levels[top].next += 1
+                    levels.append(
+                        enter(subnode, parentIsNew: levels[top].subnodesAreNew, pass: &pass)
+                    )
+                    continue
+                }
+
+                let done = levels.removeLast()
+                attach(done.sublayers, to: done.layer, pass: &pass)
+                guard let parent = levels.indices.last else { return done.layer }
+
+                levels[parent].sublayers.append(done.layer)
+            }
+        }
+
+        /// Brings the layer of `node` itself in line: frame, appearance, visibility, and the
+        /// animation from what it showed.
+        private func enter(_ node: Node, parentIsNew: Bool, pass: inout Pass) -> Level {
             pass.visited.insert(node.id)
             var isNew = false
             var cameBack = false
@@ -163,12 +201,11 @@
                 layer.add(fadeIn, forKey: "opacity")
             }
 
-            var sublayers: [CALayer] = []
-            for subnode in node.subnodes {
-                sublayers.append(
-                    sync(subnode, parentIsNew: isNew || cameBack, pass: &pass)
-                )
-            }
+            return Level(layer: layer, subnodes: node.subnodes, subnodesAreNew: isNew || cameBack)
+        }
+
+        /// Puts `sublayers` into `layer` in that order; layers taken out go to `pass.detached`.
+        private func attach(_ sublayers: [CALayer], to layer: CALayer, pass: inout Pass) {
             let current = layer.sublayers ?? []
             if !current.elementsEqual(sublayers, by: ===) {
                 let kept = Set(sublayers.map(ObjectIdentifier.init))
@@ -178,7 +215,6 @@
                 }
                 layer.sublayers = sublayers.isEmpty ? nil : sublayers
             }
-            return layer
         }
 
         /// A hidden node's layer is hidden — after fading out, when the render is animated

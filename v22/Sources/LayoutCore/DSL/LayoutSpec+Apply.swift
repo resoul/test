@@ -35,7 +35,10 @@ public struct PreparedLayout {
     /// The tree to give `FlexboxEngine.layout`.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public let input: LayoutNode
+    public var input: LayoutNode { tree.root }
+
+    /// Owns `input`, so that a deep tree is released level by level with the prepared layout.
+    let tree: LayoutTreeOwner
 
     /// Some content measures by asking a view, so the tree must be solved on the main
     /// thread.
@@ -212,7 +215,7 @@ extension LayoutSpec {
         var tree = LayoutTree(direction: direction, spacing: spacing)
         let input = tree.root(for: self)
         return PreparedLayout(
-            input: input,
+            tree: LayoutTreeOwner(input),
             requiresMainThread: tree.requiresMainThread,
             elements: tree.elements,
             owners: tree.owners
@@ -263,8 +266,9 @@ extension LayoutSpec {
         var tree = LayoutTree(direction: direction, spacing: spacing)
         let root = tree.root(for: self)
         let context = LayoutContext(stackBudget: LayoutContext.currentThreadStackBudget)
-        return (try? FlexboxEngine.measure(root, width: width, height: height, context: context))
-            ?? .zero
+        let size = try? FlexboxEngine.measure(root, width: width, height: height, context: context)
+        LayoutNode.dismantle(consume root)
+        return size ?? .zero
     }
 }
 

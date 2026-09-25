@@ -60,6 +60,37 @@ public struct LayoutNode: Sendable {
     }
 }
 
+extension LayoutNode {
+    /// Releases `tree` one level at a time. Swift frees nested arrays recursively — one
+    /// runtime frame per level — so letting a tree thousands of levels deep go at once can
+    /// overflow a small stack. Here every node's children are taken out before the node is
+    /// dropped, so no release reaches further than one level. Only a tree nothing else shares
+    /// is freed here; a shared one is freed by its last owner.
+    static func dismantle(_ tree: consuming LayoutNode) {
+        var pending: [LayoutNode] = []
+        pending.append(consume tree)
+        while var node = pending.popLast() {
+            pending.append(contentsOf: node.children)
+            node.children = []
+        }
+    }
+}
+
+/// Owns the tree of a prepared layout and releases it level by level.
+final class LayoutTreeOwner {
+    private(set) var root: LayoutNode
+
+    init(_ root: LayoutNode) {
+        self.root = root
+    }
+
+    deinit {
+        let tree = root
+        root = LayoutNode(id: root.id)
+        LayoutNode.dismantle(consume tree)
+    }
+}
+
 /// A style a node takes from a width on (see `LayoutNode.variants`).
 ///
 /// Ownership: value type. Isolation: none. Errors: none. Cancellation: not applicable.
