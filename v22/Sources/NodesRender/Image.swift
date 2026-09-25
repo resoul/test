@@ -359,6 +359,18 @@
         }
     }
 
+    /// An image's own size, keeping its proportions: as wide as its natural width when
+    /// nothing limits it, and as tall as its proportions give for whatever width it gets.
+    struct NaturalSizeMeasurer: ContentMeasurer {
+        let size: LayoutSize
+
+        func minContentWidth() -> Double { size.width }
+
+        func maxContentWidth() -> Double { size.width }
+
+        func height(forWidth width: Double) -> Double { width * size.height / size.width }
+    }
+
     struct LoadedImage: Sendable {
         let image: CGImage
         let size: LayoutSize
@@ -376,6 +388,15 @@
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: replaces load.
         public var source: ImageSource? {
             didSet { if source != oldValue { reload() } }
+        }
+
+        /// Source pixels per point of the image's own size: 2 for an image made for a 2x
+        /// display. It changes only how large the image measures, not which pixels are decoded
+        /// — those follow the frame and the display scale. Values of zero or less count as 1.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var scale: Double {
+            didSet { if scale != oldValue { setNeedsLayout() } }
         }
 
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
@@ -426,7 +447,16 @@
 
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public override var layoutContent: LeafContent? {
-            .size(pixelSize ?? placeholder?.size ?? .zero)
+            let pointScale = scale > 0 ? scale : 1
+            let natural =
+                pixelSize.map {
+                    LayoutSize(width: $0.width / pointScale, height: $0.height / pointScale)
+                } ?? placeholder?.size
+            guard let natural, natural.width > 0, natural.height > 0 else {
+                return .size(natural ?? .zero)
+            }
+
+            return .measured(NaturalSizeMeasurer(size: natural))
         }
 
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
@@ -446,11 +476,13 @@
         /// Cancellation: the load stops when the source changes or the node is released.
         public init(
             source: ImageSource? = nil,
+            scale: Double = 1,
             contentMode: ImageContentMode = .fit,
             placeholder: ImagePlaceholder? = nil,
             pipeline: ImagePipeline = .shared
         ) {
             self.source = source
+            self.scale = scale
             self.contentMode = contentMode
             self.placeholder = placeholder
             self.pipeline = pipeline

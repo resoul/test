@@ -202,6 +202,88 @@
         #expect(image.accessibilityContentTraits.contains(.image))
     }
 
+    /// Lays out one image as a column's item, the way a screen places it.
+    @MainActor
+    private final class Column: Node {
+        let image: Image
+        let width: Length
+        let alignment: AlignItems
+
+        init(_ image: Image, width: Length = .auto, alignment: AlignItems = .start) {
+            self.image = image
+            self.width = width
+            self.alignment = alignment
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                FlexContainer(.column) { image }
+                    .width(width)
+                    .alignItems(alignment)
+            }
+            .alignItems(.start)
+        }
+    }
+
+    @MainActor
+    private func loaded(_ image: Image) async throws {
+        for _ in 0..<100 where image.pixelSize == nil {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(image.pixelSize != nil)
+    }
+
+    /// Chromium 152 lays out a 400×200 `<img>` the same way in these containers.
+    @Test @MainActor
+    func imageKeepsItsProportionsForTheWidthItGets() async throws {
+        let data = try encodedImage(width: 400, height: 200)
+        let cases: [(Length, AlignItems, LayoutSize)] = [
+            (.auto, .start, LayoutSize(width: 400, height: 200)),
+            (.points(100), .stretch, LayoutSize(width: 100, height: 50)),
+            (.points(100), .center, LayoutSize(width: 400, height: 200)),
+        ]
+        for (width, alignment, expected) in cases {
+            let image = Image(source: .data(data))
+            try await loaded(image)
+            let host = NodeHost(
+                root: Column(image, width: width, alignment: alignment),
+                size: LayoutSize(width: 600, height: 600)
+            )
+            host.layoutIfNeeded()
+            #expect(image.frame.size == expected, "width \(width), \(alignment)")
+            host.detach()
+        }
+    }
+
+    @Test @MainActor
+    func scaleTurnsSourcePixelsIntoPoints() async throws {
+        let image = Image(source: .data(try encodedImage(width: 400, height: 200)), scale: 2)
+        try await loaded(image)
+        let host = NodeHost(root: Column(image), size: LayoutSize(width: 600, height: 600))
+        defer { host.detach() }
+        host.layoutIfNeeded()
+        #expect(image.frame.size == LayoutSize(width: 200, height: 100))
+        #expect(image.pixelSize == LayoutSize(width: 400, height: 200))
+
+        image.scale = 4
+        host.layoutIfNeeded()
+        #expect(image.frame.size == LayoutSize(width: 100, height: 50))
+    }
+
+    @Test @MainActor
+    func placeholderSizeKeepsItsProportionsToo() {
+        let image = Image(
+            placeholder: ImagePlaceholder(size: LayoutSize(width: 40, height: 20))
+        )
+        let host = NodeHost(
+            root: Column(image, width: .points(100), alignment: .stretch),
+            size: LayoutSize(width: 600, height: 600)
+        )
+        defer { host.detach() }
+        host.layoutIfNeeded()
+        #expect(image.frame.size == LayoutSize(width: 100, height: 50))
+    }
+
     @Test @MainActor
     func changingContentModeRedrawsTheSameFrame() async throws {
         let data = try encodedImage(width: 40, height: 10)
@@ -398,11 +480,10 @@
         )
         let image = Image(source: .data(data), placeholder: placeholder)
         #expect(image.phase == .loading)
-        guard case let .size(size)? = image.layoutContent else {
-            Issue.record("The placeholder must provide an intrinsic size")
-            return
-        }
-        #expect(size == LayoutSize(width: 24, height: 24))
+        let measured = NodeHost(root: Column(image), size: LayoutSize(width: 200, height: 200))
+        measured.layoutIfNeeded()
+        #expect(image.frame.size == LayoutSize(width: 24, height: 24))
+        measured.detach()
 
         let host = NodeHost(root: image, size: LayoutSize(width: 24, height: 24))
         defer { host.detach() }
