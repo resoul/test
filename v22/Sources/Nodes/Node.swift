@@ -242,11 +242,12 @@ open class Node: LayoutElement {
         var levels = [first]
         while let top = levels.indices.last {
             if levels[top].next >= 0 {
-                let subnode = levels[top].node.subnodes[levels[top].next]
+                let node = levels[top].node
+                let subnode = node.subnodes[levels[top].next]
                 levels[top].next -= 1
                 let local = LayoutPoint(
-                    x: levels[top].point.x - subnode.frame.origin.x,
-                    y: levels[top].point.y - subnode.frame.origin.y
+                    x: levels[top].point.x - subnode.frame.origin.x + node.contentOrigin.x,
+                    y: levels[top].point.y - subnode.frame.origin.y + node.contentOrigin.y
                 )
                 if let level = enter(subnode, at: local) {
                     levels.append(level)
@@ -273,8 +274,8 @@ open class Node: LayoutElement {
             }
 
             let inner = LayoutPoint(
-                x: origin.x + node.frame.origin.x,
-                y: origin.y + node.frame.origin.y
+                x: origin.x + node.frame.origin.x - node.contentOrigin.x,
+                y: origin.y + node.frame.origin.y - node.contentOrigin.y
             )
             // Pushed last to first, so the first subnode is visited next.
             for subnode in node.subnodes.reversed() {
@@ -282,6 +283,10 @@ open class Node: LayoutElement {
             }
         }
     }
+
+    /// The point of the node's own coordinates shown at its top left corner: its subnodes
+    /// are drawn moved back by it. Zero, except where a scroll moved its content.
+    var contentOrigin: LayoutPoint { .zero }
 
     /// The frame in the coordinates `origin` is given in.
     func frame(from origin: LayoutPoint) -> LayoutRect {

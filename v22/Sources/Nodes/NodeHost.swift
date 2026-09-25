@@ -71,6 +71,14 @@ public final class NodeHost {
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public private(set) var renderAnimation: Animation?
 
+    /// Scrolls whose offset changed since the adapter last drew, when nothing else did and
+    /// the change was not animated: the adapter may move just their content and focus ring
+    /// instead of drawing the whole tree. Cleared by `didRender()`.
+    ///
+    /// Ownership: the host keeps the nodes until the next drawing. Isolation: MainActor.
+    /// Errors: none. Cancellation: not applicable.
+    public private(set) var scrolledSinceRender: [Scroll] = []
+
     /// Whether the next `layoutIfNeeded()` lays the tree out.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
@@ -212,12 +220,29 @@ public final class NodeHost {
         onNeedsRender?()
     }
 
+    /// Marks `scroll` as scrolled: without an animation the adapter can move just its
+    /// content (`scrolledSinceRender`); with one, the whole tree is drawn with it.
+    func setNeedsScrollRender(_ scroll: Scroll) {
+        guard Animation.current == nil else {
+            setNeedsRender()
+            return
+        }
+        guard !scrolledSinceRender.contains(where: { $0 === scroll }) else { return }
+
+        let wasQuiet = !needsRender && scrolledSinceRender.isEmpty
+        scrolledSinceRender.append(scroll)
+        if wasQuiet {
+            onNeedsRender?()
+        }
+    }
+
     /// Tells the host the adapter has drawn the tree as it is now.
     ///
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public func didRender() {
         needsRender = false
         renderAnimation = nil
+        scrolledSinceRender = []
     }
 
     /// The size the tree takes under the given space — for `sizeThatFits` and
@@ -552,6 +577,42 @@ public final class NodeHost {
         target.pressChanged(false)
     }
 
+    // MARK: - Scrolls
+
+    /// The visible scrolls of the tree, outer ones first, framed in the root's coordinates
+    /// — for the adapter to put the platform's scrolling over them.
+    ///
+    /// Ownership: returns values referring to nodes of the tree. Isolation: MainActor.
+    /// Errors: none. Cancellation: not applicable.
+    public func scrollItems() -> [ScrollItem] {
+        var items: [ScrollItem] = []
+        root.walkVisible(from: .zero) { node, origin in
+            if let scroll = node as? Scroll {
+                items.append(ScrollItem(scroll: scroll, frame: scroll.frame(from: origin)))
+            }
+            return true
+        }
+        return items
+    }
+
+    /// The scrolls under `point`, in the root's coordinates, that have somewhere to scroll,
+    /// the innermost first. A drag moves the first one of its axis; a wheel that has taken
+    /// one to its end goes on to the next.
+    ///
+    /// Ownership: returns nodes of the tree. Isolation: MainActor. Errors: none.
+    /// Cancellation: not applicable.
+    public func scrolls(at point: LayoutPoint) -> [Scroll] {
+        var found: [Scroll] = []
+        var node = root.hitTest(point)
+        while let current = node {
+            if let scroll = current as? Scroll, scroll.canScroll {
+                found.append(scroll)
+            }
+            node = current.supernode
+        }
+        return found
+    }
+
     // MARK: - Focus
 
     /// The focused node's item, or `nil` — where the adapter draws a focus ring.
@@ -617,6 +678,20 @@ public final class NodeHost {
         withAnimation(focusAnimation) {
             previous?.setFocused(false)
             target?.setFocused(true)
+            if let target {
+                reveal(target)
+            }
+        }
+    }
+
+    /// Scrolls every scroll around `node`, the innermost first, so that the node shows.
+    private func reveal(_ node: Node) {
+        var current = node.supernode
+        while let ancestor = current {
+            if let scroll = ancestor as? Scroll {
+                scroll.scrollToReveal(node)
+            }
+            current = ancestor.supernode
         }
     }
 

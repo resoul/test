@@ -38,6 +38,8 @@
         /// A node the app asked to focus (`NodeHost.requestFocus`), until the focus system
         /// moves the focus.
         private var requestedFocus: NodeID?
+        /// The platform's scrolling of each scroll of the tree, off a TV.
+        private var scrollDrivers: [NodeID: ScrollDriver] = [:]
 
         /// A view showing `root`.
         ///
@@ -146,23 +148,91 @@
                     animation: host.renderAnimation
                 )
                 host.didRender()
-                accessibilityCache = nil
-                updateFocusItems()
-                if usesFocus, !isTV {
-                    focusRing.show(
-                        around: host.focusedItem,
-                        color: tintColor.cgColor,
-                        in: contentLayer
-                    )
-                }
+                updateScrollDrivers()
+                updateAfterMove()
                 if UIAccessibility.isVoiceOverRunning {
                     UIAccessibility.post(notification: .layoutChanged, argument: nil)
                 }
+            } else if !host.scrolledSinceRender.isEmpty {
+                // Only scrolls moved: their content moves, and what depends on where nodes
+                // show — the ring, focus and accessibility frames — follows.
+                let scrolled = host.scrolledSinceRender
+                renderer.renderScrolls(scrolled)
+                host.didRender()
+                for scroll in scrolled {
+                    scrollDrivers[scroll.id]?.follow(factor: factor)
+                }
+                updateAfterMove()
             }
             if widthChanged {
                 // The height the tree wants depends on the width it has.
                 invalidateIntrinsicContentSize()
             }
+        }
+
+        /// Brings what depends on where the nodes show in line after a drawing.
+        private func updateAfterMove() {
+            accessibilityCache = nil
+            updateFocusItems()
+            if usesFocus, !isTV {
+                focusRing.show(
+                    around: host.focusedItem,
+                    color: tintColor.cgColor,
+                    in: contentLayer
+                )
+            }
+        }
+
+        // MARK: - Scrolling
+
+        /// Brings the scroll drivers in line with the tree's scrolls after a drawing: one per
+        /// visible scroll, over its frame. On a TV the focus scrolls, not the touch surface.
+        private func updateScrollDrivers() {
+            var kept: [NodeID: ScrollDriver] = [:]
+            if !isTV {
+                for item in host.scrollItems() {
+                    let driver =
+                        scrollDrivers[item.scroll.id] ?? ScrollDriver(in: self, scroll: item.scroll)
+                    driver.place(zoomed(item.frame), factor: factor)
+                    kept[item.scroll.id] = driver
+                }
+            }
+            for (id, driver) in scrollDrivers where kept[id] == nil {
+                driver.remove()
+            }
+            scrollDrivers = kept
+        }
+
+        /// Touches over the scrolls' physics come to this view, like any other: the scroll
+        /// views only lend their pans, which are on this view.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+            let hit = super.hitTest(point, with: event)
+            if let hit, scrollDrivers.values.contains(where: { $0.owns(hit) }) {
+                return self
+            }
+            return hit
+        }
+
+        /// A drag starts a scroll's pan only where that scroll is the innermost one under the
+        /// finger able to move along its axis, so a row of cards scrolls sideways inside a
+        /// list that scrolls up and down.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func gestureRecognizerShouldBegin(
+            _ gestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            guard
+                let driver = scrollDrivers.values.first(where: {
+                    $0.pan === gestureRecognizer
+                })
+            else { return super.gestureRecognizerShouldBegin(gestureRecognizer) }
+
+            let location = gestureRecognizer.location(in: self)
+            let point = LayoutPoint(x: Double(location.x) / factor, y: Double(location.y) / factor)
+            return host.scrolls(at: point).first { $0.axis == driver.scroll?.axis }
+                === driver.scroll
         }
 
         /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
@@ -178,6 +248,15 @@
         ///
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+            // A touch on content still gliding stops it, and does nothing else — as in any
+            // scroll view.
+            let gliding = scrollDrivers.values.filter(\.isGliding)
+            guard gliding.isEmpty else {
+                for driver in gliding {
+                    driver.stop()
+                }
+                return
+            }
             guard let touch = touches.first, host.pointerDown(at: point(of: touch)) else {
                 super.touchesBegan(touches, with: event)
                 return
@@ -460,6 +539,104 @@
             let view = NodeView(root: node)
             addSubview(view)
             return view
+        }
+    }
+
+    /// The platform's scrolling for one scroll of the tree. An empty `UIScrollView` over the
+    /// scroll's frame gives the physics — the drag, the glide, the bounce at the ends — and
+    /// its offset moves the scroll; the tree's layers do all the drawing. Its pan is added to
+    /// the node view, which takes the touches over it (`hitTest`) so taps still reach the
+    /// nodes. The scroll view stays shown and interactive: hidden, or with interaction off,
+    /// its pan never begins.
+    @MainActor
+    final class ScrollDriver: NSObject, UIScrollViewDelegate {
+        private(set) weak var scroll: Scroll?
+        private let physics = UIScrollView()
+        /// Set while the driver moves the scroll view itself, so it does not hear itself.
+        private var isFollowing = false
+        private var factor = 1.0
+
+        var pan: UIPanGestureRecognizer { physics.panGestureRecognizer }
+
+        /// Moving with the finger, or on its own after it: a touch then stops it.
+        var isGliding: Bool { physics.isDecelerating && !isPastTheEnds }
+
+        init(in view: UIView, scroll: Scroll) {
+            self.scroll = scroll
+            super.init()
+            physics.delegate = self
+            physics.backgroundColor = nil
+            physics.contentInsetAdjustmentBehavior = .never
+            physics.showsVerticalScrollIndicator = false
+            physics.showsHorizontalScrollIndicator = false
+            physics.alwaysBounceVertical = scroll.axis == .vertical
+            physics.alwaysBounceHorizontal = scroll.axis == .horizontal
+            view.addSubview(physics)
+            view.addGestureRecognizer(physics.panGestureRecognizer)
+        }
+
+        /// Puts the scroll view over the scroll's frame, `frame` in the node view's points,
+        /// with the content's extent, and at the scroll's offset unless a finger moves it.
+        func place(_ frame: CGRect, factor: Double) {
+            guard let scroll else { return }
+
+            isFollowing = true
+            defer { isFollowing = false }
+
+            self.factor = factor
+            physics.frame = frame
+            let content = scroll.contentBounds
+            // The content may start before the scroll's origin (a row laid out from the
+            // right); the insets let the offset go there.
+            physics.contentInset = UIEdgeInsets(
+                top: CGFloat(-content.origin.y * factor),
+                left: CGFloat(-content.origin.x * factor),
+                bottom: 0,
+                right: 0
+            )
+            physics.contentSize = CGSize(
+                width: (content.origin.x + content.size.width) * factor,
+                height: (content.origin.y + content.size.height) * factor
+            )
+            follow(factor: factor)
+        }
+
+        /// Moves the scroll view to the scroll's offset, when code moved the scroll rather
+        /// than a finger.
+        func follow(factor: Double) {
+            guard let scroll, !physics.isTracking, !physics.isDecelerating else { return }
+
+            isFollowing = true
+            defer { isFollowing = false }
+
+            let offset = scroll.shownOffset
+            physics.contentOffset = CGPoint(x: offset.x * factor, y: offset.y * factor)
+        }
+
+        func owns(_ view: UIView) -> Bool {
+            view === physics
+        }
+
+        func stop() {
+            physics.setContentOffset(physics.contentOffset, animated: false)
+        }
+
+        func remove() {
+            physics.panGestureRecognizer.view?.removeGestureRecognizer(physics.panGestureRecognizer)
+            physics.removeFromSuperview()
+        }
+
+        private var isPastTheEnds: Bool {
+            scroll.map { $0.overscroll != .zero } ?? false
+        }
+
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            guard !isFollowing else { return }
+
+            let offset = scrollView.contentOffset
+            scroll?.platformDidScroll(
+                to: LayoutPoint(x: Double(offset.x) / factor, y: Double(offset.y) / factor)
+            )
         }
     }
 

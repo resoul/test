@@ -159,18 +159,29 @@
                     animation: host.renderAnimation
                 )
                 host.didRender()
-                accessibilityCache = nil
-                focusRing.show(
-                    around: host.focusedItem,
-                    color: NSColor.keyboardFocusIndicatorColor.cgColor,
-                    in: contentLayer
-                )
+                updateAfterMove()
                 NSAccessibility.post(element: self, notification: .layoutChanged)
+            } else if !host.scrolledSinceRender.isEmpty {
+                // Only scrolls moved: their content moves, and the ring and accessibility
+                // frames follow.
+                renderer.renderScrolls(host.scrolledSinceRender)
+                host.didRender()
+                updateAfterMove()
             }
             if widthChanged {
                 // The height the tree wants depends on the width it has.
                 invalidateIntrinsicContentSize()
             }
+        }
+
+        /// Brings what depends on where the nodes show in line after a drawing.
+        private func updateAfterMove() {
+            accessibilityCache = nil
+            focusRing.show(
+                around: host.focusedItem,
+                color: NSColor.keyboardFocusIndicatorColor.cgColor,
+                in: contentLayer
+            )
         }
 
         /// The view is a container: its elements are the tree's.
@@ -318,6 +329,61 @@
         private static func selects(_ event: NSEvent) -> Bool {
             event.specialKey == .carriageReturn || event.specialKey == .enter
                 || event.charactersIgnoringModifiers == " "
+        }
+
+        // MARK: - Scrolling
+
+        /// The scroll wheel and the trackpad move the tree's scrolls: the innermost one under
+        /// the pointer that can still go that way, then the ones around it. A trackpad
+        /// gesture, with its glide, stays with the scrolls it started in, as in any Mac scroll
+        /// view. What no scroll takes goes on up the responder chain.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func scrollWheel(with event: NSEvent) {
+            if event.phase == .began || (event.phase == [] && event.momentumPhase == []) {
+                latched = nil
+            }
+            var delta = LayoutPoint(
+                x: -Double(event.scrollingDeltaX),
+                y: -Double(event.scrollingDeltaY)
+            )
+            if !event.hasPreciseScrollingDeltas {
+                // A mouse wheel counts lines.
+                delta = LayoutPoint(x: delta.x * NodeNSView.line, y: delta.y * NodeNSView.line)
+            }
+            if !scroll(by: delta, at: point(of: event)) {
+                super.scrollWheel(with: event)
+            }
+        }
+
+        /// Points one line of a mouse wheel scrolls.
+        private static let line = 10.0
+
+        /// The scrolls the current trackpad gesture moves.
+        private var latched: [Scroll]?
+
+        /// Moves the scrolls under `point` by `delta`, in the view's points, and returns
+        /// whether any moved.
+        @discardableResult
+        func scroll(by delta: LayoutPoint, at point: LayoutPoint) -> Bool {
+            let scrolls = latched ?? host.scrolls(at: point)
+            latched = scrolls
+            var left = LayoutPoint(x: delta.x / factor, y: delta.y / factor)
+            var moved = false
+            for scroll in scrolls {
+                let before = scroll.contentOffset
+                var offset = before
+                switch scroll.axis {
+                case .vertical: offset.y += left.y
+                case .horizontal: offset.x += left.x
+                }
+                scroll.contentOffset = offset
+                let now = scroll.contentOffset
+                left.x -= now.x - before.x
+                left.y -= now.y - before.y
+                moved = moved || now != before
+            }
+            return moved
         }
 
         private func point(of event: NSEvent) -> LayoutPoint {

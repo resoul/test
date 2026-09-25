@@ -21,7 +21,7 @@ AGENTS.md Trellis).
 | `ImageNode` (планируемый) | `Image` | совпадает со SwiftUI — допустимо |
 | `ControlNode` | `Control` | |
 | кнопка | `Button` | совпадает со SwiftUI — допустимо |
-| `ScrollNode` | `Scroll` | `ScrollView` занят в SwiftUI; `Scroll` свободно |
+| `ScrollNode` | `Scroll` | `ScrollView` занят в SwiftUI; `Scroll` свободно. Реализовано (2026-09-25); `ScrollAxis`, `ScrollRange`, `ScrollItem`, `contentOffset`, `overscroll`, `platformDidScroll(to:)`, `scrollToReveal` — предложено |
 | `TableNode` | `Table` | совпадает со SwiftUI — допустимо |
 | `GridNode` | `Grid` | совпадает со SwiftUI — допустимо |
 | `TabsNode` | `Tabs` | |
