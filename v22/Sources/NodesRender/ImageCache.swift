@@ -78,6 +78,7 @@
         }
 
         /// Returns cached bytes, or downloads and stores them. File URLs are read directly.
+        /// An image whose format cannot take the metadata policy is returned uncached.
         ///
         /// Ownership: returns data. Isolation: actor. Errors: network, image, and file errors.
         /// Cancellation: cancellation of the caller cancels the download before a disk write.
@@ -91,7 +92,14 @@
                 (200...299).contains(response.statusCode)
             else { throw ImageCacheError.invalidResponse }
 
-            try store(data, for: url)
+            do {
+                try store(data, for: url)
+            } catch ImageCacheError.processingFailed {
+                // The metadata policy cannot be applied to this format: Image I/O reads WebP,
+                // for one, but cannot write it. Storing the original would keep on disk what
+                // the policy removes, so the image is shown but not cached.
+                return data
+            }
             return try cachedData(for: url) ?? data
         }
 

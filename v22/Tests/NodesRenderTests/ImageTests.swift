@@ -91,6 +91,62 @@
         #expect(sourcePixels.dataProvider?.data as Data? == savedPixels.dataProvider?.data as Data?)
     }
 
+    /// A lossless 1×1 WebP. Image I/O decodes WebP but cannot encode it.
+    private let webP = Data(
+        base64Encoded: "UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA=="
+    )!
+
+    /// Answers requests to `image-cache.test` with the WebP above, so the download path of
+    /// the disk cache runs without a network. Other hosts are left to the system.
+    private final class WebPProtocol: URLProtocol {
+        override class func canInit(with request: URLRequest) -> Bool {
+            request.url?.host == "image-cache.test"
+        }
+
+        override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+        override func startLoading() {
+            guard let url = request.url,
+                let response = HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "image/webp"]
+                )
+            else { return }
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: webP)
+            client?.urlProtocolDidFinishLoading(self)
+        }
+
+        override func stopLoading() {}
+    }
+
+    private let webPProtocolRegistered: Bool = URLProtocol.registerClass(WebPProtocol.self)
+
+    @Test
+    func imageThatCannotTakeTheMetadataPolicyIsShownButNotCached() async throws {
+        #expect(webPProtocolRegistered)
+        let source = try #require(CGImageSourceCreateWithData(webP as CFData, nil))
+        #expect(CGImageSourceCreateImageAtIndex(source, 0, nil) != nil)
+
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = ImageCache(
+            configuration: ImageCacheConfiguration(
+                directory: directory,
+                metadata: .removeLocation
+            )
+        )
+        let url = URL(string: "https://image-cache.test/photo.webp")!
+        #expect(try await cache.load(url) == webP)
+        #expect(try await cache.cachedData(for: url) == nil)
+
+        let pipeline = ImagePipeline(cache: cache)
+        let image = try await pipeline.load(.url(url), targetPixelDimension: 8)
+        #expect(image.size == LayoutSize(width: 1, height: 1))
+    }
+
     @Test
     func cachePoliciesUseDifferentDiskEntries() async throws {
         let directory = temporaryCache()
