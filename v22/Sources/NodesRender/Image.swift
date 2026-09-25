@@ -105,6 +105,7 @@
             var waiters: Set<UInt64>
         }
 
+        private let decodeGate = DecodeGate()
         private var decoded: [DecodedKey: DecodedEntry] = [:]
         private var inFlight: [DecodedKey: InFlight] = [:]
         private var decodedBytes = 0
@@ -113,6 +114,8 @@
         private var nextWaiterID: UInt64 = 0
         private var cacheGeneration: UInt64 = 0
         private var decodeCount = 0
+        private var runningDecodes = 0
+        private var peakRunningDecodes = 0
 
         /// Ownership: the caller owns the pipeline. Isolation: actor. Errors: none.
         /// Cancellation: not applicable.
@@ -160,9 +163,18 @@
             } else {
                 nextFlightID &+= 1
                 let id = nextFlightID
-                // The pipeline serializes large decodes on its own executor so several
-                // simultaneous images do not create several full-sized bitmaps at once.
-                let task = Task { try Self.decode(data, pixelDimension: limit) }
+                // Decodes run one at a time so several simultaneous images do not create
+                // several full-sized bitmaps at once. They wait in the gate rather than on
+                // this actor, which stays free for cache hits and cancellations; a decode
+                // cancelled while queued leaves the queue without running.
+                let task = Task.detached(priority: Task.currentPriority) { [decodeGate] in
+                    try await decodeGate.acquire()
+                    await self.decodeStarted()
+                    let result = Result { try Self.decode(data, pixelDimension: limit) }
+                    await self.decodeFinished()
+                    await decodeGate.release()
+                    return try result.get()
+                }
                 flight = InFlight(
                     id: id,
                     cacheGeneration: cacheGeneration,
@@ -207,8 +219,17 @@
             cacheGeneration &+= 1
         }
 
-        func decodedCacheState() -> (entries: Int, bytes: Int, decodes: Int) {
-            (decoded.count, decodedBytes, decodeCount)
+        func decodedCacheState() -> (entries: Int, bytes: Int, decodes: Int, peakRunning: Int) {
+            (decoded.count, decodedBytes, decodeCount, peakRunningDecodes)
+        }
+
+        private func decodeStarted() {
+            runningDecodes += 1
+            peakRunningDecodes = max(peakRunningDecodes, runningDecodes)
+        }
+
+        private func decodeFinished() {
+            runningDecodes -= 1
         }
 
         private func removeWaiter(_ id: UInt64, from key: DecodedKey, flightID: UInt64) {
@@ -282,6 +303,59 @@
                     height: Double(height > 0 ? height : image.height)
                 )
             )
+        }
+    }
+
+    /// Lets one decode run at a time and queues the rest in arrival order. A queued caller
+    /// that is cancelled leaves the queue and throws `CancellationError`.
+    actor DecodeGate {
+        private var isRunning = false
+        private var waiting: [(id: UInt64, continuation: CheckedContinuation<Void, Error>)] = []
+        private var nextID: UInt64 = 0
+
+        var waitingCount: Int { waiting.count }
+
+        func acquire() async throws {
+            try Task.checkCancellation()
+            guard isRunning else {
+                isRunning = true
+                return
+            }
+
+            nextID &+= 1
+            let id = nextID
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation {
+                    (continuation: CheckedContinuation<Void, Error>) in
+                    enqueue(id, continuation)
+                }
+            } onCancel: {
+                Task { await self.leave(id) }
+            }
+        }
+
+        private func enqueue(_ id: UInt64, _ continuation: CheckedContinuation<Void, Error>) {
+            // Cancellation that arrived before this point found nothing to remove.
+            if Task.isCancelled {
+                continuation.resume(throwing: CancellationError())
+            } else {
+                waiting.append((id, continuation))
+            }
+        }
+
+        func release() {
+            guard !waiting.isEmpty else {
+                isRunning = false
+                return
+            }
+
+            // The slot passes straight to the next caller, so nobody can overtake the queue.
+            waiting.removeFirst().continuation.resume()
+        }
+
+        private func leave(_ id: UInt64) {
+            guard let index = waiting.firstIndex(where: { $0.id == id }) else { return }
+            waiting.remove(at: index).continuation.resume(throwing: CancellationError())
         }
     }
 

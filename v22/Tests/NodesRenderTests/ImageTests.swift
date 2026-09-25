@@ -280,6 +280,44 @@
     }
 
     @Test
+    func differentImagesDecodeOneAtATime() async throws {
+        let sources = try (0..<6).map { index in
+            try encodedImage(width: 1600 + index * 16, height: 1600)
+        }
+        let pipeline = ImagePipeline(maximumDecodedCacheBytes: 0)
+        let widths = try await withThrowingTaskGroup(of: Int.self) { group in
+            for data in sources {
+                group.addTask {
+                    try await pipeline.load(.data(data), targetPixelDimension: 1700).image.width
+                }
+            }
+            return try await group.reduce(into: []) { $0.append($1) }
+        }
+        #expect(widths.sorted() == (0..<6).map { 1600 + $0 * 16 })
+        let state = await pipeline.decodedCacheState()
+        #expect(state.decodes == 6)
+        #expect(state.peakRunning == 1)
+    }
+
+    @Test
+    func cancelledQueuedDecodeLeavesTheQueue() async throws {
+        let gate = DecodeGate()
+        try await gate.acquire()
+        let queued = Task { try await gate.acquire() }
+        while await gate.waitingCount == 0 { await Task.yield() }
+
+        queued.cancel()
+        await #expect(throws: CancellationError.self) { try await queued.value }
+        #expect(await gate.waitingCount == 0)
+
+        // The slot is still held by the first caller; releasing it frees the gate for the
+        // next one instead of handing it to the cancelled caller.
+        await gate.release()
+        try await gate.acquire()
+        await gate.release()
+    }
+
+    @Test
     func replacingFileBytesDoesNotReuseAnOldBitmap() async throws {
         let file = temporaryCache().appendingPathExtension("png")
         defer { try? FileManager.default.removeItem(at: file) }
