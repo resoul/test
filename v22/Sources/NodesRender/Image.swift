@@ -23,7 +23,7 @@
     }
 
     /// Loads and decodes static images. The disk cache holds encoded bytes; decoding happens
-    /// away from the main actor, with a pixel limit independent of disk storage.
+    /// away from the main actor. A small preview is followed by pixels matched to the frame.
     ///
     /// Ownership: the caller owns the pipeline and its cache. Isolation: actor. Errors: image,
     /// file, and network errors are thrown. Cancellation: the caller's task cancels loading.
@@ -35,23 +35,30 @@
         /// Cancellation: not applicable.
         public let cache: ImageCache
 
-        /// Maximum decoded width or height. The original encoded data stays intact in the
-        /// disk cache; this limit only reduces memory used by display images.
+        /// Optional ceiling for decoded width or height. `nil` lets the requested frame use
+        /// the source's full resolution when needed. Disk bytes are never reduced by this.
         ///
         /// Ownership: value. Isolation: actor. Errors: none. Cancellation: not applicable.
-        public let maximumDecodedPixelDimension: Int
+        public let maximumDecodedPixelDimension: Int?
+
+        /// Initial preview size, before the node knows how large it will be drawn.
+        ///
+        /// Ownership: value. Isolation: actor. Errors: none. Cancellation: not applicable.
+        public let previewPixelDimension: Int
 
         /// Ownership: the caller owns the pipeline. Isolation: actor. Errors: none.
         /// Cancellation: not applicable.
         public init(
             cache: ImageCache = ImageCache(),
-            maximumDecodedPixelDimension: Int = 4096
+            maximumDecodedPixelDimension: Int? = nil,
+            previewPixelDimension: Int = 256
         ) {
             self.cache = cache
-            self.maximumDecodedPixelDimension = max(1, maximumDecodedPixelDimension)
+            self.maximumDecodedPixelDimension = maximumDecodedPixelDimension.map { max(1, $0) }
+            self.previewPixelDimension = max(1, previewPixelDimension)
         }
 
-        func load(_ source: ImageSource) async throws -> LoadedImage {
+        func load(_ source: ImageSource, targetPixelDimension: Int) async throws -> LoadedImage {
             let data: Data
             switch source {
             case let .data(value): data = value
@@ -74,10 +81,14 @@
             let width = swapsAxes ? rawHeight : rawWidth
             let height = swapsAxes ? rawWidth : rawHeight
 
+            let limit =
+                maximumDecodedPixelDimension.map {
+                    min(max(1, targetPixelDimension), $0)
+                } ?? max(1, targetPixelDimension)
             let options: [String: Any] = [
                 kCGImageSourceCreateThumbnailFromImageAlways as String: true,
                 kCGImageSourceCreateThumbnailWithTransform as String: true,
-                kCGImageSourceThumbnailMaxPixelSize as String: maximumDecodedPixelDimension,
+                kCGImageSourceThumbnailMaxPixelSize as String: limit,
                 kCGImageSourceShouldCacheImmediately as String: true,
             ]
             guard
@@ -103,12 +114,12 @@
         let size: LayoutSize
     }
 
-    /// A static image node. Its encoded source is loaded once per change and the bitmap is
-    /// redrawn at the size the layout gives it. A late result from an old source is discarded.
+    /// A static image node. It decodes a preview, then pixels for its frame and display scale.
+    /// An old result is discarded when the source, frame, or display scale changes.
     ///
     /// Ownership: the creator owns the node; the node owns its load task. Isolation:
     /// MainActor. Errors: a failed load leaves the node empty. Cancellation: replacing the
-    /// source or releasing the node cancels the old load.
+    /// source, requested pixel size, or releasing the node cancels the old load.
     @MainActor
     public final class Image: Node, LayerDrawing {
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: replaces load.
@@ -121,6 +132,9 @@
             didSet {
                 if contentMode != oldValue {
                     revision &+= 1
+                    requestedPixelDimension = nil
+                    detailTask?.cancel()
+                    detailGeneration &+= 1
                     host?.setNeedsRender()
                 }
             }
@@ -130,6 +144,11 @@
         ///
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public private(set) var pixelSize: LayoutSize?
+
+        /// Pixels currently decoded for display; may be a preview while a sharper image loads.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public private(set) var decodedPixelSize: LayoutSize?
 
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public var drawingRevision: UInt64 { revision }
@@ -145,6 +164,10 @@
         private let pipeline: ImagePipeline
         private var loaded: LoadedImage?
         private var loadTask: Task<Void, Never>?
+        private var detailTask: Task<Void, Never>?
+        private var sourceGeneration: UInt64 = 0
+        private var detailGeneration: UInt64 = 0
+        private var requestedPixelDimension: Int?
         private var revision: UInt64 = 0
 
         /// Ownership: the caller owns the node. Isolation: MainActor. Errors: none.
@@ -161,7 +184,57 @@
             reload()
         }
 
-        deinit { loadTask?.cancel() }
+        deinit {
+            loadTask?.cancel()
+            detailTask?.cancel()
+        }
+
+        /// Requests only the pixels needed to cover the visible frame at the display scale.
+        /// Fill and stretch can need more source pixels than fit because they crop or distort.
+        ///
+        /// Ownership: starts a task owned by the node. Isolation: MainActor. Errors: a failed
+        /// refinement leaves the last decoded image visible. Cancellation: a new request
+        /// cancels the old one.
+        public func prepareDrawing(size: CGSize, scale: Double) {
+            guard let source, let pixelSize,
+                size.width > 0, size.height > 0, scale > 0,
+                pixelSize.width > 0, pixelSize.height > 0
+            else { return }
+
+            let pixelWidth = Double(size.width) * scale
+            let pixelHeight = Double(size.height) * scale
+            guard pixelWidth.isFinite, pixelHeight.isFinite else { return }
+            let horizontal = pixelWidth / pixelSize.width
+            let vertical = pixelHeight / pixelSize.height
+            let factor = contentMode == .fit ? min(horizontal, vertical) : max(horizontal, vertical)
+            let sourceMaximum = max(pixelSize.width, pixelSize.height)
+            let wanted = Int(min(sourceMaximum, max(1, (sourceMaximum * factor).rounded(.up))))
+            guard requestedPixelDimension != wanted else { return }
+
+            requestedPixelDimension = wanted
+            detailTask?.cancel()
+            detailGeneration &+= 1
+            let request = detailGeneration
+            let generation = sourceGeneration
+            let pipeline = pipeline
+            detailTask = Task { [weak self] in
+                do {
+                    let result = try await pipeline.load(source, targetPixelDimension: wanted)
+                    guard !Task.isCancelled, let self, self.sourceGeneration == generation,
+                        self.detailGeneration == request
+                    else { return }
+                    self.loaded = result
+                    self.decodedPixelSize = LayoutSize(
+                        width: Double(result.image.width),
+                        height: Double(result.image.height)
+                    )
+                    self.revision &+= 1
+                    self.host?.setNeedsRender()
+                } catch {
+                    // The preview or preceding detail remains visible until another size asks.
+                }
+            }
+        }
 
         /// Ownership: draws into `context`. Isolation: MainActor. Errors: none.
         /// Cancellation: none.
@@ -194,22 +267,37 @@
 
         private func reload() {
             revision &+= 1
+            sourceGeneration &+= 1
+            detailGeneration &+= 1
             loadTask?.cancel()
+            detailTask?.cancel()
             loadTask = nil
+            detailTask = nil
+            requestedPixelDimension = nil
             loaded = nil
             pixelSize = nil
+            decodedPixelSize = nil
             setNeedsLayout()
             host?.setNeedsRender()
             guard let source else { return }
 
-            let request = revision
+            let request = sourceGeneration
             let pipeline = pipeline
             loadTask = Task { [weak self] in
                 do {
-                    let result = try await pipeline.load(source)
-                    guard !Task.isCancelled, let self, self.revision == request else { return }
+                    let result = try await pipeline.load(
+                        source,
+                        targetPixelDimension: pipeline.previewPixelDimension
+                    )
+                    guard !Task.isCancelled, let self, self.sourceGeneration == request else {
+                        return
+                    }
                     self.loaded = result
                     self.pixelSize = result.size
+                    self.decodedPixelSize = LayoutSize(
+                        width: Double(result.image.width),
+                        height: Double(result.image.height)
+                    )
                     self.revision &+= 1
                     self.setNeedsLayout()
                     self.host?.setNeedsRender()

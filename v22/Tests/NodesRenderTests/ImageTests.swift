@@ -171,6 +171,64 @@
         #expect(alphaAtCorner(filled) > 0)
     }
 
+    @Test @MainActor
+    func imageDecodesAgainForTheFrameAndDisplayScale() async throws {
+        let data = try encodedImage(width: 800, height: 400)
+        let pipeline = ImagePipeline(previewPixelDimension: 64)
+        let image = Image(source: .data(data), pipeline: pipeline)
+        for _ in 0..<100 where image.pixelSize == nil {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(image.pixelSize == LayoutSize(width: 800, height: 400))
+        let preview = try #require(image.decodedPixelSize)
+        #expect(preview.width <= 64)
+
+        let host = NodeHost(root: image, size: LayoutSize(width: 40, height: 40))
+        defer { host.detach() }
+        let renderer = LayerRenderer()
+        let container = CALayer()
+        host.layoutIfNeeded()
+        renderer.render(image, in: container, scale: 2)
+        for _ in 0..<100 where image.decodedPixelSize?.width == preview.width {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let small = try #require(image.decodedPixelSize)
+        #expect(small.width > preview.width)
+        #expect(small.width <= 80)
+
+        host.size = LayoutSize(width: 300, height: 300)
+        host.layoutIfNeeded()
+        renderer.render(image, in: container, scale: 2)
+        for _ in 0..<100 where image.decodedPixelSize?.width == small.width {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let large = try #require(image.decodedPixelSize)
+        #expect(large.width > small.width)
+        #expect(large.width <= 600)
+        #expect(image.pixelSize == LayoutSize(width: 800, height: 400))
+    }
+
+    @Test @MainActor
+    func fillDecodesEnoughPixelsForTheCrop() async throws {
+        let data = try encodedImage(width: 800, height: 100)
+        let pipeline = ImagePipeline(previewPixelDimension: 64)
+        let image = Image(source: .data(data), contentMode: .fill, pipeline: pipeline)
+        for _ in 0..<100 where image.pixelSize == nil {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(image.pixelSize != nil)
+
+        let host = NodeHost(root: image, size: LayoutSize(width: 100, height: 100))
+        defer { host.detach() }
+        let renderer = LayerRenderer()
+        host.layoutIfNeeded()
+        renderer.render(image, in: CALayer(), scale: 2)
+        for _ in 0..<100 where image.decodedPixelSize?.width != 800 {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(image.decodedPixelSize?.width == 800)
+    }
+
     private func alphaAtCorner(_ image: CGImage) -> UInt8 {
         var pixels = [UInt8](repeating: 0, count: image.width * image.height * 4)
         pixels.withUnsafeMutableBytes { bytes in

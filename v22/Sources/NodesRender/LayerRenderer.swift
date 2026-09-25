@@ -9,6 +9,13 @@
     /// Cancellation: not applicable.
     @MainActor
     public protocol LayerDrawing: AnyObject {
+        /// Lets a drawing prepare the pixels needed for this size and display scale. A later
+        /// result requests another render; drawing can use its current pixels meanwhile.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: the drawing
+        /// owns any work it starts.
+        func prepareDrawing(size: CGSize, scale: Double)
+
         /// Grows whenever what `draw` produces changes; the renderer redraws only then (or
         /// when the size or scale changes).
         ///
@@ -21,6 +28,11 @@
         /// Ownership: draws into `context`. Isolation: MainActor. Errors: none.
         /// Cancellation: none.
         func draw(in context: CGContext, size: CGSize)
+    }
+
+    extension LayerDrawing {
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public func prepareDrawing(size: CGSize, scale: Double) {}
     }
 
     /// Draws a tree of nodes as a tree of `CALayer`s: one layer per mounted node, framed by the
@@ -556,6 +568,7 @@
                 layer.removeAnimation(forKey: "contents")
             }
             let size = CGSize(width: node.frame.size.width, height: node.frame.size.height)
+            drawing.prepareDrawing(size: size, scale: scale)
             let wanted = Drawing(revision: drawing.drawingRevision, size: size, scale: scale)
             let before = drawn[node.id]
             guard before != wanted else { return }
