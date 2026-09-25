@@ -16,7 +16,7 @@
 | **предложено** | вариант автора документа, явного «да» ещё не было |
 | **открыто** | вопрос не решён, варианты перечислены |
 
-Решения Trellis ([docs/decisions.md](../docs/decisions.md)) этими документами не
+Решения Trellis ([docs/decisions.md](https://github.com/resoul/test/blob/main/docs/decisions.md)) этими документами не
 меняются. Там, где Espalier расходится с D-решением Trellis, это названо явно в
 [01-overview.md](docs/01-overview.md#что-пересматривается-относительно-trellis).
 
@@ -63,6 +63,6 @@
 
 - [Texture](https://github.com/TextureGroup/Texture) — модель «подкласс ноды + раскладка
   внутри + `addSubnode` в UIKit», layout spec'и без собственных view/слоёв. Код Texture
-  не копируется (см. [source-provenance.md](../docs/source-provenance.md)).
+  не копируется (см. [source-provenance.md](https://github.com/resoul/test/blob/main/docs/source-provenance.md)).
 - [Flux](https://github.com/resoul/flux) — реактивные потоки на Swift Concurrency;
   в Espalier рассматривается как адаптер к состоянию, а не как его ядро.

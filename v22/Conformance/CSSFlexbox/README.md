@@ -1,7 +1,7 @@
 # CSS Flexbox conformance
 
-Проверка того, что раскладка совпадает с CSS Flexbox «точь-в-точь» (цель P7 v22,
-[06-flexbox-conformance.md](../../v22/docs/06-flexbox-conformance.md)). Эталон —
+Проверка того, что раскладка Espalier совпадает с CSS Flexbox «точь-в-точь» (цель P7,
+[06-flexbox-conformance.md](../../docs/06-flexbox-conformance.md)). Эталон —
 настоящий Chromium, не чьё-то прочтение спецификации.
 
 ## Как устроено
@@ -19,9 +19,8 @@ expectations/*.json     известный итог каждого кейса д
 reports/*.md            отчёт последней записи baseline: сводка и все расхождения
 ```
 
-Swift-прогон: `Tests/TrellisCoreTests/Layout/CSSConformanceTests.swift`. Он строит из
-кейса `LayoutInputSnapshot`, раскладывает его через `FlexboxEngine` с frame корня из
-Chromium (как хост даёт bounds корню) и сравнивает frame каждой ноды с допуском 0.05 pt.
+Swift-прогон: `Tests/LayoutCoreTests/CSSConformanceTests.swift`. Он строит из кейса
+дерево `LayoutCore`, раскладывает его через `FlexboxEngine` с frame корня из Chromium (как хост даёт bounds корню) и сравнивает frame каждой ноды с допуском 0.05 pt.
 
 Итог кейса:
 
@@ -31,10 +30,12 @@ Chromium (как хост даёт bounds корню) и сравнивает fr
 | `fail` | хотя бы один frame отличается — ошибка математики |
 | `unsupported` | кейс использует CSS, который движок не может выразить (`margin: auto`, `order`, проценты в отступах) — пробел в словаре стилей, а не ошибка математики |
 
-Тест сравнивает итоги с `expectations/engine-legacy.json` и падает при **любом** изменении:
+Тест сравнивает итоги с `expectations/engine.json` и падает при **любом** изменении:
 и при регрессии, и когда кейс начал проходить (тогда baseline надо обновить осознанно).
 
 ## Команды
+
+Все команды — из корня пакета.
 
 Перегенерировать эталон (нужен Node.js и Playwright с Chromium):
 
@@ -42,7 +43,7 @@ Chromium (как хост даёт bounds корню) и сравнивает fr
 NODE_PATH="$(npm root -g)" node Conformance/CSSFlexbox/generate.cjs
 ```
 
-Записать baseline и отчёт для текущего движка:
+Записать baseline (`expectations/engine.json`) и отчёт (`reports/engine.md`):
 
 ```sh
 CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance
@@ -54,17 +55,19 @@ CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance
 swift test --filter cssFlexboxConformance
 ```
 
-Движок Espalier (`v22/`) держит свою копию набора — генератор, кейсы, фикстуры, свой
-baseline и отчёт — в [v22/Conformance/CSSFlexbox](../../v22/Conformance/CSSFlexbox/README.md).
-Здесь остаются фикстуры, снятые Chromium 153, и baseline старого движка Trellis
-(`expectations/engine-legacy.json`); новые кейсы добавляются в копию Espalier.
+Прогнать движок на любом файле в формате фикстуры (например, уменьшенных деревьях с
+эталоном из браузера) — итог каждого кейса пишется рядом, в `<файл>.engine.json`:
+
+```sh
+CSS_CONFORMANCE_LAB=/путь/к/кейсам.json swift test --filter cssFlexboxLab
+```
 
 ## Версии Chromium
 
 Весь набор снят одним Chromium — 153 (2026-09-25, `generate.cjs`). До этого эталоны были
 сняты Chromium 141, а `reduced` — Chromium 152 из встроенного браузера приложения. Между 141 и
 153 деревья не изменились, а кадры разошлись только в `random/0328` и `random-text/0066` —
-новый Chromium раскладывает их иначе; движок v22 совпадает с новым. Смена версии Chromium
+новый Chromium раскладывает их иначе; движок совпадает с новым. Смена версии Chromium
 может так же сдвинуть отдельные кейсы: такой сдвиг — повод проверить, чей это дефект, а не
 ошибка движка по умолчанию.
 
@@ -72,14 +75,13 @@ baseline и отчёт — в [v22/Conformance/CSSFlexbox](../../v22/Conformance
 
 Одинаковы для HTML-стороны и для движка; причина каждого — в скобках.
 
-- Каждая нода — `display: flex` (каждая нода Trellis — flex-контейнер).
+- Каждая нода — `display: flex` (каждая нода раскладки — flex-контейнер).
 - `box-sizing: border-box` (в движке `width`/`height` включают padding, как в Yoga).
 - Каждая нода — `position: relative`, чтобы absolute-ребёнок позиционировался от родителя.
 - Шрифтов нет. Лист с содержимым (`content: [w, h]`) в HTML получает жёсткий внутренний
   блок `w×h`. Лист с «текстом» (`text: [высота строки, слово, слово, …]`) — обычный блок со
   словами-`inline-block` заданной ширины: Chromium переносит их как текст, а тестовый
-  измеритель — так же жадно. Проверяется раскладка, а не шрифтовые движки. Старый движок
-  Trellis читает только `flexbox.json`.
+  измеритель — так же жадно. Проверяется раскладка, а не шрифтовые движки.
 - Лист — содержимое, а не контейнер: свойства flex-контейнера (`flex-direction`,
   `justify-content`, `align-items`, `gap`, …) в HTML ему не выставляются — они сдвигали бы
   содержимое внутри листа и с ним базовую линию. Базовая линия слова — его низ.
@@ -101,4 +103,5 @@ baseline и отчёт — в [v22/Conformance/CSSFlexbox](../../v22/Conformance
 
 `reduced` — 81 дерево из 2–5 нод: каждое — наименьшее дерево, которое ещё расходилось с
 Chromium, найденное уменьшением падающего случайного кейса (убирались ноды и свойства, пока
-расхождение оставалось). Имя — `reduced/<исходный кейс>`; дефекты #143–#152.
+расхождение оставалось). Имя — `reduced/<исходный кейс>`; дефекты #143–#152
+([реестр](../../docs/defects.md)).
