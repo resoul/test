@@ -142,7 +142,9 @@
                 let id = waiter
                 download = Download(
                     id: id,
-                    task: Task { try await self.download(url, id: id) },
+                    task: Task { [removals] in
+                        try await self.download(url, id: id, removalsAtStart: removals)
+                    },
                     waiters: [waiter]
                 )
                 downloads[url] = download
@@ -329,11 +331,16 @@
             downloads[url]?.waiters.count ?? 0
         }
 
-        private func download(_ url: URL, id: UInt64) async throws -> Data {
+        /// `removalsAtStart` is taken when the download is created, not when its task first
+        /// runs: a removal of all entries can reach the actor in between.
+        private func download(
+            _ url: URL,
+            id: UInt64,
+            removalsAtStart: UInt64
+        ) async throws -> Data {
             // Later loads find the file on disk, or start over after a failure.
             defer { if downloads[url]?.id == id { downloads[url] = nil } }
 
-            let removalsAtStart = removals
             let (data, response) = try await fetch(url)
             try Task.checkCancellation()
             guard let response = response as? HTTPURLResponse,
