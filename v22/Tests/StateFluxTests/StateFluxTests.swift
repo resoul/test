@@ -85,3 +85,28 @@ func aStateCanFeedAnotherThroughFlux() async {
     #expect(echo.value == "SWIFT")
     subscription.cancel()
 }
+
+/// A transaction that notes the state's value right after the writes it was given.
+private struct Recording: StateTransaction {
+    let state: State<Int>
+    let received: Received<Int>
+
+    @MainActor
+    func perform(_ writes: () -> Void) {
+        writes()
+        received.values.append(state.value)
+    }
+}
+
+@Test @MainActor
+func aStreamBoundWithATransactionWritesEachValueInsideIt() async {
+    let state = State(0)
+    let received = Received<Int>()
+    let transaction = Recording(state: state, received: received)
+    let subscription = Flux.from([1, 2]).bind(to: state, animation: transaction)
+
+    await waitUntil { received.values.count == 2 }
+
+    #expect(received.values == [1, 2])
+    subscription.cancel()
+}

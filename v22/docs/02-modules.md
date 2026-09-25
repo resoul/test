@@ -25,7 +25,7 @@ NodesAppKit     встраивание нод в AppKit
 Theme           (ещё не создан) тема: шкала отступов, цвета, типографика; тема по
                 умолчанию (см. 09). Шкала отступов пока живёт в LayoutCore.
 StateCore       синхронное состояние на MainActor с отслеживанием чтений: State, Computed,
-                Observer, Effect (см. 08). Только стандартная библиотека.
+                Observer, Effect, StateTransaction (см. 08). Только стандартная библиотека.
 StateFlux       адаптер Flux ↔ StateCore (Flux ≥ 1.2.1)
 ```
 

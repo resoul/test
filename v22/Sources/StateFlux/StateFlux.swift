@@ -21,6 +21,24 @@ extension Flux {
             state?.value = value
         }
     }
+
+    /// Writes every value of the stream into `state` inside `transaction` — with nodes, an
+    /// animation: `flux.bind(to: state, animation: .default)` moves the screen to each new
+    /// value. Each value is written, and its updates run, in a transaction of its own.
+    ///
+    /// Ownership: the returned subscription owns the delivery; the state is held weakly, so a
+    /// released state receives nothing. Isolation: MainActor. Errors: none. Cancellation:
+    /// cancel the subscription, or let its `SubscriptionBag` go. A subscription that is
+    /// dropped without being cancelled keeps delivering until the stream ends.
+    @MainActor
+    @discardableResult
+    public func bind(to state: State<T>, animation transaction: some StateTransaction)
+        -> Subscription
+    {
+        sinkOnMain { [weak state] value in
+            transaction.perform { state?.value = value }
+        }
+    }
 }
 
 extension State where Value: Sendable {

@@ -89,6 +89,50 @@ public struct Animation: Sendable, Hashable {
     @MainActor static var current: Animation?
 }
 
+extension Animation: StateTransaction {
+    /// Makes the writes inside `withAnimation(self)`, so what they change is drawn with this
+    /// animation — the way a stream bound with `animation:` writes its values.
+    ///
+    /// Ownership: runs `writes` once. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    @MainActor
+    public func perform(_ writes: () -> Void) {
+        withAnimation(self, writes)
+    }
+}
+
+// So that a parameter typed as a transaction takes `.default`, `.spring()` and the rest, as
+// a parameter typed `Animation` does.
+extension StateTransaction where Self == Animation {
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public static var `default`: Animation { Animation.default }
+
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public static func linear(duration: Double = 0.25) -> Animation {
+        Animation.linear(duration: duration)
+    }
+
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public static func easeIn(duration: Double = 0.25) -> Animation {
+        Animation.easeIn(duration: duration)
+    }
+
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public static func easeOut(duration: Double = 0.25) -> Animation {
+        Animation.easeOut(duration: duration)
+    }
+
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public static func easeInOut(duration: Double = 0.25) -> Animation {
+        Animation.easeInOut(duration: duration)
+    }
+
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public static func spring(response: Double = 0.5, dampingRatio: Double = 0.8) -> Animation {
+        Animation.spring(response: response, dampingRatio: dampingRatio)
+    }
+}
+
 /// Runs `body` and animates what it changes: the layouts and redraws it causes — directly
 /// or through the states it writes — move with `animation` when they are drawn next. `nil`
 /// turns animation off inside an animated block.

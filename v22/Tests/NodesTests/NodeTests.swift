@@ -1207,3 +1207,24 @@ func walksOfAVeryDeepTreeDoNotRunOutOfStack() {
         node.unmount()
     }
 }
+
+/// Takes a transaction the way `StateFlux`'s `bind(to:animation:)` does.
+@MainActor
+private func write(_ transaction: some StateTransaction, _ writes: () -> Void) {
+    transaction.perform(writes)
+}
+
+@Test @MainActor
+func anAnimationIsATransactionThatAnimatesItsWrites() {
+    let screen = Screen()
+    let host = host(screen)
+    host.didRender()
+
+    write(.linear(duration: 1)) {
+        screen.card.showsFollow.value = false
+    }
+    host.layoutIfNeeded()
+
+    #expect(host.renderAnimation == .linear(duration: 1))
+    host.detach()
+}
