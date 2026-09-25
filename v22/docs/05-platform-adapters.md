@@ -60,7 +60,7 @@ final class ProfileCardView: UIView {
 |---|---|---|
 | Сообщить собственный размер наружу | `sizeThatFits` + `intrinsicContentSize` (иначе Auto Layout и self-sizing ячейки не узнают высоту) | `fittingSize` + `intrinsicContentSize` |
 | Запросить пересчёт | `setNeedsLayout` + `invalidateIntrinsicContentSize` | `needsLayout = true` + `invalidateIntrinsicContentSize` |
-| Система координат | y вниз | y вверх, если не `isFlipped` — адаптер переворачивает или требует `isFlipped` (открыто) |
+| Система координат | y вниз | y вверх, если не `isFlipped`. **Реализовано:** `LayoutNSView` и `NodeNSView` перевёрнуты сами; при вызове через протокол (`applyLayoutSpec()` в чужом view) адаптер отражает y, если родитель не перевёрнут |
 | Направление письма | `effectiveUserInterfaceLayoutDirection` | `userInterfaceLayoutDirection` |
 | Округление к пикселям | `traitCollection.displayScale` | `window.backingScaleFactor` (переиспользовать `PixelRoundingPolicy` Trellis) |
 | Измерение ребёнка | `sizeThatFits` | `fittingSize` / `intrinsicContentSize` |
@@ -68,6 +68,22 @@ final class ProfileCardView: UIView {
 Правило для пользователя: у детей view с `layoutSpec()` нет Auto Layout-констрейнтов —
 frame выставляет раскладка. Снаружи сам view свободно живёт в Auto Layout через
 `intrinsicContentSize`.
+
+### Mac Catalyst
+
+Catalyst-приложение — UIKit-приложение: в нём работают `LayoutUIKit`/`NodesUIKit`, а
+`LayoutAppKit`/`NodesAppKit` собираются пустыми. В Catalyst импортируются и UIKit, и AppKit, но
+`NSView` недоступен, поэтому AppKit-адаптеры закрыты `#if canImport(AppKit) && !canImport(UIKit)`
+(реализовано 2026-09-25, дефект #153). Приложению с общим кодом для Mac и Catalyst нужно то же
+условие: `#if canImport(AppKit)` в Catalyst истинно и выбрало бы AppKit-адаптер.
+
+```swift
+#if canImport(AppKit) && !canImport(UIKit)
+    import NodesAppKit   // Mac
+#else
+    import NodesUIKit    // iOS, iPadOS, tvOS, Mac Catalyst
+#endif
+```
 
 «Рисование» остаётся за самими view (`draw(_:)`) или за `CALayer` нод; раскладка только
 расставляет frame.

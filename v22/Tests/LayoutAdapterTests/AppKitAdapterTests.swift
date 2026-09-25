@@ -1,4 +1,4 @@
-#if canImport(AppKit)
+#if canImport(AppKit) && !canImport(UIKit)
     import AppKit
     @testable import LayoutAppKit
     import LayoutCore

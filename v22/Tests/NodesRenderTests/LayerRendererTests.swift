@@ -84,7 +84,7 @@
     }
 #endif
 
-#if canImport(AppKit)
+#if canImport(AppKit) && !canImport(UIKit)
     import AppKit
     import NodesAppKit
 

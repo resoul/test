@@ -1,4 +1,6 @@
-#if canImport(AppKit)
+// AppKit only where UIKit is not: Mac Catalyst imports both, but has no NSView — an app there
+// is a UIKit app and uses the UIKit adapter, so this module is empty.
+#if canImport(AppKit) && !canImport(UIKit)
     import AppKit
     import LayoutCore
     import os

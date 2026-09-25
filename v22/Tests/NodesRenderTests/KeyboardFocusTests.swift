@@ -1,4 +1,4 @@
-#if canImport(AppKit)
+#if canImport(AppKit) && !canImport(UIKit)
     import AppKit
     import LayoutCore
     import Nodes
@@ -93,7 +93,7 @@
     }
 #endif
 
-#if canImport(AppKit)
+#if canImport(AppKit) && !canImport(UIKit)
     @Test @MainActor
     func aFocusRequestFocusesTheNodeWithARing() throws {
         let pair = Pair()
