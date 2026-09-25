@@ -261,8 +261,11 @@ open class Node: LayoutElement {
         return shift
     }
 
-    /// The nearest scroll around the node.
-    private var enclosingScroll: Scroll? {
+    /// The nearest scroll around the node, or `nil`.
+    ///
+    /// Ownership: returns a node of the tree. Isolation: MainActor. Errors: none.
+    /// Cancellation: not applicable.
+    public var enclosingScroll: Scroll? {
         var node = supernode
         while let current = node {
             if let scroll = current as? Scroll { return scroll }

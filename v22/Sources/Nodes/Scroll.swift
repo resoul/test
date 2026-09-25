@@ -208,9 +208,11 @@ public final class Scroll: Node {
         scrollToReveal(rect)
     }
 
-    /// The frame of `node` in the scroll's coordinates, as laid out; `nil` when it is not
-    /// inside. Scrolls in between count at their current offsets.
-    func frame(of node: Node) -> LayoutRect? {
+    /// The frame of `node` in the scroll's coordinates, as laid out (not moved by the
+    /// offset); `nil` when it is not inside. Scrolls in between count at their offsets.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func frame(of node: Node) -> LayoutRect? {
         var origin = LayoutPoint.zero
         var current = node
         while current !== self {

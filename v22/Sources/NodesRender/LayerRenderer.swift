@@ -300,7 +300,7 @@
             if let scroll {
                 indicator = updateIndicator(of: scroll, in: layer)
             }
-            if node.sticky != nil, let scroll = LayerRenderer.enclosingScroll(of: node) {
+            if node.sticky != nil, let scroll = node.enclosingScroll {
                 stickyNodes[scroll.id, default: []].append(node)
             }
             return Level(
@@ -322,15 +322,6 @@
             )
         }
 
-        private static func enclosingScroll(of node: Node) -> Scroll? {
-            var current = node.supernode
-            while let next = current {
-                if let scroll = next as? Scroll { return scroll }
-
-                current = next.supernode
-            }
-            return nil
-        }
 
         /// Where the coordinate space of `layer` starts, as shown before this render: recorded
         /// when the render handled it, else summed up its superlayers.

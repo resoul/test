@@ -577,6 +577,14 @@ public final class NodeHost {
         target.pressChanged(false)
     }
 
+    /// The mounted node with `id`, or `nil`.
+    ///
+    /// Ownership: returns a node of the tree. Isolation: MainActor. Errors: none.
+    /// Cancellation: not applicable.
+    public func node(_ id: NodeID) -> Node? {
+        mounted[id]
+    }
+
     // MARK: - Scrolls
 
     /// The visible scrolls of the tree, outer ones first, framed in the root's coordinates

@@ -76,6 +76,12 @@ xcodebuild test -scheme Espalier-Package -destination 'platform=iOS Simulator,na
 xcodebuild test -scheme Espalier-Package -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'
 ```
 
+Фокус пульта на живом экране — UI-тест tvOS-демо (`XCUIRemote`):
+
+```sh
+cd DemotvOS && xcodebuild test -project DemotvOS.xcodeproj -scheme LayoutDemoTV -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'
+```
+
 ## Отчётность
 
 - Каждый найденный дефект — строка в [docs/defects.md](docs/defects.md) в момент

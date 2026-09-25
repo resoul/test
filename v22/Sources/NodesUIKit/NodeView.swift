@@ -29,6 +29,11 @@
         /// focus system recognizes the focused item by identity.
         private var focusItemsByNode: [NodeID: NodeFocusItem] = [:]
         private var focusOrder: [NodeFocusItem] = []
+        /// A focus container for each scroll, kept while the scroll is: the focus system
+        /// searches its whole content and scrolls it to what it focuses.
+        private var scrollContainers: [NodeID: ScrollFocusContainer] = [:]
+        /// The items and scroll containers right under the view, not inside a scroll.
+        private var topFocusItems: [any UIFocusItem] = []
         /// A select press that began on a focused node and has not ended yet.
         private var isSelecting = false
         /// A focus guide over each focus section, kept while the section is.
@@ -299,7 +304,14 @@
         /// Ownership: the view keeps the items. Isolation: MainActor. Errors: none.
         /// Cancellation: none.
         public override func focusItems(in rect: CGRect) -> [any UIFocusItem] {
-            super.focusItems(in: rect) + focusOrder.filter { $0.frame.intersects(rect) }
+            // The scroll views giving the scrolls' physics are subviews, but hold nothing to
+            // focus: the scrolls' own focus containers stand for them.
+            let own = super.focusItems(in: rect).filter { item in
+                !scrollDrivers.values.contains { driver in
+                    (item as? UIView).map(driver.owns) ?? false
+                }
+            }
+            return own + topFocusItems.filter { $0.frame.intersects(rect) }
         }
 
         /// The focused node's item, so a focus update keeps the focus where it is.
@@ -420,11 +432,20 @@
             guard usesFocus else { return }
 
             let hadItems = !focusOrder.isEmpty
+            let containers = updateScrollContainers()
             var kept: [NodeID: NodeFocusItem] = [:]
             focusOrder = host.focusItems().map { item in
                 let focusItem =
                     focusItemsByNode[item.node] ?? NodeFocusItem(view: self, node: item.node)
                 focusItem.frame = zoomed(item.frame)
+                focusItem.parent = self
+                if let node = host.node(item.node), let scroll = node.enclosingScroll,
+                    let container = containers[scroll.id], let frame = scroll.frame(of: node)
+                {
+                    // Inside a scroll the item is the scroll's, framed in its content.
+                    focusItem.frame = zoomed(frame)
+                    focusItem.parent = container
+                }
                 kept[item.node] = focusItem
                 return focusItem
             }
@@ -432,11 +453,50 @@
                 $0.isFocused && kept[$0.node] == nil
             }
             focusItemsByNode = kept
+            for container in containers.values {
+                container.items =
+                    focusOrder.filter { $0.parent === container }
+                    + containers.values.filter { $0.parent === container }
+            }
+            topFocusItems =
+                focusOrder.filter { $0.parent === self }
+                + containers.values.filter { $0.parent === self }
             updateSections()
             if lostFocus || (!hadItems && !focusOrder.isEmpty) {
                 setNeedsFocusUpdate()
             }
             applyFocusRequest()
+        }
+
+        /// Brings the scrolls' focus containers in line with the tree's scrolls: each framed in
+        /// the content of the scroll around it, or in the view.
+        private func updateScrollContainers() -> [NodeID: ScrollFocusContainer] {
+            var kept: [NodeID: ScrollFocusContainer] = [:]
+            for item in host.scrollItems() {
+                kept[item.scroll.id] =
+                    scrollContainers[item.scroll.id]
+                    ?? ScrollFocusContainer(view: self, scroll: item.scroll)
+            }
+            for (id, container) in kept {
+                guard let scroll = container.scroll else { continue }
+
+                container.factor = factor
+                container.frame = zoomed(item(frameOf: scroll))
+                container.parent = self
+                if let outer = scroll.enclosingScroll, let outerContainer = kept[outer.id],
+                    let frame = outer.frame(of: scroll)
+                {
+                    container.frame = zoomed(frame)
+                    container.parent = outerContainer
+                }
+            }
+            scrollContainers = kept
+            return kept
+        }
+
+        /// The frame of `scroll` in the root's coordinates, where it shows.
+        private func item(frameOf scroll: Scroll) -> LayoutRect {
+            host.scrollItems().first { $0.scroll === scroll }?.frame ?? scroll.frame
         }
 
         /// Brings the section guides in line with the tree's focus sections.
@@ -672,13 +732,128 @@
         }
     }
 
+    /// A scroll of a tree for the platform's focus system: an item that does not take focus
+    /// itself but holds the focusable nodes inside the scroll, framed in its content. The
+    /// focus system then looks for the next node in the whole content, not only in what
+    /// shows, and moves `contentOffset` to show it — as it does for a `UIScrollView`. Its
+    /// coordinates are the content's, shifted by the offset, as a scroll view's bounds are.
+    @MainActor
+    final class ScrollFocusContainer: NSObject, UIFocusItem, UIFocusItemScrollableContainer,
+        UICoordinateSpace
+    {
+        private(set) weak var view: NodeView?
+        private(set) weak var scroll: Scroll?
+        /// The view, or the container of the scroll around this one.
+        weak var parent: (any UIFocusEnvironment & UICoordinateSpace)?
+        /// In the parent's coordinates.
+        var frame: CGRect = .zero
+        var factor = 1.0
+        /// The focusable nodes and the scrolls right inside.
+        var items: [any UIFocusItem] = []
+
+        init(view: NodeView, scroll: Scroll) {
+            self.view = view
+            self.scroll = scroll
+        }
+
+        // The item: never focused itself.
+
+        var canBecomeFocused: Bool { false }
+        var preferredFocusEnvironments: [any UIFocusEnvironment] { [] }
+        var parentFocusEnvironment: (any UIFocusEnvironment)? { parent }
+        var focusItemContainer: (any UIFocusItemContainer)? { self }
+
+        func setNeedsFocusUpdate() {
+            view?.setNeedsFocusUpdate()
+        }
+
+        func updateFocusIfNeeded() {
+            view?.updateFocusIfNeeded()
+        }
+
+        func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool { true }
+
+        func didUpdateFocus(
+            in context: UIFocusUpdateContext,
+            with coordinator: UIFocusAnimationCoordinator
+        ) {}
+
+        // The container.
+
+        var coordinateSpace: any UICoordinateSpace { self }
+
+        func focusItems(in rect: CGRect) -> [any UIFocusItem] {
+            items.filter { $0.frame.intersects(rect) }
+        }
+
+        var contentOffset: CGPoint {
+            get {
+                let offset = scroll?.shownOffset ?? .zero
+                return CGPoint(x: offset.x * factor, y: offset.y * factor)
+            }
+            set {
+                // The focus system moves it to show the node it focuses; it moves as focus
+                // moves, with its animation.
+                withAnimation(scroll?.host?.focusAnimation) {
+                    scroll?.contentOffset = LayoutPoint(
+                        x: Double(newValue.x) / factor,
+                        y: Double(newValue.y) / factor
+                    )
+                }
+            }
+        }
+
+        var contentSize: CGSize {
+            guard let content = scroll?.contentBounds else { return .zero }
+
+            return CGSize(
+                width: (content.origin.x + content.size.width) * factor,
+                height: (content.origin.y + content.size.height) * factor
+            )
+        }
+
+        var visibleSize: CGSize { bounds.size }
+
+        // The coordinate space: the content, starting at the offset.
+
+        var bounds: CGRect {
+            CGRect(origin: contentOffset, size: frame.size)
+        }
+
+        func convert(_ point: CGPoint, to coordinateSpace: any UICoordinateSpace) -> CGPoint {
+            let inParent = CGPoint(
+                x: point.x - bounds.minX + frame.minX,
+                y: point.y - bounds.minY + frame.minY
+            )
+            return parent?.convert(inParent, to: coordinateSpace) ?? inParent
+        }
+
+        func convert(_ point: CGPoint, from coordinateSpace: any UICoordinateSpace) -> CGPoint {
+            let inParent = parent?.convert(point, from: coordinateSpace) ?? point
+            return CGPoint(
+                x: inParent.x - frame.minX + bounds.minX,
+                y: inParent.y - frame.minY + bounds.minY
+            )
+        }
+
+        func convert(_ rect: CGRect, to coordinateSpace: any UICoordinateSpace) -> CGRect {
+            CGRect(origin: convert(rect.origin, to: coordinateSpace), size: rect.size)
+        }
+
+        func convert(_ rect: CGRect, from coordinateSpace: any UICoordinateSpace) -> CGRect {
+            CGRect(origin: convert(rect.origin, from: coordinateSpace), size: rect.size)
+        }
+    }
+
     /// One focusable node of a tree for the platform's focus system. It keeps the node's
     /// identity and its frame from the last drawing; it never holds the node itself.
     @MainActor
     final class NodeFocusItem: NSObject, UIFocusItem {
         let node: NodeID
         private(set) weak var view: NodeView?
-        /// In the view's coordinates.
+        /// The view, or the focus container of the scroll the node is in.
+        weak var parent: (any UIFocusEnvironment)?
+        /// In the parent's coordinates: the view's, or the scroll's content.
         var frame: CGRect = .zero
 
         init(view: NodeView, node: NodeID) {
@@ -693,7 +868,7 @@
         var canBecomeFocused: Bool { true }
 
         var preferredFocusEnvironments: [any UIFocusEnvironment] { [] }
-        var parentFocusEnvironment: (any UIFocusEnvironment)? { view }
+        var parentFocusEnvironment: (any UIFocusEnvironment)? { parent ?? view }
         /// The container of the item's own children, not of the item: a node is focused as a
         /// whole, so there are none. The view here made the focus engine find the item's
         /// siblings as its children, and the remote could not move the focus.

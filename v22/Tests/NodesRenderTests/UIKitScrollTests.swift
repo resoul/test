@@ -122,3 +122,57 @@
         view.host.detach()
     }
 #endif
+
+#if canImport(UIKit)
+    /// A tappable, so focusable, row.
+    @MainActor
+    private final class Item: Node {
+        override init() {
+            super.init()
+            onTap = {}
+        }
+
+        override var layoutContent: LeafContent? { .size(LayoutSize(width: 50, height: 30)) }
+    }
+
+    @MainActor
+    private final class Items: Node {
+        let items = (0..<10).map { _ in Item() }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                for item in items { item }
+            }
+        }
+    }
+
+    @Test @MainActor
+    func theFocusSystemSearchesAScrollsWholeContentAndScrollsIt() throws {
+        let items = Items()
+        let scroll = Scroll(.vertical, content: items)
+        let view = NodeView(root: scroll)
+        view.zoom = 1
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 100)
+        view.layoutIfNeeded()
+        guard view.traitCollection.userInterfaceIdiom == .tv
+            || view.traitCollection.userInterfaceIdiom == .pad
+        else { return }
+
+        let top = view.focusItems(in: view.bounds)
+        // The scroll's own container, and not the empty scroll view giving its physics.
+        #expect(top.count == 1)
+        let container = try #require(
+            top.compactMap { $0.focusItemContainer as? any UIFocusItemScrollableContainer }.first
+        )
+        #expect(container.contentSize == CGSize(width: 200, height: 300))
+        #expect(container.visibleSize == CGSize(width: 200, height: 100))
+        // The last row, far below what shows, is found in the content.
+        let inside = container.focusItems(in: CGRect(x: 0, y: 0, width: 200, height: 300))
+        #expect(inside.count == 10)
+        #expect(inside.contains { $0.frame == CGRect(x: 0, y: 270, width: 200, height: 30) })
+
+        container.contentOffset = CGPoint(x: 0, y: 150)
+        #expect(scroll.contentOffset == LayoutPoint(x: 0, y: 150))
+        view.host.detach()
+    }
+#endif
