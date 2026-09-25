@@ -87,10 +87,13 @@ public final class Scroll: Node {
         get { offsetRange.clamp(requestedOffset.value) }
         set {
             let shown = contentOffset
-            overscroll = .zero
             // Before its first layout the scroll has no content to keep the offset within:
             // the offset asked for waits for it.
-            requestedOffset.value = isMounted ? offsetRange.clamp(newValue) : newValue
+            let requested = isMounted ? offsetRange.clamp(newValue) : newValue
+            guard requested != requestedOffset.value else { return }
+
+            overscroll = .zero
+            requestedOffset.value = requested
             let now = contentOffset
             guard now != shown else { return }
 

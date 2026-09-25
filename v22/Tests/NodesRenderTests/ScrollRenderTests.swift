@@ -157,4 +157,22 @@
         #expect(header.frame == CGRect(x: 0, y: 70, width: 200, height: 20))
         #expect(renderer.layer(for: section)?.sublayers?.last === header)
     }
+
+    @Test @MainActor
+    func rightToLeftTheIndicatorIsOnTheLeft() throws {
+        let scroll = Scroll(.vertical, content: List())
+        let host = NodeHost(root: scroll, size: LayoutSize(width: 200, height: 100))
+        host.direction = .rightToLeft
+        let renderer = LayerRenderer()
+        CATransaction.begin()
+        defer {
+            host.detach()
+            CATransaction.commit()
+        }
+        host.layoutIfNeeded()
+        renderer.render(scroll, in: CALayer())
+
+        let indicator = try #require(renderer.layer(for: scroll)?.sublayers?.last)
+        #expect(indicator.frame.minX == 3)
+    }
 #endif

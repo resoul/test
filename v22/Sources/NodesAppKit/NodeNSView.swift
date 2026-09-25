@@ -30,7 +30,12 @@
         /// Holds the tree's layers, scaled by `zoom` from its top left corner.
         private let contentLayer = CALayer()
         private var isLayingOut = false
-        private var accessibilityCache: [NSAccessibilityElement]?
+        /// The accessibility element of each node, kept while the node is one: VoiceOver
+        /// keeps its place by the element's identity, and a scroll redraws many times a
+        /// second.
+        private var accessibilityByNode: [NodeID: NodeAccessibilityElement] = [:]
+        /// The elements in reading order; `nil` after a drawing, until asked for.
+        private var accessibilityOrder: [NodeAccessibilityElement]?
         private let focusRing = FocusRing()
         /// Return or Space went down on a focused node and has not come up yet.
         private var isSelecting = false
@@ -176,7 +181,12 @@
 
         /// Brings what depends on where the nodes show in line after a drawing.
         private func updateAfterMove() {
-            accessibilityCache = nil
+            accessibilityOrder = nil
+            if NSWorkspace.shared.isVoiceOverEnabled {
+                // VoiceOver reads the frame of the element it is on without asking the view
+                // again: bring it up to date now.
+                _ = updateAccessibilityElements()
+            }
             focusRing.show(
                 around: host.focusedItem,
                 color: NSColor.keyboardFocusIndicatorColor.cgColor,
@@ -191,19 +201,28 @@
             false
         }
 
-        /// The tree's accessibility elements (`NodeHost.accessibilityItems()`), rebuilt after
-        /// every drawing.
+        /// The tree's accessibility elements (`NodeHost.accessibilityItems()`), brought up to
+        /// date after every drawing; a node keeps its element.
         ///
         /// Ownership: the view keeps the elements. Isolation: MainActor. Errors: none.
         /// Cancellation: none.
         public override func accessibilityChildren() -> [Any]? {
-            if let accessibilityCache { return accessibilityCache }
+            accessibilityOrder ?? updateAccessibilityElements()
+        }
 
-            let elements = host.accessibilityItems().map {
-                NodeAccessibilityElement(parent: self, item: $0, zoom: factor)
+        private func updateAccessibilityElements() -> [NodeAccessibilityElement] {
+            var kept: [NodeID: NodeAccessibilityElement] = [:]
+            let order = host.accessibilityItems().map { item in
+                let element =
+                    accessibilityByNode[item.node]
+                    ?? NodeAccessibilityElement(parent: self, node: item.node)
+                element.update(item, zoom: factor)
+                kept[item.node] = element
+                return element
             }
-            accessibilityCache = elements
-            return elements
+            accessibilityByNode = kept
+            accessibilityOrder = order
+            return order
         }
 
         /// No width of its own — the surroundings give it one (constraints, SwiftUI, a
@@ -336,12 +355,22 @@
         /// The scroll wheel and the trackpad move the tree's scrolls: the innermost one under
         /// the pointer that can still go that way, then the ones around it. A trackpad
         /// gesture, with its glide, stays with the scrolls it started in, as in any Mac scroll
-        /// view. What no scroll takes goes on up the responder chain.
+        /// view, and pulls the content past its end with growing resistance; let go, it
+        /// springs back. What no scroll takes goes on up the responder chain.
         ///
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func scrollWheel(with event: NSEvent) {
-            if event.phase == .began || (event.phase == [] && event.momentumPhase == []) {
-                latched = nil
+            let phase: WheelPhase
+            if event.phase == [] && event.momentumPhase == [] {
+                phase = .wheel
+            } else if event.momentumPhase == .ended || event.momentumPhase == .cancelled {
+                phase = .glideEnded
+            } else if event.momentumPhase != [] {
+                phase = .gliding
+            } else if event.phase == .ended || event.phase == .cancelled {
+                phase = .released
+            } else {
+                phase = event.phase == .began ? .began : .touching
             }
             var delta = LayoutPoint(
                 x: -Double(event.scrollingDeltaX),
@@ -351,9 +380,23 @@
                 // A mouse wheel counts lines.
                 delta = LayoutPoint(x: delta.x * NodeNSView.line, y: delta.y * NodeNSView.line)
             }
-            if !scroll(by: delta, at: point(of: event)) {
+            if !scroll(by: delta, at: point(of: event), phase: phase) {
                 super.scrollWheel(with: event)
             }
+        }
+
+        /// Where a scroll event is in its gesture.
+        enum WheelPhase {
+            /// A mouse wheel: no gesture, no pulling past the ends.
+            case wheel
+            /// Fingers down on the trackpad.
+            case began
+            case touching
+            /// Fingers up.
+            case released
+            /// The glide after the fingers.
+            case gliding
+            case glideEnded
         }
 
         /// Points one line of a mouse wheel scrolls.
@@ -361,16 +404,46 @@
 
         /// The scrolls the current trackpad gesture moves.
         private var latched: [Scroll]?
+        /// The scroll pulled past its end, and how far the gesture pulled it — more than it
+        /// shows, which the resistance makes less.
+        private var pulled: (scroll: Scroll, by: Double)?
+        /// The glide reached an end and bounced: the rest of it is spent.
+        private var glideIsSpent = false
 
         /// Moves the scrolls under `point` by `delta`, in the view's points, and returns
-        /// whether any moved.
+        /// whether it took the event.
         @discardableResult
-        func scroll(by delta: LayoutPoint, at point: LayoutPoint) -> Bool {
+        func scroll(by delta: LayoutPoint, at point: LayoutPoint, phase: WheelPhase = .wheel)
+            -> Bool
+        {
+            switch phase {
+            case .wheel, .began:
+                latched = nil
+                glideIsSpent = false
+                springBack()
+            case .released, .glideEnded:
+                springBack()
+                return latched.map { !$0.isEmpty } ?? false
+            case .gliding where glideIsSpent:
+                return true
+            case .touching, .gliding:
+                break
+            }
             let scrolls = latched ?? host.scrolls(at: point)
             latched = scrolls
             var left = LayoutPoint(x: delta.x / factor, y: delta.y / factor)
             var moved = false
-            for scroll in scrolls {
+            // Moving back, a scroll pulled past its end first takes the pull back.
+            if let pull = pulled {
+                let back = along(pull.scroll.axis, left)
+                if back * pull.by < 0 {
+                    let now = abs(back) >= abs(pull.by) ? 0 : pull.by + back
+                    left = setting(pull.scroll.axis, of: left, to: back + (pull.by - now))
+                    stretch(pull.scroll, to: now)
+                    moved = true
+                }
+            }
+            for scroll in scrolls where along(scroll.axis, left) != 0 {
                 let before = scroll.contentOffset
                 var offset = before
                 switch scroll.axis {
@@ -383,7 +456,58 @@
                 left.y -= now.y - before.y
                 moved = moved || now != before
             }
+            // What no scroll took pulls the innermost one of its axis past its end.
+            if phase != .wheel,
+                let scroll = scrolls.first(where: { along($0.axis, left) != 0 })
+            {
+                let already = pulled?.scroll === scroll ? pulled!.by : 0
+                stretch(scroll, to: already + along(scroll.axis, left))
+                moved = true
+                if phase == .gliding {
+                    // A glide that hits the end bounces off it at once.
+                    glideIsSpent = true
+                    springBack()
+                }
+            }
             return moved
+        }
+
+        /// Shows `scroll` pulled `amount` points past its end, with resistance: the further
+        /// the pull, the less it gives, never beyond its window's length.
+        private func stretch(_ scroll: Scroll, to amount: Double) {
+            let window =
+                scroll.axis == .vertical ? scroll.frame.size.height : scroll.frame.size.width
+            let length = max(window, 1)
+            let shown = (1 - 1 / (abs(amount) * 0.55 / length + 1)) * length
+            let past = amount < 0 ? -shown : shown
+            pulled = amount == 0 ? nil : (scroll, amount)
+            let offset = scroll.contentOffset
+            scroll.platformDidScroll(
+                to: scroll.axis == .vertical
+                    ? LayoutPoint(x: offset.x, y: offset.y + past)
+                    : LayoutPoint(x: offset.x + past, y: offset.y)
+            )
+        }
+
+        /// Lets a pulled scroll spring back to its end.
+        private func springBack() {
+            guard let pull = pulled else { return }
+
+            pulled = nil
+            withAnimation(.spring(response: 0.3, dampingRatio: 1)) {
+                pull.scroll.platformDidScroll(to: pull.scroll.contentOffset)
+            }
+        }
+
+        private func along(_ axis: ScrollAxis, _ point: LayoutPoint) -> Double {
+            axis == .vertical ? point.y : point.x
+        }
+
+        private func setting(_ axis: ScrollAxis, of point: LayoutPoint, to value: Double)
+            -> LayoutPoint
+        {
+            axis == .vertical
+                ? LayoutPoint(x: point.x, y: value) : LayoutPoint(x: value, y: point.y)
         }
 
         private func point(of event: NSEvent) -> LayoutPoint {
@@ -424,12 +548,16 @@
         /// constant, so the nonisolated press can read it without touching `self`'s state.
         private let press: @MainActor @Sendable () -> Bool
 
-        init(parent: NodeNSView, item: AccessibilityItem, zoom: Double) {
-            press = { [weak host = parent.host, node = item.node] in
+        init(parent: NodeNSView, node: NodeID) {
+            press = { [weak host = parent.host] in
                 host?.activate(node) ?? false
             }
             super.init()
             setAccessibilityParent(parent)
+        }
+
+        /// Shows what `item` says, at its frame zoomed by `zoom`.
+        func update(_ item: AccessibilityItem, zoom: Double) {
             setAccessibilityLabel(item.label)
             setAccessibilityValue(item.value)
             setAccessibilityHelp(item.hint)

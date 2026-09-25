@@ -112,4 +112,95 @@
         #expect(scroll.contentOffset == LayoutPoint(x: 0, y: 20))
         view.host.detach()
     }
+
+    /// Ten tappable rows: each an accessibility element.
+    @MainActor
+    private final class Buttons: Node {
+        let rows = (0..<10).map { _ in Row() }
+
+        override init() {
+            super.init()
+            for row in rows {
+                row.onTap = {}
+            }
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                for row in rows { row }
+            }
+        }
+    }
+
+    @Test @MainActor
+    func accessibilityElementsStayTheSameWhileTheirFramesFollowTheScroll() throws {
+        let scroll = Scroll(.vertical, content: Buttons())
+        let view = view(of: scroll)
+        let before = try #require(view.accessibilityChildren() as? [NSAccessibilityElement])
+
+        view.scroll(by: LayoutPoint(x: 0, y: 60), at: LayoutPoint(x: 10, y: 10))
+        view.layout()
+
+        let after = try #require(view.accessibilityChildren() as? [NSAccessibilityElement])
+        #expect(after.count == 10)
+        #expect(zip(before, after).allSatisfy { $0 === $1 })
+        #expect(after[2].accessibilityFrameInParentSpace().minY == 0)
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func theTrackpadPullsPastTheEndWithResistanceAndItSpringsBack() {
+        let scroll = Scroll(.vertical, content: List())
+        let view = view(of: scroll)
+        let top = LayoutPoint(x: 10, y: 10)
+
+        view.scroll(by: LayoutPoint(x: 0, y: -60), at: top, phase: .began)
+        let first = scroll.overscroll.y
+        #expect(scroll.contentOffset == .zero)
+        #expect(first < 0 && first > -60)
+        view.scroll(by: LayoutPoint(x: 0, y: -60), at: top, phase: .touching)
+        // Twice the pull shows less than twice as far.
+        #expect(scroll.overscroll.y < first && scroll.overscroll.y > 2 * first)
+
+        // Back down: the pull goes first, then the content.
+        view.scroll(by: LayoutPoint(x: 0, y: 100), at: top, phase: .touching)
+        #expect(scroll.overscroll.y < 0)
+        #expect(scroll.contentOffset == .zero)
+        view.scroll(by: LayoutPoint(x: 0, y: -100), at: top, phase: .touching)
+        view.layout()
+
+        view.scroll(by: .zero, at: top, phase: .released)
+        #expect(scroll.overscroll == .zero)
+        #expect(view.host.renderAnimation == .spring(response: 0.3, dampingRatio: 1))
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func theWheelStopsAtTheEnd() {
+        let scroll = Scroll(.vertical, content: List())
+        let view = view(of: scroll)
+
+        view.scroll(by: LayoutPoint(x: 0, y: -60), at: LayoutPoint(x: 10, y: 10), phase: .wheel)
+
+        #expect(scroll.overscroll == .zero)
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func aGlideThatReachesTheEndBouncesOnce() {
+        let scroll = Scroll(.vertical, content: List())
+        let view = view(of: scroll)
+        let point = LayoutPoint(x: 10, y: 10)
+        view.scroll(by: LayoutPoint(x: 0, y: 150), at: point, phase: .began)
+        view.scroll(by: .zero, at: point, phase: .released)
+
+        view.scroll(by: LayoutPoint(x: 0, y: 100), at: point, phase: .gliding)
+
+        #expect(scroll.contentOffset == LayoutPoint(x: 0, y: 200))
+        #expect(scroll.overscroll == .zero)
+        #expect(view.host.renderAnimation == .spring(response: 0.3, dampingRatio: 1))
+        view.scroll(by: LayoutPoint(x: 0, y: 100), at: point, phase: .gliding)
+        #expect(scroll.overscroll == .zero)
+        view.host.detach()
+    }
 #endif

@@ -630,7 +630,9 @@
             indicator.frame =
                 vertical
                 ? CGRect(
-                    x: base.x + size.width - inset - thickness,
+                    // Along the trailing edge: the left one right to left.
+                    x: scroll.host?.direction == .rightToLeft
+                        ? base.x + inset : base.x + size.width - inset - thickness,
                     y: base.y + along,
                     width: thickness,
                     height: bar
