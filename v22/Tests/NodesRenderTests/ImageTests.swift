@@ -100,10 +100,11 @@
     /// Requests the stub server has answered, by URL path.
     private let stubRequests = OSAllocatedUnfairLock(initialState: [String: Int]())
 
-    /// Answers requests to `image-cache.test` with the WebP above, so the download path of
-    /// the disk cache runs without a network. Paths containing `slow` answer after 0.3 s, so
-    /// that loads overlap. Other hosts are left to the system.
-    private final class WebPProtocol: URLProtocol {
+    /// Answers requests to `image-cache.test`, so the download path of the disk cache runs
+    /// without a network: the WebP above by default, 100 000 bytes in chunks for paths
+    /// containing `large` (without `Content-Length` when the path also has `chunked`), and 404 for paths containing `missing`. Paths containing `slow` answer after
+    /// 0.3 s, so that loads overlap.
+    private final class StubServer: URLProtocol {
         override class func canInit(with request: URLRequest) -> Bool {
             request.url?.host == "image-cache.test"
         }
@@ -111,40 +112,62 @@
         override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
         override func startLoading() {
-            guard let url = request.url,
+            guard let url = request.url else { return }
+            let body = url.path.contains("large") ? Data(count: 100_000) : webP
+            guard
                 let response = HTTPURLResponse(
                     url: url,
-                    statusCode: 200,
+                    statusCode: url.path.contains("missing") ? 404 : 200,
                     httpVersion: nil,
-                    headerFields: ["Content-Type": "image/webp"]
+                    headerFields: url.path.contains("chunked")
+                        ? ["Content-Type": "image/webp"]
+                        : ["Content-Type": "image/webp", "Content-Length": String(body.count)]
                 )
             else { return }
             stubRequests.withLock { $0[url.path, default: 0] += 1 }
             if url.path.contains("slow") { Thread.sleep(forTimeInterval: 0.3) }
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: webP)
+            // In 10 000-byte chunks, as a network delivers a large body.
+            for start in stride(from: 0, to: body.count, by: 10_000) {
+                client?.urlProtocol(self, didLoad: body[start..<min(start + 10_000, body.count)])
+                if body.count > 10_000 { Thread.sleep(forTimeInterval: 0.01) }
+            }
             client?.urlProtocolDidFinishLoading(self)
         }
 
         override func stopLoading() {}
     }
 
-    private let webPProtocolRegistered: Bool = URLProtocol.registerClass(WebPProtocol.self)
+    /// A session that reaches only the stub server's host through it.
+    private let stubSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StubServer.self]
+        return URLSession(configuration: configuration)
+    }()
+
+    private func stubCache(
+        _ directory: URL,
+        metadata: ImageMetadataPolicy = .preserve,
+        maximumDownloadBytes: Int? = nil
+    ) -> ImageCache {
+        ImageCache(
+            configuration: ImageCacheConfiguration(
+                directory: directory,
+                metadata: metadata,
+                maximumDownloadBytes: maximumDownloadBytes
+            ),
+            session: stubSession
+        )
+    }
 
     @Test
     func imageThatCannotTakeTheMetadataPolicyIsShownButNotCached() async throws {
-        #expect(webPProtocolRegistered)
         let source = try #require(CGImageSourceCreateWithData(webP as CFData, nil))
         #expect(CGImageSourceCreateImageAtIndex(source, 0, nil) != nil)
 
         let directory = temporaryCache()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let cache = ImageCache(
-            configuration: ImageCacheConfiguration(
-                directory: directory,
-                metadata: .removeLocation
-            )
-        )
+        let cache = stubCache(directory, metadata: .removeLocation)
         let url = URL(string: "https://image-cache.test/photo.webp")!
         #expect(try await cache.load(url) == webP)
         #expect(try await cache.cachedData(for: url) == nil)
@@ -156,10 +179,9 @@
 
     @Test
     func simultaneousLoadsOfOneURLShareOneDownload() async throws {
-        #expect(webPProtocolRegistered)
         let directory = temporaryCache()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let cache = ImageCache(configuration: ImageCacheConfiguration(directory: directory))
+        let cache = stubCache(directory)
         let url = URL(string: "https://image-cache.test/shared-slow.webp")!
         async let first = cache.load(url)
         async let second = cache.load(url)
@@ -174,10 +196,9 @@
 
     @Test
     func aCancelledLoadLeavesTheSharedDownloadToTheOthers() async throws {
-        #expect(webPProtocolRegistered)
         let directory = temporaryCache()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let cache = ImageCache(configuration: ImageCacheConfiguration(directory: directory))
+        let cache = stubCache(directory)
         let url = URL(string: "https://image-cache.test/leave-slow.webp")!
         let leaving = Task { try await cache.load(url) }
         let staying = Task { try await cache.load(url) }
@@ -188,6 +209,32 @@
         #expect(try await staying.value == webP)
         #expect(try await cache.cachedData(for: url) == webP)
         #expect(stubRequests.withLock { $0[url.path] } == 1)
+    }
+
+    @Test
+    func responseOverTheDownloadLimitIsRejectedAndNotCached() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = stubCache(directory, maximumDownloadBytes: 10_000)
+        for path in ["large.webp", "large-chunked.webp"] {
+            let large = URL(string: "https://image-cache.test/" + path)!
+            await #expect(throws: ImageCacheError.responseTooLarge) { try await cache.load(large) }
+            #expect(try await cache.cachedData(for: large) == nil)
+        }
+
+        let small = URL(string: "https://image-cache.test/small.webp")!
+        #expect(try await cache.load(small) == webP)
+        #expect(try await cache.cachedData(for: small) == webP)
+    }
+
+    @Test
+    func errorResponsesAreNotCached() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = stubCache(directory)
+        let url = URL(string: "https://image-cache.test/missing.webp")!
+        await #expect(throws: ImageCacheError.invalidResponse) { try await cache.load(url) }
+        #expect(try await cache.cachedData(for: url) == nil)
     }
 
     @Test

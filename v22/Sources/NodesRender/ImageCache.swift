@@ -2,6 +2,7 @@
     import CryptoKit
     import Foundation
     import ImageIO
+    import os
 
     /// Metadata kept when an image is written to the disk cache.
     ///
@@ -41,6 +42,12 @@
         ///
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         public var minimumCompressionBytes: Int
+        /// Largest response body accepted from the network, or `nil` for no limit. A response
+        /// that announces a larger size is abandoned at its headers; one that grows past the
+        /// limit is abandoned as soon as it does.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public var maximumDownloadBytes: Int?
 
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         public init(
@@ -50,7 +57,8 @@
             maximumAge: TimeInterval = 7 * 24 * 60 * 60,
             metadata: ImageMetadataPolicy = .preserve,
             compression: ImageCompressionPolicy = .original,
-            minimumCompressionBytes: Int = 1_000_000
+            minimumCompressionBytes: Int = 1_000_000,
+            maximumDownloadBytes: Int? = nil
         ) {
             self.directory = directory
             self.maximumBytes = maximumBytes
@@ -58,6 +66,7 @@
             self.metadata = metadata
             self.compression = compression
             self.minimumCompressionBytes = minimumCompressionBytes
+            self.maximumDownloadBytes = maximumDownloadBytes
         }
     }
 
@@ -71,6 +80,13 @@
         /// Ownership: value. Isolation: actor. Errors: none. Cancellation: not applicable.
         public let configuration: ImageCacheConfiguration
 
+        /// The session downloads go through: its configuration supplies headers, timeouts,
+        /// and authentication.
+        ///
+        /// Ownership: the caller owns the session. Isolation: actor. Errors: none.
+        /// Cancellation: not applicable.
+        public let session: URLSession
+
         private struct Download {
             let id: UInt64
             let task: Task<Data, Error>
@@ -80,10 +96,14 @@
         private var downloads: [URL: Download] = [:]
         private var nextID: UInt64 = 0
 
-        /// Ownership: the caller owns the cache. Isolation: actor. Errors: none.
+        /// Ownership: the caller owns the cache and the session. Isolation: actor. Errors: none.
         /// Cancellation: not applicable.
-        public init(configuration: ImageCacheConfiguration = ImageCacheConfiguration()) {
+        public init(
+            configuration: ImageCacheConfiguration = ImageCacheConfiguration(),
+            session: URLSession = .shared
+        ) {
             self.configuration = configuration
+            self.session = session
         }
 
         /// Returns cached bytes, or downloads and stores them. File URLs are read directly.
@@ -174,7 +194,7 @@
             // Later loads find the file on disk, or start over after a failure.
             defer { if downloads[url]?.id == id { downloads[url] = nil } }
 
-            let (data, response) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await fetch(url)
             try Task.checkCancellation()
             guard let response = response as? HTTPURLResponse,
                 (200...299).contains(response.statusCode)
@@ -189,6 +209,23 @@
                 return data
             }
             return try cachedData(for: url) ?? data
+        }
+
+        private func fetch(_ url: URL) async throws -> (Data, URLResponse) {
+            guard let limit = configuration.maximumDownloadBytes else {
+                return try await session.data(from: url)
+            }
+
+            let watch = DownloadLimit(bytes: max(0, limit))
+            let result: (Data, URLResponse)
+            do {
+                result = try await session.data(from: url, delegate: watch)
+            } catch {
+                if watch.exceeded { throw ImageCacheError.responseTooLarge }
+                throw error
+            }
+            guard result.0.count <= limit else { throw ImageCacheError.responseTooLarge }
+            return result
         }
 
         private func leave(_ waiter: UInt64, from url: URL, id: UInt64) {
@@ -284,10 +321,43 @@
         }
     }
 
+    /// Cancels a download once its announced or received size passes the limit, so at most
+    /// the limit and one network chunk are held in memory. The async `URLSession` calls do not
+    /// forward data callbacks to a task delegate; only the task's creation, so the delegate
+    /// watches the task's byte counters.
+    private final class DownloadLimit: NSObject, URLSessionTaskDelegate {
+        private let bytes: Int64
+        private let state = OSAllocatedUnfairLock(
+            initialState: (exceeded: false, observation: NSKeyValueObservation?.none)
+        )
+
+        init(bytes: Int) {
+            self.bytes = Int64(bytes)
+        }
+
+        var exceeded: Bool { state.withLock { $0.exceeded } }
+
+        func urlSession(_ session: URLSession, didCreateTask task: URLSessionTask) {
+            let limit = bytes
+            let observation = task.observe(\.countOfBytesReceived, options: [.initial, .new]) {
+                [weak self] task, _ in
+                guard
+                    task.countOfBytesReceived > limit || task.countOfBytesExpectedToReceive > limit
+                else { return }
+
+                self?.state.withLock { $0.exceeded = true }
+                task.cancel()
+            }
+            state.withLock { $0.observation = observation }
+        }
+    }
+
     /// Failure to read or store a usable image.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public enum ImageCacheError: Error, Sendable {
+        /// The response body was larger than `maximumDownloadBytes`.
+        case responseTooLarge
         case invalidResponse
         case invalidImage
         case processingFailed
