@@ -583,6 +583,56 @@
         #expect(image.pixelSize == LayoutSize(width: 1, height: 1))
     }
 
+    /// A button showing only an icon.
+    @MainActor
+    private final class IconButton: Node {
+        let icon = Image(placeholder: ImagePlaceholder(size: LayoutSize(width: 24, height: 24)))
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.row) { icon }
+        }
+    }
+
+    /// A row with an icon-only button and a picture, as a profile header has.
+    @MainActor
+    private final class Header: Node {
+        let button = IconButton()
+        let picture = Image(placeholder: ImagePlaceholder(size: LayoutSize(width: 48, height: 48)))
+        var icon: Image { button.icon }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.row) {
+                button
+                picture
+            }
+            .alignItems(.start)
+        }
+    }
+
+    @Test @MainActor
+    func imagesAreDecorativeUntilLabeledAndNameTheirButtons() {
+        let header = Header()
+        header.button.onTap = {}
+        let host = NodeHost(root: header, size: LayoutSize(width: 300, height: 100))
+        defer { host.detach() }
+        host.layoutIfNeeded()
+        var items = host.accessibilityItems()
+        #expect(!items.contains { $0.node == header.picture.id })
+        let unnamed = items.first { $0.node == header.button.id }
+        #expect(unnamed?.label == "")
+
+        header.icon.accessibility.label = "Settings"
+        header.picture.accessibility.label = "Portrait of Ada"
+        host.layoutIfNeeded()
+        items = host.accessibilityItems()
+        let button = try? #require(items.first { $0.node == header.button.id })
+        #expect(button?.label == "Settings")
+        #expect(button?.traits.contains(.button) == true)
+        let picture = try? #require(items.first { $0.node == header.picture.id })
+        #expect(picture?.label == "Portrait of Ada")
+        #expect(picture?.traits.contains(.image) == true)
+    }
+
     /// Chromium 152 lays out a 400×200 `<img>` the same way in these containers.
     @Test @MainActor
     func imageKeepsItsProportionsForTheWidthItGets() async throws {
