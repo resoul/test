@@ -61,7 +61,8 @@
 
         #expect(view.host.focusedNode == pair.first.id)
         #expect(pair.first.appearance.scale == 1)
-        let ring = try #require(view.layer?.sublayers?.last)
+        // The ring is drawn with the tree, in the layer that holds its layers.
+        let ring = try #require(view.layer?.sublayers?.first?.sublayers?.last)
         #expect(!ring.isHidden)
         #expect(ring.frame == CGRect(x: 6, y: 6, width: 48, height: 28))
 

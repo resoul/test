@@ -222,9 +222,11 @@ extension LayoutSpec {
         )
     }
 
-    /// Lays the spec out in `rect` at once: `prepare`, solve, `PreparedLayout.apply`. A spec
-    /// too deep for the calling thread's stack is not applied — the elements keep their
-    /// frames — rather than crashing it.
+    /// Lays the spec out in `rect` at once: `prepare`, solve, `PreparedLayout.apply`. The pass
+    /// is rejected — the elements keep their frames — when the spec is too deep for the
+    /// calling thread's stack, rather than crashing it, and when an element is laid out in
+    /// two places: it has one frame, and applying either would hide the mistake.
+    /// `reporting`, when given, receives what the pass found.
     ///
     /// Ownership: borrows the elements for the call. Isolation: MainActor; runs synchronously.
     /// Errors: none. Cancellation: not applicable.
@@ -233,19 +235,41 @@ extension LayoutSpec {
         in rect: LayoutRect,
         direction: LayoutDirection = .leftToRight,
         scale: Double = 1,
-        spacing: SpacingScale = .standard
+        spacing: SpacingScale = .standard,
+        reporting: LayoutSpecReporting? = nil
     ) -> [LayoutPlacement] {
         let prepared = prepare(direction: direction, spacing: spacing)
-        let context = LayoutContext(stackBudget: LayoutContext.currentThreadStackBudget)
-        guard
-            let result = try? FlexboxEngine.layout(
-                prepared.input,
-                size: rect.size,
-                context: context
+        var trace: LayoutTraceRequest?
+        if let reporting, !reporting.traceAreas.isEmpty {
+            let traced = reporting.tracedElements
+            trace = LayoutTraceRequest(
+                areas: reporting.traceAreas,
+                ids: traced.map { traced in
+                    prepared.ids { element in traced.contains { $0 === element } }
+                }
             )
-        else {
-            return []
         }
+        let context = LayoutContext(
+            trace: trace,
+            stackBudget: LayoutContext.currentThreadStackBudget
+        )
+        let clock = ContinuousClock()
+        let start = clock.now
+        let result = try? FlexboxEngine.layout(prepared.input, size: rect.size, context: context)
+        let duration = clock.now - start
+        let duplicates = result.map { prepared.elementsPlacedMoreThanOnce(in: $0) } ?? []
+        if let reporting {
+            reporting.handler(
+                LayoutSpecReport(
+                    host: reporting.host,
+                    prepared: prepared,
+                    result: result,
+                    duration: duration,
+                    duplicates: duplicates
+                )
+            )
+        }
+        guard let result, duplicates.isEmpty else { return [] }
 
         return prepared.apply(result, in: rect, scale: scale)
     }

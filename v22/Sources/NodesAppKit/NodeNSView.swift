@@ -25,6 +25,8 @@
 
         private let renderer = LayerRenderer()
         private let hostedLayer = CALayer()
+        /// Holds the tree's layers, scaled by `zoom` from its top left corner.
+        private let contentLayer = CALayer()
         private var isLayingOut = false
         private var accessibilityCache: [NSAccessibilityElement]?
         private let focusRing = FocusRing()
@@ -39,6 +41,8 @@
             host = NodeHost(root: root, size: LayoutSize(width: 0, height: 0))
             super.init(frame: .zero)
             hostedLayer.isGeometryFlipped = true
+            contentLayer.anchorPoint = .zero
+            hostedLayer.addSublayer(contentLayer)
             layer = hostedLayer
             wantsLayer = true
             host.focusLook = .ring
@@ -87,6 +91,26 @@
         /// Cancellation: not applicable.
         public var root: Node { host.root }
 
+        /// How many times bigger than its points the tree is shown: at 2, it is laid out in
+        /// half the view's size and drawn twice as big. Text is drawn for the final size and
+        /// stays sharp; clicks and accessibility frames follow. `nil`, the default, is 1.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var zoom: Double? {
+            didSet {
+                guard zoom != oldValue else { return }
+
+                invalidateIntrinsicContentSize()
+                needsLayout = true
+            }
+        }
+
+        /// `zoom`, kept positive.
+        var factor: Double {
+            let zoom = zoom ?? 1
+            return zoom > 0 ? zoom : 1
+        }
+
         /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
         public override var isFlipped: Bool { true }
 
@@ -108,16 +132,27 @@
             isLayingOut = true
             defer { isLayingOut = false }
 
-            let widthChanged = host.size.width != Double(bounds.width)
-            host.size = LayoutSize(width: Double(bounds.width), height: Double(bounds.height))
-            host.scale = Double(window?.backingScaleFactor ?? 1)
+            let content = LayoutSize(
+                width: Double(bounds.width) / factor,
+                height: Double(bounds.height) / factor
+            )
+            let widthChanged = host.size.width != content.width
+            host.size = content
+            // Frames snap to, and text is drawn for, the pixels of the zoomed size.
+            host.scale = Double(window?.backingScaleFactor ?? 1) * factor
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            contentLayer.bounds = CGRect(x: 0, y: 0, width: content.width, height: content.height)
+            contentLayer.position = .zero
+            contentLayer.transform = CATransform3DMakeScale(CGFloat(factor), CGFloat(factor), 1)
+            CATransaction.commit()
             host.direction =
                 userInterfaceLayoutDirection == .rightToLeft ? .rightToLeft : .leftToRight
             host.layoutIfNeeded()
             if host.needsRender {
                 renderer.render(
                     host.root,
-                    in: hostedLayer,
+                    in: contentLayer,
                     scale: host.scale,
                     animation: host.renderAnimation
                 )
@@ -126,7 +161,7 @@
                 focusRing.show(
                     around: host.focusedItem,
                     color: NSColor.keyboardFocusIndicatorColor.cgColor,
-                    in: hostedLayer
+                    in: contentLayer
                 )
                 NSAccessibility.post(element: self, notification: .layoutChanged)
             }
@@ -152,7 +187,7 @@
             if let accessibilityCache { return accessibilityCache }
 
             let elements = host.accessibilityItems().map {
-                NodeAccessibilityElement(parent: self, item: $0)
+                NodeAccessibilityElement(parent: self, item: $0, zoom: factor)
             }
             accessibilityCache = elements
             return elements
@@ -164,10 +199,11 @@
         /// can make it wider than the window.
         public override var intrinsicContentSize: CGSize {
             let width =
-                bounds.width > 0 ? AvailableSpace.definite(Double(bounds.width)) : .maxContent
+                bounds.width > 0
+                ? AvailableSpace.definite(Double(bounds.width) / factor) : .maxContent
             return CGSize(
                 width: NSView.noIntrinsicMetric,
-                height: host.fittingSize(width: width).height
+                height: host.fittingSize(width: width).height * factor
             )
         }
 
@@ -285,7 +321,7 @@
         private func point(of event: NSEvent) -> LayoutPoint {
             // The view is flipped, so the point is measured from the top left.
             let location = convert(event.locationInWindow, from: nil)
-            return LayoutPoint(x: Double(location.x), y: Double(location.y))
+            return LayoutPoint(x: Double(location.x) / factor, y: Double(location.y) / factor)
         }
 
         /// The layer drawing `node`, for tests and debugging.
@@ -320,7 +356,7 @@
         /// constant, so the nonisolated press can read it without touching `self`'s state.
         private let press: @MainActor @Sendable () -> Bool
 
-        init(parent: NodeNSView, item: AccessibilityItem) {
+        init(parent: NodeNSView, item: AccessibilityItem, zoom: Double) {
             press = { [weak host = parent.host, node = item.node] in
                 host?.activate(node) ?? false
             }
@@ -334,10 +370,10 @@
             setAccessibilityEnabled(!item.traits.contains(.notEnabled))
             setAccessibilityFrameInParentSpace(
                 NSRect(
-                    x: item.frame.origin.x,
-                    y: item.frame.origin.y,
-                    width: item.frame.size.width,
-                    height: item.frame.size.height
+                    x: item.frame.origin.x * zoom,
+                    y: item.frame.origin.y * zoom,
+                    width: item.frame.size.width * zoom,
+                    height: item.frame.size.height * zoom
                 )
             )
         }

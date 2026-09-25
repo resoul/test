@@ -94,4 +94,53 @@
         #expect(!second.isHidden)
         #expect(second.frame.minX == 0)
     }
+
+    /// An item laid out once, or — by mistake — twice.
+    @MainActor
+    private final class Repeated: LayoutNSView {
+        let item = NSView()
+        var twice = false
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            addSubview(item)
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.row) {
+                item.size(10)
+                if twice { item.size(10) }
+            }
+            .alignItems(.start)
+        }
+    }
+
+    @MainActor
+    @Test
+    func aLayoutViewReportsItsPasses() {
+        let view = Repeated(frame: NSRect(x: 0, y: 0, width: 100, height: 40))
+        var reports: [LayoutSpecReport] = []
+        view.onLayoutReport = { reports.append($0) }
+        view.traceAreas = [.place]
+        view.tracedElements = [view.item]
+        view.needsLayout = true
+        view.layoutSubtreeIfNeeded()
+
+        #expect(reports.count == 1)
+        #expect(reports.first?.hasProblems == false)
+        #expect(reports.first?.host.hasPrefix("Repeated@") == true)
+        #expect(reports.first?.trace.count == 1)
+        #expect(view.item.frame == CGRect(x: 0, y: 0, width: 10, height: 10))
+
+        // The item in two places: the pass is rejected and the item keeps its frame.
+        view.twice = true
+        view.needsLayout = true
+        view.layoutSubtreeIfNeeded()
+
+        #expect(reports.last?.isRejected == true)
+        #expect(reports.last?.duplicates.count == 1)
+        #expect(view.item.frame == CGRect(x: 0, y: 0, width: 10, height: 10))
+    }
 #endif

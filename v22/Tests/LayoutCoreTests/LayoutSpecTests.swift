@@ -537,11 +537,95 @@ func placeModifiersApplyOnTopOfTheEmbeddedStyle() {
 }
 
 @Test @MainActor
-func anElementEmbeddingItselfIsPlacedAsALeafThere() {
+func anElementEmbeddingItselfIsPlacedAsALeafThere() throws {
     let panel = Panel { nil }
     panel.layout = { FlexContainer { panel } }
-    let placements = FlexContainer { panel }
-        .apply(in: LayoutRect(x: 0, y: 0, width: 100, height: 100))
+    let rect = LayoutRect(x: 0, y: 0, width: 100, height: 100)
+    let prepared = FlexContainer { panel }.prepare()
+    let result = try FlexboxEngine.layout(prepared.input, size: rect.size)
 
-    #expect(placements.count == 2)
+    #expect(prepared.apply(result, in: rect).count == 2)
+    // It has a frame in both places, so applying the spec rejects the pass.
+    #expect(FlexContainer { panel }.apply(in: rect).isEmpty)
+}
+
+@MainActor
+@Test
+func applyReportsWhatThePassFound() {
+    let badge = Box(10, 10)
+    let other = Box(20, 10)
+    let rect = LayoutRect(x: 0, y: 0, width: 100, height: 20)
+    var reports: [LayoutSpecReport] = []
+    func reporting(
+        traceAreas: Set<LayoutTraceArea> = [],
+        traced: [any LayoutElement]? = nil
+    ) -> LayoutSpecReporting {
+        LayoutSpecReporting(host: "Card", traceAreas: traceAreas, tracedElements: traced) {
+            reports.append($0)
+        }
+    }
+
+    // A clean pass: applied, nothing to fix.
+    FlexContainer(.row) {
+        badge; other
+    }.alignItems(.start).apply(in: rect, reporting: reporting())
+    #expect(reports.count == 1)
+    #expect(reports[0].hasProblems == false)
+    #expect(reports[0].elements == 2)
+    #expect(
+        reports[0].lines[0].hasSuffix(
+            "rejected=no stack=enough duplicates=none widthless=none"
+        )
+    )
+    #expect(badge.frame == LayoutRect(x: 0, y: 0, width: 10, height: 10))
+
+    // An element in two places: the pass is rejected, every element keeps its frame.
+    let placements = FlexContainer(.row) {
+        other; badge; other
+    }
+    .alignItems(.start).apply(in: rect, reporting: reporting())
+    #expect(placements.isEmpty)
+    #expect(badge.frame == LayoutRect(x: 0, y: 0, width: 10, height: 10))
+    #expect(reports[1].isRejected)
+    #expect(reports[1].duplicates.map { ObjectIdentifier($0) } == [ObjectIdentifier(other)])
+    #expect(reports[1].lines[0].contains("rejected=yes stack=enough duplicates=#0:Box "))
+    #expect(reports[1].generation == reports[0].generation + 1)
+
+    // A trace of one element.
+    FlexContainer(.row) {
+        badge; other
+    }
+    .alignItems(.start)
+    .apply(in: rect, reporting: reporting(traceAreas: [.place], traced: [other]))
+    #expect(reports[2].trace.count == 1)
+    #expect(reports[2].lines.count == 2)
+    #expect(
+        reports[2].lines[1]
+            == "[layout] place host=Card gen=\(reports[2].generation) #1:Box x=10 y=0 size=20x10"
+    )
+}
+
+@MainActor
+@Test
+func applyReportsVariantsChosenWithoutAWidth() {
+    let wide = Box(10, 10)
+    let narrow = Box(20, 10)
+    var report: LayoutSpecReport?
+    // The inner row sizes itself to its content, so its breakpoint has no width to go by.
+    FlexContainer(.row) {
+        FlexContainer(.row) {
+            Breakpoint(from: 50) {
+                wide
+            } otherwise: {
+                narrow
+            }
+        }
+    }
+    .alignItems(.start)
+    .apply(
+        in: LayoutRect(x: 0, y: 0, width: 100, height: 20),
+        reporting: LayoutSpecReporting(host: "Card") { report = $0 }
+    )
+    #expect(report?.hasProblems == true)
+    #expect(report?.lines[0].hasSuffix("widthless=none") == false)
 }

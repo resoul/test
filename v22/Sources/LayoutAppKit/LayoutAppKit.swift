@@ -1,6 +1,30 @@
 #if canImport(AppKit)
     import AppKit
     import LayoutCore
+    import os
+
+    /// Where the adapter writes layout reports.
+    private let layoutLog = Logger(subsystem: "Layout", category: "layout")
+
+    @MainActor
+    enum LayoutReportLog {
+        /// Problems in a spec, and a trace the app asked for, go to the unified log while
+        /// debugging; a pass without either stays quiet. `nil` outside `DEBUG`: nothing is
+        /// reported.
+        static var handler: (@MainActor (LayoutSpecReport) -> Void)? {
+            #if DEBUG
+                return { report in
+                    guard report.hasProblems || !report.trace.isEmpty else { return }
+
+                    for line in report.lines {
+                        layoutLog.log("\(line, privacy: .public)")
+                    }
+                }
+            #else
+                return nil
+            #endif
+        }
+    }
 
     extension NSView: LayoutElement {
         /// How the view measures inside a spec: by its own spec if it provides one, by
@@ -49,14 +73,31 @@
         /// Lays out `layoutSpec()` in the view's bounds. Call it from `layout()` of a class
         /// that cannot inherit from `LayoutNSView`.
         ///
+        /// In a `DEBUG` build problems of the spec go to the unified log (subsystem `Layout`,
+        /// category `layout`).
+        ///
         /// Ownership: sets frames of the spec's elements. Isolation: MainActor. Errors: none.
         /// Cancellation: none.
         public func applyLayoutSpec() {
+            applyLayoutSpec(
+                reporting: LayoutReportLog.handler.map {
+                    LayoutSpecReporting(host: LayoutSpecReporting.hostName(for: self), handler: $0)
+                }
+            )
+        }
+
+        /// `applyLayoutSpec()` that hands what the pass found to `reporting` — `nil` reports
+        /// nothing.
+        ///
+        /// Ownership: sets frames of the spec's elements. Isolation: MainActor. Errors: none.
+        /// Cancellation: none.
+        public func applyLayoutSpec(reporting: LayoutSpecReporting?) {
             layoutSpec()?.apply(
                 in: LayoutRect(bounds),
                 direction: layoutDirection,
                 scale: layoutScale,
-                spacing: layoutSpacing
+                spacing: layoutSpacing,
+                reporting: reporting
             )
         }
 
@@ -98,6 +139,26 @@
         /// Errors: none. Cancellation: none.
         open func layoutSpec() -> LayoutSpec? { nil }
 
+        /// Receives a report after every layout of the spec. In a `DEBUG` build it writes
+        /// problems and a requested trace to the unified log (subsystem `Layout`, category
+        /// `layout`); an app can replace it, and `nil` reports nothing.
+        ///
+        /// Ownership: the view keeps the closure; it must not keep the view. Isolation:
+        /// MainActor. Errors: none. Cancellation: not applicable.
+        public var onLayoutReport: (@MainActor (LayoutSpecReport) -> Void)? = LayoutReportLog
+            .handler
+
+        /// What the engine records for the report: nothing when empty.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var traceAreas: Set<LayoutTraceArea> = []
+
+        /// The elements traced, with the containers of their layouts; `nil` traces every one.
+        ///
+        /// Ownership: keeps the elements. Isolation: MainActor. Errors: none. Cancellation: not
+        /// applicable.
+        public var tracedElements: [any LayoutElement]?
+
         /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
         open override var isFlipped: Bool { true }
 
@@ -105,7 +166,7 @@
         /// Cancellation: none.
         open override func layout() {
             super.layout()
-            applyLayoutSpec()
+            applyLayoutSpec(reporting: layoutReporting)
         }
 
         /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
@@ -115,6 +176,17 @@
             }
 
             return layoutSpecSize(fitting: .zero)
+        }
+
+        private var layoutReporting: LayoutSpecReporting? {
+            onLayoutReport.map {
+                LayoutSpecReporting(
+                    host: LayoutSpecReporting.hostName(for: self),
+                    traceAreas: traceAreas,
+                    tracedElements: tracedElements,
+                    handler: $0
+                )
+            }
         }
 
         /// Tells the view that what `layoutSpec()` returns has changed.

@@ -74,6 +74,78 @@
         }
     }
 
+    /// Holds one node, 10 points in.
+    @MainActor
+    private final class Holder: Node {
+        var child: Node? {
+            didSet { setNeedsLayout() }
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.row) { if let child { child } }.padding(10).width(.points(50))
+        }
+    }
+
+    @MainActor
+    private final class Pair: Node {
+        let left = Holder()
+        let right = Holder()
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.row) {
+                left; right
+            }.gap(20).alignItems(.start)
+        }
+    }
+
+    @Test @MainActor
+    func aNodeMovingToAnotherParentStartsWhereItWasShown() throws {
+        let pair = Pair()
+        let dot = Dot(width: 10)
+        pair.left.child = dot
+        let host = NodeHost(root: pair, size: LayoutSize(width: 200, height: 50))
+        let renderer = LayerRenderer()
+        let container = CALayer()
+        CATransaction.begin()
+        defer {
+            host.detach()
+            CATransaction.commit()
+        }
+        func render() {
+            host.layoutIfNeeded()
+            renderer.render(pair, in: container, animation: host.renderAnimation)
+            host.didRender()
+        }
+        render()
+
+        withAnimation {
+            pair.left.child = nil
+            pair.right.child = dot
+        }
+        render()
+
+        let layer = try #require(renderer.layer(for: dot))
+        #expect(layer.superlayer === renderer.layer(for: pair.right))
+        let move = try #require(layer.animation(forKey: "position") as? CABasicAnimation)
+        // It was shown at (10, 10) of the left holder, which is where the right one, 70 points
+        // further, has -60.
+        #expect(move.fromValue as? CGPoint == CGPoint(x: -55, y: 15))
+        #expect(move.toValue as? CGPoint == CGPoint(x: 15, y: 15))
+
+        // And back: the left holder comes first in the tree, so the dot is handled while its
+        // layer is still in the right one.
+        withAnimation {
+            pair.right.child = nil
+            pair.left.child = dot
+        }
+        render()
+
+        #expect(layer.superlayer === renderer.layer(for: pair.left))
+        let back = try #require(layer.animation(forKey: "position") as? CABasicAnimation)
+        #expect(back.fromValue as? CGPoint == CGPoint(x: 85, y: 15))
+        #expect(back.toValue as? CGPoint == CGPoint(x: 15, y: 15))
+    }
+
     @Test @MainActor
     func aTreeDrawnForTheFirstTimeDoesNotAnimate() {
         let row = Row()
