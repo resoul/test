@@ -61,6 +61,7 @@
 | `hidden`, `invisible`, `applyLayoutVisibility` | видимость | [04](04-conditionals-and-responsive.md#3-видимость) |
 | `PreparedLayout.elementsPlacedMoreThanOnce(in:)` | кадр в двух местах — ошибка спеки | [03](03-layout-api.md#управление-subnodes): проход отклоняется |
 | `PreparedLayout.element(for:)`, `ids(of:)`, `ids(where:)`, `LayoutTree.owners` | id движка ↔ элемент, контейнер ↔ его владелец | отчёт и трассировка по нодам |
+| модификаторы с опциональным значением, `nil` — спека без изменений; `padding(top:…)` без сторон не оборачивает элемент | опционалы | [04](04-conditionals-and-responsive.md#4-условный-модификатор); дефект #137 |
 | `if(_:_:)` | условный модификатор | [04](04-conditionals-and-responsive.md#4-условный-модификатор) |
 | `collapsesWhenEmpty()` — `display: none` при пустом списке элементов | пустой контейнер | [04](04-conditionals-and-responsive.md#8-пустой-контейнер) |
 | `Tokens.swift` | `Spacing`, `SpacingScale`, `BreakpointWidth` | [09](09-theme.md), [04](04-conditionals-and-responsive.md#именованные-пороги) |

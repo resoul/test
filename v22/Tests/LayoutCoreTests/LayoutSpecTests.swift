@@ -340,6 +340,59 @@ func idsLeadBackToTheirElements() {
 
 @MainActor
 @Test
+func nilArgumentsLeaveTheSpecAsItWas() {
+    let a = Box(10, 10)
+    let b = Box(10, 10)
+    let rect = LayoutRect(x: 0, y: 0, width: 100, height: 40)
+    let noPoints: Double? = nil
+    let noStep: Spacing? = nil
+    let isCompact = true
+    func frames(_ spec: LayoutSpec) -> [LayoutRect?] {
+        spec.apply(in: rect)
+        return [a.frame, b.frame]
+    }
+
+    let plain = frames(
+        FlexContainer(.row) {
+            a; b
+        }
+    )
+    let withNils = frames(
+        FlexContainer(.row) {
+            a.padding(noPoints).margin(noStep).size(nil).alignSelf(nil).order(nil)
+                .aspectRatio(nil).width(nil).height(nil)
+            b.padding(isCompact ? nil : 16).margin(isCompact ? nil : .s4)
+        }
+        .gap(noPoints).gap(isCompact ? nil : .s2).direction(nil).justifyContent(nil)
+        .alignItems(nil).alignContent(nil).wrap(nil).padding(noStep)
+    )
+    #expect(withNils == plain)
+
+    // The same forms with values apply them: a 10 wide, a gap of 6, then 4 of padding.
+    let spaced = frames(
+        FlexContainer(.row) {
+            a; b.padding(isCompact ? 4 : nil)
+        }.gap(isCompact ? 6 : nil)
+    )
+    #expect(spaced[1]?.minX == 20)
+}
+
+@MainActor
+@Test
+func paddingWithEverySideNilChangesNothing() {
+    let plain = Box(10, 10)
+    let padded = Box(10, 10)
+    let rect = LayoutRect(x: 0, y: 0, width: 100, height: 40)
+
+    FlexContainer(.row) { plain.alignSelf(.center) }.apply(in: rect)
+    let none: Double? = nil
+    FlexContainer(.row) { padded.alignSelf(.center).padding(top: none) }.apply(in: rect)
+
+    #expect(padded.frame == plain.frame)
+}
+
+@MainActor
+@Test
 func breakpointAtTheRootChoosesByTheWidth() {
     let avatar = Box()
     let text = Box(50, 10)
