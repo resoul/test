@@ -203,6 +203,7 @@
 | `DecodeGate`, `ImagePipeline.load` (очередь декодирования) | декодирования pipeline идут по одному вне актора; отменённый в очереди запрос уходит без работы; дефект #155 | [11](11-image.md), [defects](defects.md) |
 | `Image.layoutContent`, `Image.scale`, `NaturalSizeMeasurer` | размер в точках (`пиксели / scale`), высота по ширине — как `<img>` в Chromium 152; ширина по высоте открыта; дефект #157 | [11](11-image.md), [defects](defects.md) |
 | `ImagePipeline.load` (`digests`, `reuse`), `ImageCache.stamp`, `ImageFileStamp` | попадание в кэш памяти без чтения файла: отпечаток по штампу (размер, даты, свежие атрибуты — не `resourceValues`); дефект #160 | [11](11-image.md), [defects](defects.md) |
+| `LayerDrawing.layerImage`, `LayerImage`, `LayerRenderer.show`, `fillCrop`, `Image.solidImage` | картинка в `contents` без копии под рамку; вписывание — gravity и `contentsRect`; placeholder — один пиксель | [11](11-image.md) |
 | `LayerDrawing.prepareDrawing`, `LayerRenderer.draw` | рендерер сообщает размер и масштаб до рисования, чтобы нода могла обновить детализацию | [11](11-image.md) |
 | `ImageCache`, `ImageCacheConfiguration` | дисковый кэш URL, предел/возраст, отдельные настройки метаданных и PNG-оптимизации | [11](11-image.md) |
 | `ImageCache.load`, `ImageCache.download`, `leave` | одна загрузка на URL для одновременных запросов; последний ушедший отменяет её до записи; дефект #158 | [11](11-image.md), [defects](defects.md) |

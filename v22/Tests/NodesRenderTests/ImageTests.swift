@@ -618,13 +618,63 @@
         host.layoutIfNeeded()
         renderer.render(image, in: container)
         let layer = try #require(renderer.layer(for: image))
-        let fitted = try #require(layer.contents) as! CGImage
+        let fitted = try snapshot(layer)
         #expect(alphaAtCorner(fitted) == 0)
 
         image.contentMode = .fill
         renderer.render(image, in: container)
-        let filled = try #require(layer.contents) as! CGImage
+        let filled = try snapshot(layer)
         #expect(alphaAtCorner(filled) > 0)
+    }
+
+    @Test @MainActor
+    func layerShowsTheDecodedImageWithoutACopy() async throws {
+        let pipeline = ImagePipeline(previewPixelDimension: 64)
+        let image = Image(
+            source: .data(try encodedImage(width: 400, height: 100)),
+            contentMode: .fill,
+            placeholder: ImagePlaceholder(size: LayoutSize(width: 100, height: 100)),
+            pipeline: pipeline
+        )
+        let host = NodeHost(root: image, size: LayoutSize(width: 100, height: 100))
+        defer { host.detach() }
+        let renderer = LayerRenderer()
+        host.layoutIfNeeded()
+        renderer.render(image, in: CALayer(), scale: 2)
+        let layer = try #require(renderer.layer(for: image))
+        // The placeholder is one pixel stretched over the frame, not a frame-sized bitmap.
+        let placeholder = try #require(layer.contents.map { $0 as AnyObject as! CGImage })
+        #expect(placeholder.width == 1)
+
+        try await loaded(image)
+        host.layoutIfNeeded()
+        renderer.render(image, in: CALayer(), scale: 2)
+        // The crop needs more pixels than the source has, so the original is decoded.
+        for _ in 0..<100 where image.decodedPixelSize != LayoutSize(width: 400, height: 100) {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        renderer.render(image, in: CALayer(), scale: 2)
+        let decoded = try #require(image.layerImage?.image)
+        #expect(decoded.width == 400)
+        #expect(layer.contents.map { $0 as AnyObject } === decoded)
+        #expect(layer.contentsRect == CGRect(x: 0.375, y: 0, width: 0.25, height: 1))
+        #expect(pixelAtCorner(try snapshot(layer)).red > 200)
+    }
+
+    @Test
+    func fillCropKeepsTheCenterAtTheImagesProportions() {
+        #expect(
+            LayerRenderer.fillCrop(
+                image: CGSize(width: 400, height: 100),
+                frame: CGSize(width: 100, height: 100)
+            ) == CGRect(x: 0.375, y: 0, width: 0.25, height: 1)
+        )
+        #expect(
+            LayerRenderer.fillCrop(
+                image: CGSize(width: 100, height: 400),
+                frame: CGSize(width: 200, height: 100)
+            ) == CGRect(x: 0, y: 0.4375, width: 1, height: 0.125)
+        )
     }
 
     @Test @MainActor
@@ -840,7 +890,7 @@
         host.layoutIfNeeded()
         renderer.render(image, in: CALayer())
         let layer = try #require(renderer.layer(for: image))
-        let before = try #require(layer.contents) as! CGImage
+        let before = try snapshot(layer)
         #expect(pixelAtCorner(before).blue > 200)
 
         for _ in 0..<100 where image.phase != .ready {
@@ -849,7 +899,7 @@
         #expect(image.phase == .ready)
         host.layoutIfNeeded()
         renderer.render(image, in: CALayer())
-        let after = try #require(layer.contents) as! CGImage
+        let after = try snapshot(layer)
         #expect(pixelAtCorner(after).red > 200)
     }
 
@@ -873,7 +923,7 @@
         host.layoutIfNeeded()
         renderer.render(image, in: CALayer())
         let layer = try #require(renderer.layer(for: image))
-        let shown = try #require(layer.contents) as! CGImage
+        let shown = try snapshot(layer)
         #expect(pixelAtCorner(shown).blue > 200)
 
         try encodedImage(width: 32, height: 16).write(to: file)
@@ -886,6 +936,24 @@
         #expect(image.pixelSize == LayoutSize(width: 32, height: 16))
         image.source = nil
         #expect(image.phase == .empty)
+    }
+
+    /// What the layer shows, as Core Animation places its contents in its bounds.
+    @MainActor
+    private func snapshot(_ layer: CALayer) throws -> CGImage {
+        let context = try #require(
+            CGContext(
+                data: nil,
+                width: max(1, Int(layer.bounds.width.rounded(.up))),
+                height: max(1, Int(layer.bounds.height.rounded(.up))),
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        )
+        layer.render(in: context)
+        return try #require(context.makeImage())
     }
 
     private func alphaAtCorner(_ image: CGImage) -> UInt8 {

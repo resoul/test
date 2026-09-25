@@ -28,11 +28,40 @@
         /// Ownership: draws into `context`. Isolation: MainActor. Errors: none.
         /// Cancellation: none.
         func draw(in context: CGContext, size: CGSize)
+
+        /// An image the layer can show as it is, instead of a drawing, or `nil` to draw. The
+        /// layer then references the image and keeps no bitmap of its own: a decoded photo is
+        /// held once, not again at the frame's size. `drawingRevision` still marks changes.
+        ///
+        /// Ownership: returns a reference to an image the drawing holds. Isolation:
+        /// MainActor. Errors: none. Cancellation: none.
+        var layerImage: LayerImage? { get }
     }
 
     extension LayerDrawing {
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public func prepareDrawing(size: CGSize, scale: Double) {}
+
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public var layerImage: LayerImage? { nil }
+    }
+
+    /// An image shown as a layer's contents, placed in the frame by `contentMode`.
+    ///
+    /// Ownership: value holding a shared image. Isolation: none. Errors: none.
+    /// Cancellation: not applicable.
+    public struct LayerImage: Sendable {
+        /// Ownership: shared reference. Isolation: none. Errors: none.
+        /// Cancellation: not applicable.
+        public var image: CGImage
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public var contentMode: ImageContentMode
+
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public init(image: CGImage, contentMode: ImageContentMode) {
+            self.image = image
+            self.contentMode = contentMode
+        }
     }
 
     /// Draws a tree of nodes as a tree of `CALayer`s: one layer per mounted node, framed by the
@@ -571,6 +600,11 @@
             drawing.prepareDrawing(size: size, scale: scale)
             let wanted = Drawing(revision: drawing.drawingRevision, size: size, scale: scale)
             let before = drawn[node.id]
+            if let shown = drawing.layerImage {
+                show(shown, as: wanted, of: node, in: layer, animation: animation)
+                return
+            }
+            layer.contentsRect = CGRect(x: 0, y: 0, width: 1, height: 1)
             guard before != wanted else { return }
 
             drawn[node.id] = wanted
@@ -615,6 +649,71 @@
                     forKey: "contents"
                 )
             }
+        }
+
+        /// Shows `shown` as the layer's contents, scaled by Core Animation into the frame: a
+        /// new size or scale needs no new bitmap, only a new placement. `fill` crops through
+        /// `contentsRect` rather than `masksToBounds`, which would clip the layer's shadow.
+        private func show(
+            _ shown: LayerImage,
+            as wanted: Drawing,
+            of node: Node,
+            in layer: CALayer,
+            animation: Animation?
+        ) {
+            let image = shown.image
+            switch shown.contentMode {
+            case .fit:
+                layer.contentsGravity = .resizeAspect
+                layer.contentsRect = CGRect(x: 0, y: 0, width: 1, height: 1)
+            case .stretch:
+                layer.contentsGravity = .resize
+                layer.contentsRect = CGRect(x: 0, y: 0, width: 1, height: 1)
+            case .fill:
+                layer.contentsGravity = .resize
+                layer.contentsRect = LayerRenderer.fillCrop(
+                    image: CGSize(width: image.width, height: image.height),
+                    frame: wanted.size
+                )
+            }
+            layer.contentsScale = CGFloat(wanted.scale)
+
+            let before = drawn[node.id]
+            drawn[node.id] = wanted
+            let current = layer.contents.map { $0 as AnyObject }
+            guard current !== image else { return }
+
+            layer.contents = image
+            if let animation, let before, before.revision != wanted.revision, let current {
+                let curve =
+                    if case .spring = animation.curve {
+                        Animation.easeInOut(duration: animation.duration)
+                    } else {
+                        animation
+                    }
+                layer.add(
+                    makeAnimation("contents", from: current, to: image, curve),
+                    forKey: "contents"
+                )
+            }
+        }
+
+        /// The centered part of an image that covers `frame` at the image's proportions, in
+        /// unit coordinates of the image.
+        nonisolated static func fillCrop(image: CGSize, frame: CGSize) -> CGRect {
+            guard image.width > 0, image.height > 0, frame.width > 0, frame.height > 0 else {
+                return CGRect(x: 0, y: 0, width: 1, height: 1)
+            }
+
+            let imageRatio = image.width / image.height
+            let frameRatio = frame.width / frame.height
+            if imageRatio > frameRatio {
+                let width = frameRatio / imageRatio
+                return CGRect(x: (1 - width) / 2, y: 0, width: width, height: 1)
+            }
+
+            let height = imageRatio / frameRatio
+            return CGRect(x: 0, y: (1 - height) / 2, width: 1, height: height)
         }
 
         /// Places the indicator of `scroll` along its trailing (or bottom) edge where its offset

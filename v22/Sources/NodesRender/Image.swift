@@ -510,6 +510,7 @@
         /// Set while the node is out of the tree after having been in it: nothing loads and
         /// no pixels are held until it returns.
         private var isSuspended = false
+        private var solid: (color: Color?, image: CGImage)?
 
         /// Ownership: the caller owns the node. Isolation: MainActor. Errors: none.
         /// Cancellation: the load stops when the source changes or the node is released.
@@ -620,6 +621,22 @@
             }
         }
 
+        /// The decoded pixels, or before them a single pixel of the placeholder's color (clear
+        /// without one) stretched over the frame. The layer shows them as they are, so no
+        /// frame-sized copy of the image or the fill is made.
+        ///
+        /// Ownership: returns references the node holds. Isolation: MainActor. Errors: none.
+        /// Cancellation: none.
+        public var layerImage: LayerImage? {
+            if let image = loaded?.image {
+                return LayerImage(image: image, contentMode: contentMode)
+            }
+
+            return solidImage().map { LayerImage(image: $0, contentMode: .stretch) }
+        }
+
+        /// Draws what `layerImage` shows, for a caller that needs it in a context.
+        ///
         /// Ownership: draws into `context`. Isolation: MainActor. Errors: none.
         /// Cancellation: none.
         public func draw(in context: CGContext, size: CGSize) {
@@ -659,6 +676,41 @@
             }
             context.clip(to: box)
             context.draw(image, in: destination)
+        }
+
+        /// A single pixel of the placeholder's color, kept until the color changes: the
+        /// renderer compares contents by reference, and a new pixel each render would replace
+        /// them every time.
+        private func solidImage() -> CGImage? {
+            let color = placeholder?.color
+            if let solid, solid.color == color { return solid.image }
+
+            guard
+                let context = CGContext(
+                    data: nil,
+                    width: 1,
+                    height: 1,
+                    bitsPerComponent: 8,
+                    bytesPerRow: 0,
+                    space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                        | CGBitmapInfo.byteOrder32Little.rawValue
+                )
+            else { return nil }
+
+            if let color {
+                context.setFillColor(
+                    red: color.red,
+                    green: color.green,
+                    blue: color.blue,
+                    alpha: color.alpha
+                )
+                context.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+            }
+            guard let image = context.makeImage() else { return nil }
+
+            solid = (color, image)
+            return image
         }
 
         private func reload() {
