@@ -85,6 +85,12 @@ public struct PreparedLayout {
         return ids
     }
 
+    /// Every element the spec mentions, in order, once per place.
+    ///
+    /// Ownership: returns borrowed elements. Isolation: MainActor. Errors: none.
+    /// Cancellation: not applicable.
+    public var mentionedElements: [any LayoutElement] { elements.map(\.element) }
+
     /// The number of places the spec mentions elements in.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
@@ -213,7 +219,9 @@ extension LayoutSpec {
         )
     }
 
-    /// Lays the spec out in `rect` at once: `prepare`, solve, `PreparedLayout.apply`.
+    /// Lays the spec out in `rect` at once: `prepare`, solve, `PreparedLayout.apply`. A spec
+    /// too deep for the calling thread's stack is not applied — the elements keep their
+    /// frames — rather than crashing it.
     ///
     /// Ownership: borrows the elements for the call. Isolation: MainActor; runs synchronously.
     /// Errors: none. Cancellation: not applicable.
@@ -225,7 +233,14 @@ extension LayoutSpec {
         spacing: SpacingScale = .standard
     ) -> [LayoutPlacement] {
         let prepared = prepare(direction: direction, spacing: spacing)
-        guard let result = try? FlexboxEngine.layout(prepared.input, size: rect.size) else {
+        let context = LayoutContext(stackBudget: LayoutContext.currentThreadStackBudget)
+        guard
+            let result = try? FlexboxEngine.layout(
+                prepared.input,
+                size: rect.size,
+                context: context
+            )
+        else {
             return []
         }
 
@@ -234,7 +249,8 @@ extension LayoutSpec {
 
     /// The size the spec takes under the given space — for `sizeThatFits` and
     /// `intrinsicContentSize`. `.definite` width gives fit-content: not wider than the
-    /// space unless the content cannot be narrower.
+    /// space unless the content cannot be narrower. A spec too deep for the calling thread's
+    /// stack measures as zero rather than crashing it.
     ///
     /// Ownership: returns a value. Isolation: MainActor; runs synchronously. Errors: none.
     /// Cancellation: not applicable.
@@ -246,7 +262,9 @@ extension LayoutSpec {
     ) -> LayoutSize {
         var tree = LayoutTree(direction: direction, spacing: spacing)
         let root = tree.root(for: self)
-        return (try? FlexboxEngine.measure(root, width: width, height: height)) ?? .zero
+        let context = LayoutContext(stackBudget: LayoutContext.currentThreadStackBudget)
+        return (try? FlexboxEngine.measure(root, width: width, height: height, context: context))
+            ?? .zero
     }
 }
 

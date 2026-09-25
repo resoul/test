@@ -2,21 +2,23 @@
 /// Level 1, §9). A pure function of its input: no shared state, no platform objects, no
 /// output besides the returned value — safe to run on any task.
 ///
-/// Ownership: stateless. Isolation: none. Errors: `LayoutCancelled` only. Cancellation:
-/// through `LayoutContext`; a cancelled pass returns nothing.
+/// Ownership: stateless. Isolation: none. Errors: `LayoutCancelled`, and
+/// `LayoutStackExhausted` over `LayoutContext.stackBudget`. Cancellation: through
+/// `LayoutContext`; a pass that throws returns nothing.
 public enum FlexboxEngine {
     /// Lays out `root` as if a host gave it exactly `size`, and returns every node's frame in
     /// the root's coordinate space (the root itself is at the origin).
     ///
     /// Ownership: returns a new value. Isolation: none. Errors: throws `LayoutCancelled` when
-    /// `context` reports cancellation. Cancellation: checked at every container and every 256
-    /// items; nothing partial is returned.
+    /// `context` reports cancellation, `LayoutStackExhausted` when the tree is too deep for
+    /// `context.stackBudget`. Cancellation: checked at every container and every 256 items;
+    /// nothing partial is returned.
     public static func layout(
         _ root: LayoutNode,
         size: LayoutSize,
         context: LayoutContext = LayoutContext()
     ) throws -> LayoutResult {
-        var solver = Solver(root: root, context: context)
+        var solver = try Solver(root: root, context: context)
         solver.frames[0] = LayoutRect(origin: .zero, size: size)
         _ = try solver.compute(
             0,
@@ -47,15 +49,15 @@ public enum FlexboxEngine {
     /// The size `root` takes under the given available space when nothing else fixes it —
     /// what a host asks for `sizeThatFits`/`intrinsicContentSize`.
     ///
-    /// Ownership: returns a new value. Isolation: none. Errors: throws `LayoutCancelled`.
-    /// Cancellation: as `layout`.
+    /// Ownership: returns a new value. Isolation: none. Errors: as `layout`. Cancellation:
+    /// as `layout`.
     public static func measure(
         _ root: LayoutNode,
         width: AvailableSpace,
         height: AvailableSpace,
         context: LayoutContext = LayoutContext()
     ) throws -> LayoutSize {
-        var solver = Solver(root: root, context: context)
+        var solver = try Solver(root: root, context: context)
         return try solver.compute(
             0,
             known: OptionalSize(),
@@ -255,16 +257,25 @@ struct Solver {
     let variantsWithoutWidth = NodeSet()
     var trace: [LayoutTraceEvent] = []
     let context: LayoutContext
+    /// Where the pass started on the stack, and how far below it it may go.
+    let stackOrigin: UInt
+    let stackBudget: UInt?
 
-    init(root: LayoutNode, context: LayoutContext) {
+    init(root: LayoutNode, context: LayoutContext) throws {
         self.context = context
-        flatten(root)
+        stackOrigin = Solver.stackAddress()
+        stackBudget = context.stackBudget.map { UInt(max(0, $0)) }
+        try flatten(root)
         frames = Array(repeating: nil, count: nodes.count)
         cache.reserveCapacity(nodes.count * 2)
     }
 
+    /// Flattens the tree in pre-order. It recurses once per level like the solver, so it
+    /// checks the stack budget too: a tree too deep for the thread fails here before it
+    /// crashes it.
     @discardableResult
-    private mutating func flatten(_ node: LayoutNode) -> Int {
+    private mutating func flatten(_ node: LayoutNode) throws -> Int {
+        try checkStack()
         let index = nodes.count
         nodes.append(
             FlatNode(
@@ -283,10 +294,27 @@ struct Solver {
         var children: [Int] = []
         children.reserveCapacity(node.children.count)
         for child in node.children {
-            children.append(flatten(child))
+            children.append(try flatten(child))
         }
         nodes[index].children = children
         return index
+    }
+
+    /// Throws when the pass has gone deeper into the stack than its budget allows. The
+    /// distance is taken either way, so it does not matter which way the stack grows.
+    func checkStack() throws {
+        guard let stackBudget else { return }
+
+        let here = Solver.stackAddress()
+        let used = here > stackOrigin ? here - stackOrigin : stackOrigin - here
+        if used > stackBudget { throw LayoutStackExhausted() }
+    }
+
+    /// An address in the caller's frame.
+    @inline(never)
+    static func stackAddress() -> UInt {
+        var marker: UInt8 = 0
+        return withUnsafeMutablePointer(to: &marker) { UInt(bitPattern: $0) }
     }
 
     /// The first baseline of node `index` laid out at `size`, from its top edge, or `nil`

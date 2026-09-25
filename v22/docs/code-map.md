@@ -32,6 +32,7 @@
 | `LayoutID` | непрозрачный id, сопоставляет адаптер | [10](10-layout-engine.md#вход-и-выход): модуль не знает про ноды |
 | `LayoutResult.duplicateIDs` | дубликаты id — диагностика в результате | Trellis weave-analysis §3.1; AGENTS.md v22 «Печать» |
 | `LayoutContext` / `LayoutCancelled` | отмена через `throws`, без частичного результата | Trellis D09, D10 |
+| `LayoutContext.stackBudget`, `currentThreadStackBudget`, `LayoutStackExhausted`, `Solver.checkStack`/`stackAddress`, проверка в `flatten` и `flexLayout` | бюджет стека вместо падения | дефект #124; [10](10-layout-engine.md#статус-e3-производительность) |
 | `LayoutContext.checkpoint()` и вызовы в `flexLayout` (каждый контейнер, каждые 256 item) | точки отмены | Trellis D09, дефект #16 |
 | `LayoutResult.variantsWithoutWidth`, `Solver.variantsWithoutWidth` (`NodeSet`), запись в `Solver.style` | вариант выбран без определённой ширины | [04](04-conditionals-and-responsive.md#5-breakpoint--смена-структуры-по-размеру), [10](10-layout-engine.md#диагностика) |
 
@@ -182,6 +183,8 @@
 | `NodeCache`, `NodeHost.passGeneration` | нода на id модели; ушедшие отпускаются на следующем проходе | [04](04-conditionals-and-responsive.md#7-кэш-нод-для-динамических-списков) |
 | `LayoutSpec.prepare`, `PreparedLayout` | подготовка (MainActor) / расчёт (где угодно) / применение (MainActor) | фоновый расчёт |
 | `ContentMeasurer.requiresMainThread` | view меряются только на главном: такая раскладка решается там | `ViewMeasurer` |
+| `NodeHost.mainThreadStackBudget`, `SolveOutcome`, `reject`; `LayoutReport.Stack` | проход не поместился в стек главного — на поток хоста или отклонён | дефект #124 |
+| `Node.pendingHost`, `NodeHost.pending`/`releasePending` | изменение ноды, которую монтирует проход в полёте | дефект #138 |
 | `NodeHost.solvesInBackground`, `solve`, `adopt` | поток со стеком 8 МиБ; поток регистрируется изнутри тела; обогнанный расчёт отменяется и выбрасывается | дефекты #124, #22 (Trellis) |
 | `Accessibility`, `NodeHost.accessibilityItems`, `activate` | элементы доступности из дерева: текст, кнопки с подписью из текста внутри | как UIKit: `UIButton` читается подписью |
 | `NodeAccessibilityElement` (UIKit, AppKit) | хранит `NodeID` и слабый хост, не ноду | правило Trellis о нативных AX-объектах |

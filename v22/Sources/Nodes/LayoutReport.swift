@@ -21,6 +21,19 @@ public struct LayoutReport: Sendable {
         public let event: LayoutTraceEvent
     }
 
+    /// Whether the pass fit the stack of the thread it was solved on.
+    ///
+    /// Ownership: value type. Isolation: none. Errors: none. Cancellation: not applicable.
+    public enum Stack: Sendable, Hashable {
+        /// Solved where it was meant to be.
+        case enough
+        /// Too deep for the main thread's stack; solved on the host's own thread instead,
+        /// one frame later.
+        case moved
+        /// Too deep for any thread it could be solved on; the pass is rejected.
+        case exhausted
+    }
+
     /// `NodeHost.number` of the host.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
@@ -42,10 +55,13 @@ public struct LayoutReport: Sendable {
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public let duplicates: [NodeID]
-    /// Whether the pass was rejected — also for elements laid out twice that are not nodes.
+    /// Whether the pass was rejected — for elements laid out twice, nodes or not, or for a
+    /// tree too deep for the stack.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public let isRejected: Bool
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public let stack: Stack
     /// Nodes whose `Breakpoint` or `from:` values had no width to choose by, at least while
     /// being measured, and took the narrow side: their parent sized itself to its content.
     ///
@@ -54,16 +70,17 @@ public struct LayoutReport: Sendable {
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public let trace: [Trace]
 
-    /// Whether the pass found something to fix in the layouts.
+    /// Whether the pass found something to fix in the layouts — including a tree deeper than
+    /// the main thread's stack allows, even when it could still be solved elsewhere.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public var hasProblems: Bool { isRejected || !variantsWithoutWidth.isEmpty }
+    public var hasProblems: Bool { isRejected || stack != .enough || !variantsWithoutWidth.isEmpty }
 
     /// One line for the pass, then one per traced event. Every line names the host and the
     /// pass, and every field is always there (`none` when empty), so lines of several hosts
     /// and passes stay readable when they interleave.
     ///
-    ///     [layout] pass host=1 gen=4 elements=12 ms=0.412 rejected=no duplicates=none widthless=#7
+    ///     [layout] pass host=1 gen=4 elements=12 ms=0.412 rejected=no stack=enough duplicates=none widthless=#7
     ///     [layout] measure host=1 gen=4 #7 width=max-content height=max-content size=120x40 cached=no
     ///
     /// Ownership: returns values. Isolation: none. Errors: none. Cancellation: not
@@ -75,7 +92,8 @@ public struct LayoutReport: Sendable {
         var lines = [
             "[layout] pass host=\(host) gen=\(generation) elements=\(elements) "
                 + "ms=\(Self.format(milliseconds)) rejected=\(isRejected ? "yes" : "no") "
-                + "duplicates=\(Self.list(duplicates)) widthless=\(Self.list(variantsWithoutWidth))"
+                + "stack=\(stack) duplicates=\(Self.list(duplicates)) "
+                + "widthless=\(Self.list(variantsWithoutWidth))"
         ]
         for entry in trace {
             let node = entry.node.map { "\($0)\(entry.isContainer ? "/container" : "")" } ?? "none"

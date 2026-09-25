@@ -186,6 +186,7 @@ extension Solver {
         definite: DefiniteAxes = .both
     ) throws -> LayoutSize {
         try context.checkpoint()
+        try checkStack()
         let reportsBaseline = wantsBaseline
         wantsBaseline = false
         if nodes[index].hasAspectRatio,

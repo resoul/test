@@ -138,7 +138,18 @@ public final class NodeHost {
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public var tracedNodes: Set<NodeID>?
 
+    /// Stack the engine may use when it solves on the main thread — the first layout, and
+    /// every layout when not `solvesInBackground` — so that a tree too deep for that stack
+    /// does not crash it. Such a tree is solved on the host's own thread instead, whose
+    /// stack is far larger, and shows one frame later. A layout with views inside cannot
+    /// move, and is rejected. `nil` sets no limit.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var mainThreadStackBudget: Int? = LayoutContext.currentThreadStackBudget
+
     private var mounted: [NodeID: Node] = [:]
+    /// Nodes of the layout being solved in the background that are not mounted yet.
+    private var pending: [Node] = []
     private var pressed: Node?
     private var generation: UInt64 = 0
     private var solving: Task<Void, Never>?
@@ -152,6 +163,10 @@ public final class NodeHost {
     /// the 512 KiB of a task's thread holds a few hundred levels in an optimized build and a
     /// few dozen in an unoptimized one. A task cannot ask for a stack size, a thread can.
     nonisolated static let solverStackSize = 8 << 20
+
+    /// Stack of the solver's thread kept for the frames the engine calls into (measuring
+    /// text), beyond its own recursion.
+    nonisolated static let solverStackReserve = 256 << 10
 
     /// Grows with every layout pass and measurement of any host: `NodeCache` tells passes
     /// apart by it.
@@ -206,7 +221,8 @@ public final class NodeHost {
     }
 
     /// The size the tree takes under the given space — for `sizeThatFits` and
-    /// `intrinsicContentSize`.
+    /// `intrinsicContentSize`. It is measured on the calling thread; a tree too deep for its
+    /// stack measures as zero instead of crashing.
     ///
     /// Ownership: returns a value. Isolation: MainActor; synchronous. Errors: none.
     /// Cancellation: not applicable.
@@ -241,24 +257,54 @@ public final class NodeHost {
         cancelSolving()
         let prepared = root.asLayoutSpec.prepare(direction: direction, spacing: spacing)
         let rect = LayoutRect(origin: .zero, size: size)
-        let context = LayoutContext(trace: traceRequest(for: prepared))
+        let trace = traceRequest(for: prepared)
         guard solvesInBackground, passes > 0, !prepared.requiresMainThread else {
-            var result: LayoutResult?
-            let duration = ContinuousClock().measure {
-                result = try? FlexboxEngine.layout(
+            let context = LayoutContext(trace: trace, stackBudget: mainThreadStackBudget)
+            let clock = ContinuousClock()
+            let start = clock.now
+            do {
+                let result = try FlexboxEngine.layout(
                     prepared.input,
                     size: rect.size,
                     context: context
                 )
-            }
-            if let result {
-                finish(prepared, result, duration: duration, in: rect, animation: animation)
-            }
+                finish(
+                    prepared,
+                    result,
+                    duration: clock.now - start,
+                    stack: .enough,
+                    in: rect,
+                    animation: animation
+                )
+            } catch is LayoutStackExhausted where !prepared.requiresMainThread {
+                solvingAnimation = animation
+                solveInBackground(prepared, trace: trace, stack: .moved, in: rect)
+            } catch is LayoutStackExhausted {
+                reject(prepared, duration: clock.now - start)
+            } catch {}
             return
         }
 
         solvingAnimation = animation
-        solveInBackground(prepared, context: context, in: rect)
+        solveInBackground(prepared, trace: trace, stack: .enough, in: rect)
+    }
+
+    /// Reports a pass too deep for any thread it could be solved on; the tree keeps the
+    /// pass before.
+    private func reject(_ prepared: PreparedLayout, duration: Duration) {
+        onLayoutReport?(
+            LayoutReport(
+                host: number,
+                generation: generation,
+                elements: prepared.elementCount,
+                duration: duration,
+                duplicates: [],
+                isRejected: true,
+                stack: .exhausted,
+                variantsWithoutWidth: [],
+                trace: []
+            )
+        )
     }
 
     /// The engine's trace request for `traceAreas` and `tracedNodes`: their ids in
@@ -289,12 +335,15 @@ public final class NodeHost {
         _ prepared: PreparedLayout,
         _ result: LayoutResult,
         duration: Duration,
+        stack: LayoutReport.Stack,
         in rect: LayoutRect,
         animation: Animation?
     ) {
         let duplicates = prepared.elementsPlacedMoreThanOnce(in: result)
         if let onLayoutReport {
-            onLayoutReport(report(prepared, result, duration: duration, duplicates: duplicates))
+            onLayoutReport(
+                report(prepared, result, duration: duration, stack: stack, duplicates: duplicates)
+            )
         }
         guard duplicates.isEmpty else { return }
 
@@ -310,6 +359,7 @@ public final class NodeHost {
         _ prepared: PreparedLayout,
         _ result: LayoutResult,
         duration: Duration,
+        stack: LayoutReport.Stack,
         duplicates: [any LayoutElement]
     ) -> LayoutReport {
         func node(_ id: LayoutID) -> NodeID? { (prepared.element(for: id) as? Node)?.id }
@@ -326,6 +376,7 @@ public final class NodeHost {
             duration: duration,
             duplicates: duplicates.compactMap { ($0 as? Node)?.id },
             isRejected: !duplicates.isEmpty,
+            stack: stack,
             variantsWithoutWidth: widthless.sorted { $0.raw < $1.raw },
             trace: result.trace.map { event in
                 LayoutReport.Trace(
@@ -339,54 +390,88 @@ public final class NodeHost {
 
     private func solveInBackground(
         _ prepared: PreparedLayout,
-        context: LayoutContext,
+        trace: LayoutTraceRequest?,
+        stack: LayoutReport.Stack,
         in rect: LayoutRect
     ) {
         let input = prepared.input
         let pass = generation
+        releasePending()
+        for case let node as Node in prepared.mentionedElements where !node.isMounted {
+            node.pendingHost = self
+            pending.append(node)
+        }
         solving = Task { [weak self] in
-            let solved = await NodeHost.solve(input, size: rect.size, trace: context.trace) {
-                thread in
+            let outcome = await NodeHost.solve(input, size: rect.size, trace: trace) { thread in
                 self?.adopt(thread, pass: pass)
             }
-            guard let self, pass == self.generation, let solved else { return }
+            guard let self, pass == self.generation else { return }
 
             let animation = self.solvingAnimation
-            self.solving = nil
-            self.solverThread = nil
-            self.solvingAnimation = nil
-            self.finish(
-                prepared,
-                solved.result,
-                duration: solved.duration,
-                in: rect,
-                animation: animation
-            )
-            self.onNeedsRender?()
+            switch outcome {
+            case .cancelled:
+                return
+            case let .tooDeep(duration):
+                self.releasePending()
+                self.solving = nil
+                self.solverThread = nil
+                self.solvingAnimation = nil
+                self.reject(prepared, duration: duration)
+            case let .solved(result, duration):
+                self.releasePending()
+                self.solving = nil
+                self.solverThread = nil
+                self.solvingAnimation = nil
+                self.finish(
+                    prepared,
+                    result,
+                    duration: duration,
+                    stack: stack,
+                    in: rect,
+                    animation: animation
+                )
+                self.onNeedsRender?()
+            }
         }
+    }
+
+    /// How a solve on the host's thread ended.
+    private enum SolveOutcome: Sendable {
+        case solved(LayoutResult, Duration)
+        case tooDeep(Duration)
+        case cancelled
     }
 
     /// Solves `input` on a thread of its own. The thread is handed to `started` from inside
     /// its body, once it certainly runs: a thread cancelled before its body starts never
-    /// runs it, and the wait would never end. `nil` when cancelled.
+    /// runs it, and the wait would never end.
     private nonisolated static func solve(
         _ input: LayoutNode,
         size: LayoutSize,
         trace: LayoutTraceRequest?,
         started: @escaping @MainActor @Sendable (Thread) -> Void
-    ) async -> (result: LayoutResult, duration: Duration)? {
+    ) async -> SolveOutcome {
         await withCheckedContinuation { continuation in
             let thread = Thread {
                 let running = Thread.current
                 Task { @MainActor in started(running) }
                 let context = LayoutContext(
                     isCancelled: { Thread.current.isCancelled },
-                    trace: trace
+                    trace: trace,
+                    stackBudget: solverStackSize - solverStackReserve
                 )
                 let clock = ContinuousClock()
                 let start = clock.now
-                let result = try? FlexboxEngine.layout(input, size: size, context: context)
-                continuation.resume(returning: result.map { ($0, clock.now - start) })
+                let outcome: SolveOutcome
+                do {
+                    let result = try FlexboxEngine.layout(input, size: size, context: context)
+                    outcome = .solved(result, clock.now - start)
+                } catch is LayoutStackExhausted {
+                    outcome = .tooDeep(clock.now - start)
+                } catch {
+                    outcome = .cancelled
+                }
+                continuation.resume(returning: outcome)
             }
             thread.stackSize = solverStackSize
             thread.qualityOfService = .userInitiated
@@ -404,7 +489,15 @@ public final class NodeHost {
         }
     }
 
+    private func releasePending() {
+        for node in pending where node.pendingHost === self {
+            node.pendingHost = nil
+        }
+        pending = []
+    }
+
     private func cancelSolving() {
+        releasePending()
         solving?.cancel()
         solving = nil
         solverThread?.cancel()
