@@ -1,0 +1,190 @@
+#if canImport(ImageIO)
+    import ImageIO
+    import LayoutCore
+    import Nodes
+    import NodesRender
+    import QuartzCore
+    import Testing
+
+    private func encodedImage(
+        width: Int,
+        height: Int,
+        type: CFString = "public.png" as CFString,
+        metadata: [String: Any] = [:]
+    ) throws -> Data {
+        let context = try #require(
+            CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        )
+        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        let bitmap = try #require(context.makeImage())
+        let output = NSMutableData()
+        let destination = try #require(CGImageDestinationCreateWithData(output, type, 1, nil))
+        CGImageDestinationAddImage(destination, bitmap, metadata as CFDictionary)
+        #expect(CGImageDestinationFinalize(destination))
+        return output as Data
+    }
+
+    private func temporaryCache() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    }
+
+    @Test
+    func diskCacheKeepsTheOriginalByDefaultAndEvictsOldEntries() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let first = try encodedImage(width: 20, height: 20)
+        let second = try encodedImage(width: 30, height: 30)
+        let limit = max(first.count, second.count)
+        let cache = ImageCache(
+            configuration: ImageCacheConfiguration(
+                directory: directory,
+                maximumBytes: limit
+            )
+        )
+        let firstURL = URL(string: "https://example.test/first.png")!
+        let secondURL = URL(string: "https://example.test/second.png")!
+        try await cache.store(first, for: firstURL)
+        #expect(try await cache.cachedData(for: firstURL) == first)
+
+        try await cache.store(second, for: secondURL)
+        #expect(try await cache.cachedData(for: firstURL) == nil)
+        #expect(try await cache.cachedData(for: secondURL) == second)
+    }
+
+    @Test
+    func removingLocationMetadataPreservesEncodedImagePixels() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let gps: [String: Any] = [kCGImagePropertyGPSLatitude as String: 51.5]
+        let original = try encodedImage(
+            width: 12,
+            height: 8,
+            type: "public.jpeg" as CFString,
+            metadata: [kCGImagePropertyGPSDictionary as String: gps]
+        )
+        let cache = ImageCache(
+            configuration: ImageCacheConfiguration(
+                directory: directory,
+                metadata: .removeLocation
+            )
+        )
+        let url = URL(string: "https://example.test/photo.jpg")!
+        try await cache.store(original, for: url)
+        let saved = try #require(await cache.cachedData(for: url))
+        let before = try #require(CGImageSourceCreateWithData(original as CFData, nil))
+        let after = try #require(CGImageSourceCreateWithData(saved as CFData, nil))
+        let properties = CGImageSourceCopyPropertiesAtIndex(after, 0, nil) as? [String: Any]
+        #expect(properties?[kCGImagePropertyGPSDictionary as String] == nil)
+        let sourcePixels = try #require(CGImageSourceCreateImageAtIndex(before, 0, nil))
+        let savedPixels = try #require(CGImageSourceCreateImageAtIndex(after, 0, nil))
+        #expect(sourcePixels.width == savedPixels.width)
+        #expect(sourcePixels.height == savedPixels.height)
+        #expect(sourcePixels.dataProvider?.data as Data? == savedPixels.dataProvider?.data as Data?)
+    }
+
+    @Test
+    func cachePoliciesUseDifferentDiskEntries() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let original = try encodedImage(width: 8, height: 8)
+        let url = URL(string: "https://example.test/policy.png")!
+        let originalCache = ImageCache(configuration: ImageCacheConfiguration(directory: directory))
+        let privateCache = ImageCache(
+            configuration: ImageCacheConfiguration(
+                directory: directory,
+                metadata: .removeLocation
+            )
+        )
+        try await originalCache.store(original, for: url)
+        #expect(try await privateCache.cachedData(for: url) == nil)
+    }
+
+    @Test
+    func losslessPngSettingNeverStoresMoreThanTheInput() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let original = try encodedImage(width: 100, height: 100) + Data(repeating: 0, count: 2048)
+        let cache = ImageCache(
+            configuration: ImageCacheConfiguration(
+                directory: directory,
+                compression: .losslessIfSmaller,
+                minimumCompressionBytes: 0
+            )
+        )
+        let url = URL(string: "https://example.test/flat.png")!
+        try await cache.store(original, for: url)
+        let saved = try #require(await cache.cachedData(for: url))
+        #expect(saved.count < original.count)
+        let source = try #require(CGImageSourceCreateWithData(saved as CFData, nil))
+        let image = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        #expect(image.width == 100)
+        #expect(image.height == 100)
+        let before = try #require(CGImageSourceCreateWithData(original as CFData, nil))
+        let originalPixels = try #require(CGImageSourceCreateImageAtIndex(before, 0, nil))
+        #expect(image.dataProvider?.data as Data? == originalPixels.dataProvider?.data as Data?)
+    }
+
+    @Test @MainActor
+    func imageUsesTheLatestSourceAndItsIntrinsicSize() async throws {
+        let first = try encodedImage(width: 20, height: 20)
+        let second = try encodedImage(width: 40, height: 10)
+        let image = Image(source: .data(first))
+        image.source = .data(second)
+        for _ in 0..<100 where image.pixelSize == nil {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(image.pixelSize == LayoutSize(width: 40, height: 10))
+        #expect(image.accessibilityContentTraits.contains(.image))
+    }
+
+    @Test @MainActor
+    func changingContentModeRedrawsTheSameFrame() async throws {
+        let data = try encodedImage(width: 40, height: 10)
+        let image = Image(source: .data(data))
+        for _ in 0..<100 where image.pixelSize == nil {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(image.pixelSize != nil)
+
+        let host = NodeHost(root: image, size: LayoutSize(width: 40, height: 40))
+        defer { host.detach() }
+        let renderer = LayerRenderer()
+        let container = CALayer()
+        host.layoutIfNeeded()
+        renderer.render(image, in: container)
+        let layer = try #require(renderer.layer(for: image))
+        let fitted = try #require(layer.contents) as! CGImage
+        #expect(alphaAtCorner(fitted) == 0)
+
+        image.contentMode = .fill
+        renderer.render(image, in: container)
+        let filled = try #require(layer.contents) as! CGImage
+        #expect(alphaAtCorner(filled) > 0)
+    }
+
+    private func alphaAtCorner(_ image: CGImage) -> UInt8 {
+        var pixels = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        pixels.withUnsafeMutableBytes { bytes in
+            let context = CGContext(
+                data: bytes.baseAddress,
+                width: image.width,
+                height: image.height,
+                bitsPerComponent: 8,
+                bytesPerRow: image.width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+            context?.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        }
+        return pixels[3]
+    }
+#endif
