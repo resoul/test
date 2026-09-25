@@ -179,7 +179,9 @@ padding-top; лист без текста — его содержимое; пу�
 ## Статус: `FlexContainer` для `UIView`/`NSView`
 
 **Сделано (2026-09-24).** На Mac тесты проходят, включая `LayoutAdapterTests` для AppKit
-(2026-09-25); `LayoutUIKit` на iOS/tvOS Simulator тестами не прогонялся.
+(2026-09-25). Весь набор, включая `LayoutAdapterTests` для UIKit (8) и тесты `NodeView` (6),
+проходит на iPhone 17, iPad Air 11" (M4) и Apple TV 4K Simulator (2026-09-25); на устройствах —
+нет доступа.
 
 - `LayoutCore/DSL` — платформо-нейтральный DSL: `LayoutSpec` (`FlexContainer` — его
   псевдоним), `LayoutBuilder` (`if`, `if let`, `switch`, `for`, опциональные элементы),
