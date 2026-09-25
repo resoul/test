@@ -77,14 +77,17 @@ view.addSubnode(ProfileCard(user: user))
 
 - Имя `layout()` **нельзя**: у `NSView` уже есть системный `layout()` (аналог
   `layoutSubviews`), и `override` там означал бы совсем другое. `layoutSpec()` свободно
-  в UIKit и AppKit и отсылает к Texture. Альтернативы: `arrange()`, `makeLayout()`.
+  в UIKit и AppKit и отсылает к Texture. Альтернативы `arrange()`, `makeLayout()` отклонены
+  (2026-09-25).
 - Метод **не является** result builder'ом: он возвращает одно значение `LayoutSpec?`, внутри
   доступен обычный Swift — `guard`, локальные переменные, ранний `return`. Builder
   действует только внутри фигурных скобок контейнеров.
 - Один и тот же протокол «у меня есть раскладка» реализуют `Node`, `UIView`- и
   `NSView`-адаптеры.
 - Когда раскладку надо пересчитать из-за смены данных, вызывается аналог
-  `setNeedsLayout` (в Trellis — `markArrangementDirty()`). Имя — открыто.
+  `setNeedsLayout` (в Trellis — `markArrangementDirty()`). **Согласовано (2026-09-25):**
+  `Node.setNeedsLayout()`; у `UIView`/`NSView` — `setNeedsLayoutSpec()`
+  ([07](07-naming.md#прочие-имена)).
 
 ## Элементы раскладки
 

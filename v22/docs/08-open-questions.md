@@ -62,8 +62,6 @@
 
 ## Layout
 
-- Имя метода раскладки (`layoutSpec()` / `arrange()` / `makeLayout()`) и имя метода
-  «раскладка изменилась».
 - Ручные `addSubnode`/`removeFromSupernode` у ноды с `layoutSpec()`.
 - Протокол собственных контейнеров (расширяемость словаря).
 - Больше двух веток `Breakpoint`.

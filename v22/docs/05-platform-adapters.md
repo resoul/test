@@ -39,7 +39,7 @@ final class ProfileCardView: UIView {
 
 ### Базовые классы
 
-`LayoutView: UIView` и `LayoutNSView: NSView` (имена — открыто) сами переопределяют
+`LayoutView: UIView` и `LayoutNSView: NSView` (имена согласованы 2026-09-25) сами переопределяют
 `layoutSubviews` / `NSView.layout()` и зовут `layoutSpec()`. Пользователь переопределяет
 только `layoutSpec()` — так же, как у `Node`.
 
