@@ -1,6 +1,6 @@
 # FlexboxEngine против CSS
 
-Эталон: chromium 141.0.7390.37. Допуск: 0.05 pt.
+Эталон: chromium 153.0.8010.12. Допуск: 0.05 pt.
 Сгенерировано `CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance`.
 
 | Итог | Кейсов |

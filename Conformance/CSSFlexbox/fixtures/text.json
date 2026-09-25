@@ -1,6 +1,6 @@
 {
  "generator": "Conformance/CSSFlexbox/generate.cjs",
- "browser": "chromium 141.0.7390.37",
+ "browser": "chromium 153.0.8010.12",
  "caseCount": 20,
  "cases": [
   {
