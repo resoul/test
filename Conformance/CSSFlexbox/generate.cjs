@@ -499,6 +499,11 @@ const randomCases = [];
   }
 }
 
+// Trees reduced from failing random cases while working through defect #118: each is the
+// smallest tree that still failed, kept as a regression case. They live in cases/reduced.json.
+const reducedCases = JSON.parse(fs.readFileSync(path.join(__dirname, 'cases', 'reduced.json'), 'utf8'))
+  .cases.map(({ name, root }) => ({ name, group: 'reduced', root }));
+
 // ---------------------------------------------------------------------------------------------
 // Render
 
@@ -540,6 +545,7 @@ async function render(browser, list, file, extra) {
   await render(browser, textCases, 'text.json', {});
   await render(browser, randomTextCases, 'random-text.json', { seed: randomTextSeed });
   await render(browser, randomBaselineCases, 'random-baseline.json', { seed: randomBaselineSeed });
+  await render(browser, reducedCases, 'reduced.json', {});
   await browser.close();
 })().catch((error) => {
   console.error(error);

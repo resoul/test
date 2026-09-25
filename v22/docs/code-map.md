@@ -23,7 +23,7 @@
 | `MeasureKey.hash(into:)`, `HashMix` | хэш ключа — одно слово | [10](10-layout-engine.md#статус-e3-производительность) |
 | `@inline(never)` у шагов и помощников | кадры шагов не лежат на стеке при рекурсии | дефект #124 |
 | `Solver.baseline(_:size:parent:)`, `wantsBaseline`/`lastBaseline` | базовая линия узла при заданном размере; контейнер отдаёт её из того же прохода | CSS §8.5; [10](10-layout-engine.md#статус-e2-текст) |
-| `leafSize` / `ratioDependent` | пропорция: перенос min/max, автоминимум по зависимой оси | дефект #112 |
+| `leafSize` / `ratioDependent` | пропорция: перенос min/max и вертикального padding, автоминимум по зависимой оси (ширина — min-content; высота — только при `height: auto`) | дефекты #112, #144, #152 |
 
 ## `Sources/LayoutCore/LayoutNode.swift`
 
@@ -49,6 +49,7 @@
 |---|---|---|
 | `ContentMeasurer` | min-/max-content ширина и высота при ширине | [10](10-layout-engine.md#статус-e2-текст); три запроса к листу — [10](10-layout-engine.md#ключевые-структуры) |
 | `LeafContent.size(knownWidth:available:)` | ширина по ограничению, высота при ней | [10](10-layout-engine.md#статус-e2-текст) |
+| `LeafContent.minContentWidth` | автоминимум ширины листа с пропорцией | дефект #144 |
 | `ContentMeasurer.firstBaseline(forWidth:)`, `LeafContent.baseline(width:)` | первая базовая линия листа; без неё — низ содержимого | [10](10-layout-engine.md#статус-e2-текст) |
 
 ## `Sources/LayoutCore/DSL`, `Sources/LayoutUIKit`, `Sources/LayoutAppKit`
@@ -94,9 +95,18 @@
 | `appendItem` — автоматический минимальный размер | `min-width: auto` | CSS §4.5; закрывает Trellis #101 |
 | `resolveFlexibleLengths` | цикл заморозки, сумма факторов < 1 | CSS §9.7; закрывает Trellis #98, #99 |
 | `flexLayout` — intrinsic row (`rawContribution`, `plainContribution`, `flexedContribution`) | собственная ширина row по вкладам детей, как в Blink | дефект #111 |
-| `flexLayout` — `wrap` без переноса при неизвестной ширине column | ширина column-wrap по самому широкому элементу | дефект #116 |
-| `flexLayout` — пропорция без размеров | ширина по содержимому, высота из пропорции | дефект #115 |
-| `FlexItem.stretches`, `mainIsDefinite` | stretch только при `auto`; definite после flex | дефекты #108, #114 |
+| `beginContainer` — `wrap` без переноса под min-content шириной column | min-content ширина column-wrap — самый широкий элемент | дефекты #116, #145 |
+| `flexLayout` — `lineLimit` | column рвёт линии по своей высоте, иначе `max-height`, иначе одна линия | дефект #145 |
+| `placeLines` — `crossContent` | ширина column-wrap — линии рядом, fit-content в определённом месте | дефект #145 |
+| `fitToLines` | элемент многолинейного column без stretch — ширина в своей линии | дефект #145 |
+| `flexLayout` — пропорция без размеров (`ratioLayout`) | ширина по содержимому, высота из пропорции | дефект #115 |
+| `ratioLayout` — автоматический минимум, `percentHeight` | зависимая сторона не ниже содержимого; проценты детей — от высоты пропорции | CSS Sizing 4 §5.2.1; дефекты #144, #152 |
+| `ratioContent`, `RatioTransfer.definiteSize` | размер содержимого по оси: max(перенесённый, содержимое); содержимое — при высоте пропорции | дефект #144 |
+| `hypotheticalCross` — пропорция в column без ширины | вклад по содержимому или от заданной высоты | дефекты #144, #152 |
+| `crossSizes` — stretch по `crossForBasis` | растягиваемый элемент берёт высоту пропорции, пока своя не решена | дефект #144 |
+| `flexLayout` — `FlatNode.sizesWidthFirst` | ширина до детей: проценты ширины детей, перенос row | дефекты #148, #151 |
+| `layoutItems` — высота row-элемента с пропорцией | не передаётся: её выводит `ratioLayout` | дефект #152 |
+| `FlexItem.stretches`, `mainIsDefinite` | stretch только при `auto`; definite после flex, в том числе при `flex-basis`-длине | дефекты #108, #114, #143 |
 | `flexLayout` — used cross size | stretch минус cross-margin, затем min/max | закрывает Trellis #96, #97 |
 | `flexLayout` — fit-content ветка inner main | контейнер без размера в definite-пространстве | [10](10-layout-engine.md#что-пишется-заново-алгоритм-по-шагам-css-9) |
 | `alignMain` | auto-margin, затем `justify-content`, курсор с margin | закрывает Trellis #95 и `unsupported` `margin: auto` |
@@ -107,7 +117,8 @@
 | `SizeRequest`, `defersMinimum`, `resolvePendingMinimums` | автоматический минимум — только при переполнении строки | CSS §4.5; дефект #125 |
 | checkpoints в `crossSizes`, `layoutItems` (каждые 256) | задержка отмены на длинной строке | [10](10-layout-engine.md#статус-e3-производительность) |
 | `flexLayout` — `FlexItem.baseline`, `FlexLine.ascent`, `crossOffset(_:lineCross:ascent:)` | выравнивание по базовой линии; column — синтезированная по краю; `wrap-reverse` — от низа | CSS §8.3, §9.4 шаг 8; дефекты #121, #122 |
-| `containerBaseline` | базовая линия контейнера: физически верхняя строка | CSS §8.5; дефект #120 |
+| `containerBaseline` | базовая линия контейнера: физически верхняя строка; в `-reverse` — элемент с конца | CSS §8.5; дефекты #120, #147 |
+| `placeLines` — ascent/descent от −∞ | базовая линия вне элемента | дефект #147 |
 
 ## `Sources/LayoutCore/AbsoluteLayout.swift`
 
@@ -117,11 +128,16 @@
 | растяжение между `leading`+`trailing` / `top`+`bottom` | | закрывает Trellis #103 |
 | `absoluteStaticPosition` | статическая позиция по `justify-content`/`align-self` | CSS §4.1; закрывает Trellis #105; дефект #117 |
 | auto-margin при обоих отступах, RTL при переопределении, `heightIsDefinite` | | дефект #117 |
+| `verticalAlignment`, сдвиг в containing block | `align-self` между `top` и `bottom` | CSS Align §5.1; дефекты #146, #150 |
+| пропорция: ширина первой, `minContentWidth` | порядок Chromium для absolute с `aspect-ratio` | дефект #149 |
+| `staticStart` | место без горизонтальных вставок — от статической позиции | дефект #150 |
+| `absoluteStaticPosition` — `baseline` в `wrap-reverse` | начало письма | дефект #147 |
 
 ## `Tests/LayoutCoreTests`
 
 | Код | Что | Основание |
 |---|---|---|
+| `cssFlexboxLab` (`CSS_CONFORMANCE_LAB`) | движок на произвольном файле кейсов — проверка уменьшенных деревьев | дефект #118 |
 | `CSSConformanceTests` | сравнение с Chromium, baseline `expectations/engine.json` | [06](06-flexbox-conformance.md), [10](10-layout-engine.md#как-ведётся-работа) |
 | `EngineContractTests` | отмена, дубликаты, `measure` | Trellis D09; [10](10-layout-engine.md#этапы) |
 

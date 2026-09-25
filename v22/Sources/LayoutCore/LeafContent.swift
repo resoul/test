@@ -73,6 +73,14 @@ public enum LeafContent: Sendable {
         }
     }
 
+    /// The narrowest width the content takes without overflowing.
+    var minContentWidth: Double {
+        switch self {
+        case let .size(size): size.width
+        case let .measured(measurer): measurer.minContentWidth()
+        }
+    }
+
     /// The content size under `width`: a known content width, or a constraint — min-content,
     /// max-content, or fit-content for a definite amount of space.
     func size(knownWidth: Double?, available: AvailableSpace) -> LayoutSize {

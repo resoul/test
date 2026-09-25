@@ -36,6 +36,11 @@ public enum Length: Sendable, Hashable, ExpressibleByIntegerLiteral, Expressible
             return max(0, base * value)
         }
     }
+
+    var isFraction: Bool {
+        if case .fraction = self { return true }
+        return false
+    }
 }
 
 /// A margin value: points or `auto` (absorbs free space, CSS Flexbox §8.1).
@@ -278,6 +283,14 @@ public struct FlexStyle: Sendable, Hashable {
             return false
         }
     }
+
+    /// Some width, or the flex basis, resolves against the containing block's width.
+    var hasPercentageWidth: Bool {
+        basis.isFraction || width.isFraction || minWidth.isFraction || maxWidth.isFraction
+    }
+
+    /// The node is a row that wraps.
+    var wrapsRow: Bool { direction.isRow && wrap != .noWrap }
 
     public init() {}
 }

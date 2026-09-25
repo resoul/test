@@ -445,6 +445,22 @@ private func report(_ fixture: Fixture, _ outcomes: [(name: String, outcome: Out
     return lines.joined(separator: "\n")
 }
 
+/// Lays out every case of the fixture at `CSS_CONFORMANCE_LAB` and writes each outcome next to
+/// it (`<file>.engine.json`): a way to check trees reduced from a failing case.
+@Test
+func cssFlexboxLab() throws {
+    guard let path = ProcessInfo.processInfo.environment["CSS_CONFORMANCE_LAB"] else { return }
+
+    let url = URL(fileURLWithPath: path)
+    let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url))
+    let outcomes = Dictionary(
+        uniqueKeysWithValues: fixture.cases.map { ($0.name, run($0).detail ?? "pass") }
+    )
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    try encoder.encode(outcomes).write(to: url.appendingPathExtension("engine.json"))
+}
+
 @Test
 func cssFlexboxConformance() throws {
     // Hand-written cases, then seeded random trees; both rendered by the same browser.
@@ -454,6 +470,7 @@ func cssFlexboxConformance() throws {
         "fixtures/text.json",
         "fixtures/random-text.json",
         "fixtures/random-baseline.json",
+        "fixtures/reduced.json",
     ]
     let expectationsURL = conformanceRoot.appendingPathComponent("expectations/engine.json")
     let reportURL = conformanceRoot.appendingPathComponent("reports/engine.md")
@@ -464,7 +481,9 @@ func cssFlexboxConformance() throws {
             from: Data(contentsOf: conformanceRoot.appendingPathComponent(file))
         )
     }
-    let fixture = Fixture(browser: fixtures[0].browser, cases: fixtures.flatMap(\.cases))
+    // Fixtures can come from different browser versions: the report names each of them.
+    let browsers = Set(fixtures.map(\.browser)).sorted().joined(separator: ", ")
+    let fixture = Fixture(browser: browsers, cases: fixtures.flatMap(\.cases))
     let outcomes = fixture.cases.map { (name: $0.name, outcome: run($0)) }
     #expect(!outcomes.isEmpty)
 
