@@ -154,8 +154,9 @@
         view.zoom = 1
         view.frame = CGRect(x: 0, y: 0, width: 200, height: 100)
         view.layoutIfNeeded()
-        guard view.traitCollection.userInterfaceIdiom == .tv
-            || view.traitCollection.userInterfaceIdiom == .pad
+        guard
+            view.traitCollection.userInterfaceIdiom == .tv
+                || view.traitCollection.userInterfaceIdiom == .pad
         else { return }
 
         let top = view.focusItems(in: view.bounds)

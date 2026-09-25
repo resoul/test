@@ -322,7 +322,6 @@
             )
         }
 
-
         /// Where the coordinate space of `layer` starts, as shown before this render: recorded
         /// when the render handled it, else summed up its superlayers.
         private func shownOrigin(of layer: CALayer, pass: Pass) -> CGPoint {
