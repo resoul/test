@@ -5,6 +5,7 @@
     import LayoutCore
     import Nodes
     import QuartzCore
+    import StateCore
 
     /// Where an image is read from. File URLs are read directly; remote URLs use the disk cache.
     ///
@@ -21,6 +22,37 @@
         case fit
         case fill
         case stretch
+    }
+
+    /// A solid fill shown until image pixels are available, or after the first load fails.
+    /// An optional size measures the image before its original dimensions are known.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public struct ImagePlaceholder: Sendable, Equatable {
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public var color: Color
+
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public var size: LayoutSize?
+
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public init(
+            color: Color = Color(red: 0.9, green: 0.9, blue: 0.9),
+            size: LayoutSize? = nil
+        ) {
+            self.color = color
+            self.size = size
+        }
+    }
+
+    /// Progress of the first usable image. `ready` includes a preview while detail loads.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public enum ImageLoadPhase: Sendable, Equatable {
+        case empty
+        case loading
+        case ready
+        case failed
     }
 
     /// Loads and decodes static images. The disk cache holds encoded bytes; decoding happens
@@ -262,8 +294,9 @@
     /// An old result is discarded when the source, frame, or display scale changes.
     ///
     /// Ownership: the creator owns the node; the node owns its load task. Isolation:
-    /// MainActor. Errors: a failed load leaves the node empty. Cancellation: replacing the
-    /// source, requested pixel size, or releasing the node cancels the old load.
+    /// MainActor. Errors: a failed first load sets `phase` to `.failed` and keeps the
+    /// placeholder visible. Cancellation: replacing the source, requested pixel size, or
+    /// releasing the node cancels the old load.
     @MainActor
     public final class Image: Node, LayerDrawing {
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: replaces load.
@@ -284,6 +317,26 @@
             }
         }
 
+        /// What is drawn before pixels arrive and if the first load fails. `nil` is clear.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var placeholder: ImagePlaceholder? {
+            didSet {
+                if placeholder != oldValue {
+                    revision &+= 1
+                    if placeholder?.size != oldValue?.size { setNeedsLayout() }
+                    host?.setNeedsRender()
+                }
+            }
+        }
+
+        /// Observable loading state. Reading it in `update()` tracks changes. A preview
+        /// counts as ready while detail is refined.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none.
+        /// Cancellation: source replacement resets it to loading or empty.
+        public var phase: ImageLoadPhase { phaseState.value }
+
         /// The original oriented dimensions in pixels, or `nil` until loading succeeds.
         ///
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
@@ -299,13 +352,14 @@
 
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public override var layoutContent: LeafContent? {
-            .size(pixelSize ?? LayoutSize(width: 0, height: 0))
+            .size(pixelSize ?? placeholder?.size ?? .zero)
         }
 
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public override var accessibilityContentTraits: AccessibilityTraits { .image }
 
         private let pipeline: ImagePipeline
+        private let phaseState = State(ImageLoadPhase.empty)
         private var loaded: LoadedImage?
         private var loadTask: Task<Void, Never>?
         private var detailTask: Task<Void, Never>?
@@ -319,10 +373,12 @@
         public init(
             source: ImageSource? = nil,
             contentMode: ImageContentMode = .fit,
+            placeholder: ImagePlaceholder? = nil,
             pipeline: ImagePipeline = .shared
         ) {
             self.source = source
             self.contentMode = contentMode
+            self.placeholder = placeholder
             self.pipeline = pipeline
             super.init()
             reload()
@@ -331,6 +387,15 @@
         deinit {
             loadTask?.cancel()
             detailTask?.cancel()
+        }
+
+        /// Tries the current source again after an initial failure or a changed resource.
+        ///
+        /// Ownership: starts a node-owned task. Isolation: MainActor. Errors: none.
+        /// Cancellation: replaces the previous load and its detail request.
+        public func retry() {
+            guard source != nil else { return }
+            reload()
         }
 
         /// Requests only the pixels needed to cover the visible frame at the display scale.
@@ -383,7 +448,19 @@
         /// Ownership: draws into `context`. Isolation: MainActor. Errors: none.
         /// Cancellation: none.
         public func draw(in context: CGContext, size: CGSize) {
-            guard let image = loaded?.image, size.width > 0, size.height > 0 else { return }
+            guard size.width > 0, size.height > 0 else { return }
+            guard let image = loaded?.image else {
+                if let placeholder {
+                    context.setFillColor(
+                        red: placeholder.color.red,
+                        green: placeholder.color.green,
+                        blue: placeholder.color.blue,
+                        alpha: placeholder.color.alpha
+                    )
+                    context.fill(CGRect(origin: .zero, size: size))
+                }
+                return
+            }
             let imageWidth = CGFloat(image.width)
             let imageHeight = CGFloat(image.height)
             let box = CGRect(origin: .zero, size: size)
@@ -421,6 +498,7 @@
             loaded = nil
             pixelSize = nil
             decodedPixelSize = nil
+            phaseState.value = source == nil ? .empty : .loading
             setNeedsLayout()
             host?.setNeedsRender()
             guard let source else { return }
@@ -442,11 +520,17 @@
                         width: Double(result.image.width),
                         height: Double(result.image.height)
                     )
+                    self.phaseState.value = .ready
                     self.revision &+= 1
                     self.setNeedsLayout()
                     self.host?.setNeedsRender()
                 } catch {
-                    // The node stays empty. Replacing the source starts a new request.
+                    guard !Task.isCancelled, let self, self.sourceGeneration == request else {
+                        return
+                    }
+                    self.phaseState.value = .failed
+                    self.revision &+= 1
+                    self.host?.setNeedsRender()
                 }
             }
         }

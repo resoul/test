@@ -295,7 +295,82 @@
         #expect(state.decodes == 2)
     }
 
+    @Test @MainActor
+    func placeholderGivesSizeAndIsReplacedByTheFirstPreview() async throws {
+        let data = try encodedImage(width: 40, height: 40)
+        let placeholder = ImagePlaceholder(
+            color: Color(red: 0, green: 0, blue: 1),
+            size: LayoutSize(width: 24, height: 24)
+        )
+        let image = Image(source: .data(data), placeholder: placeholder)
+        #expect(image.phase == .loading)
+        guard case let .size(size)? = image.layoutContent else {
+            Issue.record("The placeholder must provide an intrinsic size")
+            return
+        }
+        #expect(size == LayoutSize(width: 24, height: 24))
+
+        let host = NodeHost(root: image, size: LayoutSize(width: 24, height: 24))
+        defer { host.detach() }
+        let renderer = LayerRenderer()
+        host.layoutIfNeeded()
+        renderer.render(image, in: CALayer())
+        let layer = try #require(renderer.layer(for: image))
+        let before = try #require(layer.contents) as! CGImage
+        #expect(pixelAtCorner(before).blue > 200)
+
+        for _ in 0..<100 where image.phase != .ready {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(image.phase == .ready)
+        host.layoutIfNeeded()
+        renderer.render(image, in: CALayer())
+        let after = try #require(layer.contents) as! CGImage
+        #expect(pixelAtCorner(after).red > 200)
+    }
+
+    @Test @MainActor
+    func failedImageKeepsPlaceholderAndCanRetry() async throws {
+        let file = temporaryCache().appendingPathExtension("png")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try Data([0, 1, 2]).write(to: file)
+        let placeholder = ImagePlaceholder(
+            color: Color(red: 0, green: 0, blue: 1),
+            size: LayoutSize(width: 16, height: 16)
+        )
+        let image = Image(source: .url(file), placeholder: placeholder)
+        for _ in 0..<100 where image.phase != .failed {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(image.phase == .failed)
+        let host = NodeHost(root: image, size: LayoutSize(width: 16, height: 16))
+        defer { host.detach() }
+        let renderer = LayerRenderer()
+        host.layoutIfNeeded()
+        renderer.render(image, in: CALayer())
+        let layer = try #require(renderer.layer(for: image))
+        let shown = try #require(layer.contents) as! CGImage
+        #expect(pixelAtCorner(shown).blue > 200)
+
+        try encodedImage(width: 32, height: 16).write(to: file)
+        image.retry()
+        #expect(image.phase == .loading)
+        for _ in 0..<100 where image.phase != .ready {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(image.phase == .ready)
+        #expect(image.pixelSize == LayoutSize(width: 32, height: 16))
+        image.source = nil
+        #expect(image.phase == .empty)
+    }
+
     private func alphaAtCorner(_ image: CGImage) -> UInt8 {
+        pixelAtCorner(image).alpha
+    }
+
+    private func pixelAtCorner(_ image: CGImage) -> (
+        red: UInt8, green: UInt8, blue: UInt8, alpha: UInt8
+    ) {
         var pixels = [UInt8](repeating: 0, count: image.width * image.height * 4)
         pixels.withUnsafeMutableBytes { bytes in
             let context = CGContext(
@@ -309,6 +384,6 @@
             )
             context?.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
         }
-        return pixels[3]
+        return (pixels[0], pixels[1], pixels[2], pixels[3])
     }
 #endif

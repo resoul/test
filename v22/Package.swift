@@ -33,7 +33,7 @@ let package = Package(
         .target(name: "LayoutAppKit", dependencies: ["LayoutCore"]),
         .target(name: "StateCore"),
         .target(name: "Nodes", dependencies: ["LayoutCore", "StateCore"]),
-        .target(name: "NodesRender", dependencies: ["Nodes", "LayoutCore"]),
+        .target(name: "NodesRender", dependencies: ["Nodes", "LayoutCore", "StateCore"]),
         .target(name: "NodesUIKit", dependencies: ["Nodes", "NodesRender", "LayoutCore"]),
         .target(name: "NodesAppKit", dependencies: ["Nodes", "NodesRender", "LayoutCore"]),
         .target(
