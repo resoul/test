@@ -177,3 +177,54 @@
         view.host.detach()
     }
 #endif
+
+#if canImport(UIKit)
+    @MainActor
+    private func itemsView() -> (NodeView, Scroll) {
+        let scroll = Scroll(.vertical, content: Items())
+        let view = NodeView(root: scroll)
+        view.zoom = 1
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 100)
+        view.layoutIfNeeded()
+        return (view, scroll)
+    }
+
+    @Test @MainActor
+    func accessibilityElementsStayTheSameWhileTheirFramesFollowTheScroll() throws {
+        let (view, scroll) = itemsView()
+        let before = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+
+        scroll.contentOffset = LayoutPoint(x: 0, y: 60)
+        view.layoutIfNeeded()
+
+        let after = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+        #expect(after.count == 10)
+        #expect(zip(before, after).allSatisfy { $0 === $1 })
+        #expect(after[2].accessibilityFrameInContainerSpace.minY == 0)
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func threeFingersTurnAPageOfTheScrollAroundTheElement() throws {
+        let (view, scroll) = itemsView()
+        let elements = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+
+        #expect(elements[0].accessibilityScroll(.up))
+        #expect(scroll.contentOffset == LayoutPoint(x: 0, y: 100))
+        #expect(!elements[0].accessibilityScroll(.left))
+        #expect(elements[0].accessibilityScroll(.previous))
+        #expect(scroll.contentOffset == .zero)
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func voiceOverMovingToAnElementOutOfSightScrollsToIt() throws {
+        let (view, scroll) = itemsView()
+        let elements = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+
+        elements[9].accessibilityElementDidBecomeFocused()
+
+        #expect(scroll.contentOffset == LayoutPoint(x: 0, y: 200))
+        view.host.detach()
+    }
+#endif

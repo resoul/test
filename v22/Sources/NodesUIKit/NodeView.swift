@@ -24,7 +24,12 @@
         /// Holds the tree's layers, scaled by `zoom` from its top left corner.
         private let contentLayer = CALayer()
         private var isLayingOut = false
-        private var accessibilityCache: [UIAccessibilityElement]?
+        /// The accessibility element of each node, kept while the node is one: VoiceOver
+        /// keeps its place by the element's identity, and a scroll redraws many times a
+        /// second.
+        private var accessibilityByNode: [NodeID: NodeAccessibilityElement] = [:]
+        /// The elements in reading order; `nil` after a drawing, until asked for.
+        private var accessibilityOrder: [NodeAccessibilityElement]?
         /// The focus items of the tree, one per focusable node, kept while the node is: the
         /// focus system recognizes the focused item by identity.
         private var focusItemsByNode: [NodeID: NodeFocusItem] = [:]
@@ -177,7 +182,12 @@
 
         /// Brings what depends on where the nodes show in line after a drawing.
         private func updateAfterMove() {
-            accessibilityCache = nil
+            accessibilityOrder = nil
+            if UIAccessibility.isVoiceOverRunning {
+                // VoiceOver reads the frame of the element it is on without asking the view
+                // again: bring it up to date now.
+                _ = updateAccessibilityElements()
+            }
             updateFocusItems()
             if usesFocus, !isTV {
                 focusRing.show(
@@ -534,22 +544,73 @@
             }
         }
 
-        /// The tree's accessibility elements (`NodeHost.accessibilityItems()`), rebuilt after
-        /// every drawing.
+        /// The tree's accessibility elements (`NodeHost.accessibilityItems()`), brought up to
+        /// date after every drawing; a node keeps its element.
         ///
         /// Ownership: the view keeps the elements. Isolation: MainActor. Errors: none.
         /// Cancellation: none.
         public override var accessibilityElements: [Any]? {
-            get {
-                if let accessibilityCache { return accessibilityCache }
-
-                let elements = host.accessibilityItems().map {
-                    NodeAccessibilityElement(container: self, item: $0)
-                }
-                accessibilityCache = elements
-                return elements
-            }
+            get { accessibilityOrder ?? updateAccessibilityElements() }
             set {}
+        }
+
+        private func updateAccessibilityElements() -> [NodeAccessibilityElement] {
+            var kept: [NodeID: NodeAccessibilityElement] = [:]
+            let order = host.accessibilityItems().map { item in
+                let element =
+                    accessibilityByNode[item.node] ?? NodeAccessibilityElement(container: self)
+                element.update(item, frame: zoomed(item.frame))
+                kept[item.node] = element
+                return element
+            }
+            accessibilityByNode = kept
+            accessibilityOrder = order
+            return order
+        }
+
+        /// What VoiceOver says after a three-finger swipe turned a scroll's page. English by
+        /// default; an app sets its own words.
+        ///
+        /// Ownership: the view keeps the closure. Isolation: MainActor. Errors: none.
+        /// Cancellation: not applicable.
+        public var accessibilityPageStatus: @MainActor (ScrollPage) -> String = { page in
+            "Page \(page.number) of \(page.count)"
+        }
+
+        /// A three-finger swipe on `node`'s element: turns a page of the scroll around it and
+        /// tells VoiceOver where it is.
+        fileprivate func accessibilityScroll(
+            _ direction: UIAccessibilityScrollDirection,
+            from node: NodeID
+        ) -> Bool {
+            let axis: ScrollAxis?
+            let forward: Bool
+            switch direction {
+            // Three fingers up bring the content up: the next page below.
+            case .up: (axis, forward) = (.vertical, true)
+            case .down: (axis, forward) = (.vertical, false)
+            case .left: (axis, forward) = (.horizontal, true)
+            case .right: (axis, forward) = (.horizontal, false)
+            case .next: (axis, forward) = (nil, true)
+            case .previous: (axis, forward) = (nil, false)
+            @unknown default: return false
+            }
+            guard let page = host.scrollPage(around: node, axis: axis, forward: forward) else {
+                return false
+            }
+
+            layoutIfNeeded()
+            UIAccessibility.post(
+                notification: .pageScrolled,
+                argument: accessibilityPageStatus(page)
+            )
+            return true
+        }
+
+        /// VoiceOver moved to `node`'s element: the scrolls around it show it.
+        fileprivate func accessibilityFocused(_ node: NodeID) {
+            host.reveal(node)
+            layoutIfNeeded()
         }
 
         /// No width of its own — the surroundings give it one (constraints, SwiftUI, a
@@ -894,22 +955,40 @@
     /// host to act on it; it never holds the node itself.
     @MainActor
     final class NodeAccessibilityElement: UIAccessibilityElement {
-        private let node: NodeID
-        private weak var host: NodeHost?
+        private var node: NodeID?
+        private weak var view: NodeView?
 
-        init(container: NodeView, item: AccessibilityItem) {
-            node = item.node
-            host = container.host
+        init(container: NodeView) {
+            view = container
             super.init(accessibilityContainer: container)
+        }
+
+        /// Shows what `item` says, at `frame` in the view's coordinates.
+        func update(_ item: AccessibilityItem, frame: CGRect) {
+            node = item.node
             accessibilityLabel = item.label
             accessibilityValue = item.value
             accessibilityHint = item.hint
             accessibilityTraits = NodeAccessibilityElement.traits(item.traits)
-            accessibilityFrameInContainerSpace = container.zoomed(item.frame)
+            accessibilityFrameInContainerSpace = frame
         }
 
         override func accessibilityActivate() -> Bool {
-            host?.activate(node) ?? false
+            guard let node else { return false }
+
+            return view?.host.activate(node) ?? false
+        }
+
+        override func accessibilityScroll(_ direction: UIAccessibilityScrollDirection) -> Bool {
+            guard let node, let view else { return false }
+
+            return view.accessibilityScroll(direction, from: node)
+        }
+
+        override func accessibilityElementDidBecomeFocused() {
+            guard let node else { return }
+
+            view?.accessibilityFocused(node)
         }
 
         private static func traits(_ traits: AccessibilityTraits) -> UIAccessibilityTraits {

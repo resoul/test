@@ -242,6 +242,8 @@
 | `Node.subnodesInDrawingOrder`; `hitTest`, `LayerRenderer.enter` | sticky поверх остальных элементов контейнера — как позиционированный блок в CSS | CSS painting order |
 | `LayerRenderer.stickyNodes`, `position(of:)` | быстрый путь прокрутки двигает и слои sticky | — |
 | `ScrollFocusContainer` (UIKit), `NodeFocusItem.parent`, `NodeView.topFocusItems` | прокрутка — `UIFocusItemScrollableContainer`: движок фокуса ищет по всему содержимому и двигает `contentOffset` | [05](05-platform-adapters.md#прокрутка); UI-тест `DemotvOS/UITests` |
+| `NodeHost.scrollPage`, `Scroll.scrollPage`, `ScrollPage`; `NodeHost.reveal` | прокрутка для технологий доступности: страница, «Page N of M», показ элемента | UIKit `accessibilityScroll` |
+| `NodeView.accessibilityByNode`, `NodeAccessibilityElement.update` | элемент живёт, пока нода — элемент; VoiceOver держит место по объекту | прокрутка перерисовывает много раз в секунду |
 | `ScrollDriver` (UIKit), `NodeView.hitTest`, `gestureRecognizerShouldBegin` | пустой `UIScrollView` — только физика; его пан на `NodeView` | [05](05-platform-adapters.md#прокрутка) |
 | `NodeNSView.scrollWheel`, `scroll(by:at:)`, `latched` | колесо/трекпад: внутренняя прокрутка, остаток — внешней; жест держится за начальные | [05](05-platform-adapters.md#прокрутка) |
 | `NodeView` на iPad: `usesFocus`, `selects` | система фокуса iPadOS с клавиатурой; групп фокуса нет — свойство недоступно на tvOS | дефект #135 |

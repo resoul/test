@@ -621,6 +621,36 @@ public final class NodeHost {
         return found
     }
 
+    /// Scrolls every scroll around `node`, the innermost first, so that it shows — where an
+    /// assistive technology moved to a node out of sight. With `withAnimation`, it moves with
+    /// it.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func reveal(_ node: NodeID) {
+        guard let target = mounted[node] else { return }
+
+        reveal(target)
+    }
+
+    /// Scrolls the scroll around `node` by one window, as an assistive technology asks
+    /// (three fingers on VoiceOver): along `axis`, or along either for `nil`, `forward`
+    /// toward the content's end. Returns the page it shows then, or `nil` when no scroll
+    /// around the node could move that way.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func scrollPage(around node: NodeID, axis: ScrollAxis?, forward: Bool) -> ScrollPage? {
+        var current = mounted[node]
+        while let ancestor = current {
+            if let scroll = ancestor as? Scroll, axis == nil || scroll.axis == axis,
+                let page = scroll.scrollPage(forward: forward)
+            {
+                return page
+            }
+            current = ancestor.supernode
+        }
+        return nil
+    }
+
     // MARK: - Focus
 
     /// The focused node's item, or `nil` — where the adapter draws a focus ring.

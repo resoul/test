@@ -339,3 +339,29 @@ func aSizeSetWhereTheScrollIsPlacedIsKept() {
     #expect(sized.below.frame.origin.y == 80)
     host.detach()
 }
+
+@Test @MainActor
+func assistiveScrollingTurnsPagesAndStopsAtTheEnd() {
+    let screen = Screen()
+    let host = host(screen)
+    let row = screen.list.rows[0].id
+
+    // A 100-point window onto 300 points: pages at 0, 100 and 200.
+    #expect(host.scrollPage(around: row, axis: .vertical, forward: true) == ScrollPage(number: 2, count: 3))
+    #expect(host.scrollPage(around: row, axis: nil, forward: true) == ScrollPage(number: 3, count: 3))
+    #expect(host.scrollPage(around: row, axis: .vertical, forward: true) == nil)
+    #expect(host.scrollPage(around: row, axis: .horizontal, forward: false) == nil)
+    #expect(host.scrollPage(around: row, axis: .vertical, forward: false) == ScrollPage(number: 2, count: 3))
+    host.detach()
+}
+
+@Test @MainActor
+func revealingANodeScrollsToIt() {
+    let screen = Screen()
+    let host = host(screen)
+
+    host.reveal(screen.list.rows[8].id)
+
+    #expect(screen.scroll.contentOffset == LayoutPoint(x: 0, y: 170))
+    host.detach()
+}

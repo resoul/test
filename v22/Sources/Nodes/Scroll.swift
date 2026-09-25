@@ -233,6 +233,35 @@ public final class Scroll: Node {
         )
     }
 
+    /// Scrolls by one window toward the content's end, or its start, and returns the page
+    /// shown then — `nil`, not moving, when already at that end.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func scrollPage(forward: Bool) -> ScrollPage? {
+        let vertical = axis == .vertical
+        let window = vertical ? frame.size.height : frame.size.width
+        guard window > 0 else { return nil }
+
+        let before = contentOffset
+        var offset = before
+        let step = forward ? window : -window
+        if vertical {
+            offset.y += step
+        } else {
+            offset.x += step
+        }
+        contentOffset = offset
+        guard contentOffset != before else { return nil }
+
+        let range = offsetRange
+        let done = vertical ? contentOffset.y - range.lowest.y : contentOffset.x - range.lowest.x
+        let travel = vertical ? range.highest.y - range.lowest.y : range.highest.x - range.lowest.x
+        let count = Int((travel / window).rounded(.up)) + 1
+        // The last page is the one at the end, however little of a window it adds.
+        let number = done >= travel ? count : Int((done / window).rounded(.down)) + 1
+        return ScrollPage(number: number, count: count)
+    }
+
     /// Where the start of a span of `length` at `start` must be for it to show in a window
     /// of `window` now at `offset`, moving as little as possible.
     private static func reveal(
@@ -303,5 +332,24 @@ public struct ScrollRange: Sendable, Hashable {
             x: min(max(point.x, lowest.x), highest.x),
             y: min(max(point.y, lowest.y), highest.y)
         )
+    }
+}
+
+/// One window of a scroll's content, counted from the start: what VoiceOver says after a
+/// three-finger swipe.
+///
+/// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+public struct ScrollPage: Sendable, Hashable {
+    /// From 1.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public let number: Int
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public let count: Int
+
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public init(number: Int, count: Int) {
+        self.number = number
+        self.count = count
     }
 }
