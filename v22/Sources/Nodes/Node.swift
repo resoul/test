@@ -211,21 +211,86 @@ open class Node: LayoutElement {
     /// Ownership: returns a node of the tree. Isolation: MainActor. Errors: none.
     /// Cancellation: not applicable.
     public func hitTest(_ point: LayoutPoint) -> Node? {
-        guard !isHidden, appearance.opacity > 0 else { return nil }
-
-        let isInside =
-            point.x >= 0 && point.y >= 0 && point.x < frame.size.width
-            && point.y < frame.size.height
-        if appearance.clipsContent && !isInside { return nil }
-
-        for subnode in subnodes.reversed() {
-            let local = LayoutPoint(
-                x: point.x - subnode.frame.origin.x,
-                y: point.y - subnode.frame.origin.y
-            )
-            if let hit = subnode.hitTest(local) { return hit }
+        // A loop over an explicit stack rather than recursion, so that a tree deeper than the
+        // main thread's stack does not crash it. Each level remembers the subnode it tries
+        // next, from the last; a node is the hit once none of its subnodes is.
+        struct Level {
+            let node: Node
+            let point: LayoutPoint
+            let isInside: Bool
+            var next: Int
         }
-        return isInside ? self : nil
+
+        func enter(_ node: Node, at point: LayoutPoint) -> Level? {
+            guard !node.isHidden, node.appearance.opacity > 0 else { return nil }
+
+            let isInside =
+                point.x >= 0 && point.y >= 0 && point.x < node.frame.size.width
+                && point.y < node.frame.size.height
+            if node.appearance.clipsContent && !isInside { return nil }
+
+            return Level(
+                node: node,
+                point: point,
+                isInside: isInside,
+                next: node.subnodes.count - 1
+            )
+        }
+
+        guard let first = enter(self, at: point) else { return nil }
+
+        var levels = [first]
+        while let top = levels.indices.last {
+            if levels[top].next >= 0 {
+                let subnode = levels[top].node.subnodes[levels[top].next]
+                levels[top].next -= 1
+                let local = LayoutPoint(
+                    x: levels[top].point.x - subnode.frame.origin.x,
+                    y: levels[top].point.y - subnode.frame.origin.y
+                )
+                if let level = enter(subnode, at: local) {
+                    levels.append(level)
+                }
+                continue
+            }
+
+            let done = levels.removeLast()
+            if done.isInside { return done.node }
+        }
+        return nil
+    }
+
+    /// Visits this node and the visible ones under it in pre-order, each with the origin of
+    /// its supernode's frame (the first gets `origin`); `visit` returns whether to go into the
+    /// node's subnodes. Hidden and fully transparent nodes, and all under them, are skipped.
+    /// A loop over an explicit stack, so that a tree deeper than the main thread's stack does
+    /// not crash it.
+    func walkVisible(from origin: LayoutPoint, _ visit: (Node, LayoutPoint) -> Bool) {
+        var pending: [(node: Node, origin: LayoutPoint)] = [(self, origin)]
+        while let (node, origin) = pending.popLast() {
+            guard !node.isHidden, node.appearance.opacity > 0, visit(node, origin) else {
+                continue
+            }
+
+            let inner = LayoutPoint(
+                x: origin.x + node.frame.origin.x,
+                y: origin.y + node.frame.origin.y
+            )
+            // Pushed last to first, so the first subnode is visited next.
+            for subnode in node.subnodes.reversed() {
+                pending.append((subnode, inner))
+            }
+        }
+    }
+
+    /// The frame in the coordinates `origin` is given in.
+    func frame(from origin: LayoutPoint) -> LayoutRect {
+        LayoutRect(
+            x: origin.x + frame.origin.x,
+            y: origin.y + frame.origin.y,
+            width: frame.size.width,
+            height: frame.size.height
+        )
     }
 
     /// Whether `ancestor` is this node or one of its supernodes.

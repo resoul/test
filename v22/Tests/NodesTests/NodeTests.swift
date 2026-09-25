@@ -1182,3 +1182,28 @@ func aDeepTreeOfNodesIsPreparedWithoutRunningOutOfStack() {
     #expect(prepared.elementCount == 3002)
     #expect(prepared.ids(of: root.deepest).count == 1)
 }
+
+@Test @MainActor
+func walksOfAVeryDeepTreeDoNotRunOutOfStack() {
+    // Mounted by hand: no layout goes this deep, but the walks must not depend on that.
+    let nodes = (0..<100_000).map { _ in Node() }
+    for (index, node) in nodes.enumerated() {
+        node.mount(
+            in: index > 0 ? nodes[index - 1] : nil,
+            subnodes: index + 1 < nodes.count ? [nodes[index + 1]] : []
+        )
+    }
+    let host = NodeHost(root: nodes[0], size: LayoutSize(width: 100, height: 100))
+
+    // Every frame is empty, so nothing is hit and every walk goes all the way down.
+    #expect(nodes[0].hitTest(LayoutPoint(x: 0, y: 0)) == nil)
+    #expect(host.accessibilityItems().isEmpty)
+    #expect(host.focusItems().isEmpty)
+    #expect(host.focusSections().isEmpty)
+
+    // Unmounted one by one, the chain is released a node at a time.
+    host.detach()
+    for node in nodes {
+        node.unmount()
+    }
+}
