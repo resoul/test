@@ -60,7 +60,7 @@ final class ProfileCardView: UIView {
 |---|---|---|
 | Сообщить собственный размер наружу | `sizeThatFits` + `intrinsicContentSize` (иначе Auto Layout и self-sizing ячейки не узнают высоту) | `fittingSize` + `intrinsicContentSize` |
 | Запросить пересчёт | `setNeedsLayout` + `invalidateIntrinsicContentSize` | `needsLayout = true` + `invalidateIntrinsicContentSize` |
-| Система координат | y вниз | y вверх, если не `isFlipped` — адаптер переворачивает или требует `isFlipped` (открыто) |
+| Система координат | y вниз | y вверх, если не `isFlipped`. **Реализовано:** `LayoutNSView` и `NodeNSView` перевёрнуты сами; при вызове через протокол (`applyLayoutSpec()` в чужом view) адаптер отражает y, если родитель не перевёрнут |
 | Направление письма | `effectiveUserInterfaceLayoutDirection` | `userInterfaceLayoutDirection` |
 | Округление к пикселям | `traitCollection.displayScale` | `window.backingScaleFactor` (переиспользовать `PixelRoundingPolicy` Trellis) |
 | Измерение ребёнка | `sizeThatFits` | `fittingSize` / `intrinsicContentSize` |
