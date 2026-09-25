@@ -110,10 +110,33 @@ public final class NodeHost {
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public var focusLook: FocusLook = .lift
 
-    /// Layout passes run so far — for tests and diagnostics.
+    /// Layout passes applied so far — for tests and diagnostics. A rejected pass does not
+    /// count.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public private(set) var passes = 0
+
+    /// 1, 2, … in the order hosts are created — the `host=` of their reports.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public let number: Int
+
+    /// Called after every layout pass with what it found. The adapter sets one that logs
+    /// problems; an app can replace it.
+    ///
+    /// Ownership: the host keeps the closure; it must not keep the host. Isolation:
+    /// MainActor. Errors: none. Cancellation: not applicable.
+    public var onLayoutReport: (@MainActor (LayoutReport) -> Void)?
+
+    /// What the engine records for the report: nothing when empty.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var traceAreas: Set<LayoutTraceArea> = []
+
+    /// The nodes traced, with the containers of their layouts; `nil` traces every node.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var tracedNodes: Set<NodeID>?
 
     private var mounted: [NodeID: Node] = [:]
     private var pressed: Node?
@@ -134,6 +157,8 @@ public final class NodeHost {
     /// apart by it.
     static var passGeneration: UInt64 = 0
 
+    private static var created = 0
+
     /// A host for `root`, which must not be mounted anywhere else.
     ///
     /// Ownership: keeps `root`. Isolation: MainActor. Errors: none. Cancellation:
@@ -141,6 +166,8 @@ public final class NodeHost {
     public init(root: Node, size: LayoutSize) {
         self.root = root
         self.size = size
+        NodeHost.created += 1
+        number = NodeHost.created
         root.hostOfRoot = self
     }
 
@@ -214,15 +241,37 @@ public final class NodeHost {
         cancelSolving()
         let prepared = root.asLayoutSpec.prepare(direction: direction, spacing: spacing)
         let rect = LayoutRect(origin: .zero, size: size)
+        let context = LayoutContext(trace: traceRequest(for: prepared))
         guard solvesInBackground, passes > 0, !prepared.requiresMainThread else {
-            if let result = try? FlexboxEngine.layout(prepared.input, size: rect.size) {
-                finish(prepared, result, in: rect, animation: animation)
+            var result: LayoutResult?
+            let duration = ContinuousClock().measure {
+                result = try? FlexboxEngine.layout(
+                    prepared.input,
+                    size: rect.size,
+                    context: context
+                )
+            }
+            if let result {
+                finish(prepared, result, duration: duration, in: rect, animation: animation)
             }
             return
         }
 
         solvingAnimation = animation
-        solveInBackground(prepared, in: rect)
+        solveInBackground(prepared, context: context, in: rect)
+    }
+
+    /// The engine's trace request for `traceAreas` and `tracedNodes`: their ids in
+    /// `prepared`, with the containers of their layouts.
+    private func traceRequest(for prepared: PreparedLayout) -> LayoutTraceRequest? {
+        guard !traceAreas.isEmpty else { return nil }
+
+        guard let tracedNodes else { return LayoutTraceRequest(areas: traceAreas) }
+
+        return LayoutTraceRequest(
+            areas: traceAreas,
+            ids: prepared.ids { ($0 as? Node).map { tracedNodes.contains($0.id) } ?? false }
+        )
     }
 
     /// Waits for a background solve in flight, if any, and its frames to be applied.
@@ -233,12 +282,22 @@ public final class NodeHost {
         await solving?.value
     }
 
+    /// Applies a solved pass, unless an element got a frame in two places: an element has
+    /// one frame, and applying either would hide the mistake. The tree then keeps the pass
+    /// before, and the report names the elements.
     private func finish(
         _ prepared: PreparedLayout,
         _ result: LayoutResult,
+        duration: Duration,
         in rect: LayoutRect,
         animation: Animation?
     ) {
+        let duplicates = prepared.elementsPlacedMoreThanOnce(in: result)
+        if let onLayoutReport {
+            onLayoutReport(report(prepared, result, duration: duration, duplicates: duplicates))
+        }
+        guard duplicates.isEmpty else { return }
+
         passes += 1
         needsRender = true
         if let animation {
@@ -247,20 +306,62 @@ public final class NodeHost {
         mount(prepared.apply(result, in: rect, scale: scale))
     }
 
-    private func solveInBackground(_ prepared: PreparedLayout, in rect: LayoutRect) {
+    private func report(
+        _ prepared: PreparedLayout,
+        _ result: LayoutResult,
+        duration: Duration,
+        duplicates: [any LayoutElement]
+    ) -> LayoutReport {
+        func node(_ id: LayoutID) -> NodeID? { (prepared.element(for: id) as? Node)?.id }
+        var widthless: [NodeID] = []
+        for id in result.variantsWithoutWidth {
+            if let node = node(id), !widthless.contains(node) {
+                widthless.append(node)
+            }
+        }
+        return LayoutReport(
+            host: number,
+            generation: generation,
+            elements: prepared.elementCount,
+            duration: duration,
+            duplicates: duplicates.compactMap { ($0 as? Node)?.id },
+            isRejected: !duplicates.isEmpty,
+            variantsWithoutWidth: widthless.sorted { $0.raw < $1.raw },
+            trace: result.trace.map { event in
+                LayoutReport.Trace(
+                    node: node(event.id),
+                    isContainer: !prepared.isElement(event.id),
+                    event: event
+                )
+            }
+        )
+    }
+
+    private func solveInBackground(
+        _ prepared: PreparedLayout,
+        context: LayoutContext,
+        in rect: LayoutRect
+    ) {
         let input = prepared.input
         let pass = generation
         solving = Task { [weak self] in
-            let result = await NodeHost.solve(input, size: rect.size) { thread in
+            let solved = await NodeHost.solve(input, size: rect.size, trace: context.trace) {
+                thread in
                 self?.adopt(thread, pass: pass)
             }
-            guard let self, pass == self.generation, let result else { return }
+            guard let self, pass == self.generation, let solved else { return }
 
             let animation = self.solvingAnimation
             self.solving = nil
             self.solverThread = nil
             self.solvingAnimation = nil
-            self.finish(prepared, result, in: rect, animation: animation)
+            self.finish(
+                prepared,
+                solved.result,
+                duration: solved.duration,
+                in: rect,
+                animation: animation
+            )
             self.onNeedsRender?()
         }
     }
@@ -271,16 +372,21 @@ public final class NodeHost {
     private nonisolated static func solve(
         _ input: LayoutNode,
         size: LayoutSize,
+        trace: LayoutTraceRequest?,
         started: @escaping @MainActor @Sendable (Thread) -> Void
-    ) async -> LayoutResult? {
+    ) async -> (result: LayoutResult, duration: Duration)? {
         await withCheckedContinuation { continuation in
             let thread = Thread {
                 let running = Thread.current
                 Task { @MainActor in started(running) }
-                let context = LayoutContext(isCancelled: { Thread.current.isCancelled })
-                continuation.resume(
-                    returning: try? FlexboxEngine.layout(input, size: size, context: context)
+                let context = LayoutContext(
+                    isCancelled: { Thread.current.isCancelled },
+                    trace: trace
                 )
+                let clock = ContinuousClock()
+                let start = clock.now
+                let result = try? FlexboxEngine.layout(input, size: size, context: context)
+                continuation.resume(returning: result.map { ($0, clock.now - start) })
             }
             thread.stackSize = solverStackSize
             thread.qualityOfService = .userInitiated

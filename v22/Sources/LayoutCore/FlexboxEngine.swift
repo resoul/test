@@ -25,10 +25,21 @@ public enum FlexboxEngine {
             available: AvailableSize(width: .definite(size.width), height: .definite(size.height)),
             mode: .layout(.zero)
         )
+        let frames = solver.nodes.indices.compactMap { index in
+            solver.frames[index].map { (id: solver.nodes[index].id, frame: $0) }
+        }
+        var trace = solver.trace
+        if let request = context.trace {
+            for (id, frame) in frames where request.includes(.place, id) {
+                trace.append(.placed(id, frame: frame))
+            }
+        }
         return LayoutResult(
-            frames: solver.nodes.indices.compactMap { index in
-                solver.frames[index].map { (solver.nodes[index].id, $0) }
-            },
+            frames: frames,
+            variantsWithoutWidth: Set(
+                solver.variantsWithoutWidth.indices.map { solver.nodes[$0].id }
+            ),
+            trace: trace,
             statistics: solver.statistics
         )
     }
@@ -205,6 +216,12 @@ struct HashMix {
     }
 }
 
+/// Node indices one pass collects. It belongs to that pass alone and never leaves the thread
+/// the pass runs on.
+final class NodeSet {
+    var indices: Set<Int> = []
+}
+
 /// How much work one pass did: the measure of the engine's efficiency that does not depend on
 /// the machine.
 struct SolveStatistics: Equatable {
@@ -232,6 +249,11 @@ struct Solver {
     var wantsBaseline = false
     var lastBaseline: Double?
     var statistics = SolveStatistics()
+    /// Nodes whose width variants were chosen without a definite parent width. Choosing a
+    /// style is a read that most steps do without mutating the solver, so the record is kept
+    /// in an object of the pass instead of in the solver's own fields.
+    let variantsWithoutWidth = NodeSet()
+    var trace: [LayoutTraceEvent] = []
     let context: LayoutContext
 
     init(root: LayoutNode, context: LayoutContext) {
@@ -312,7 +334,10 @@ struct Solver {
     /// style. Without a definite width the base style applies.
     @inline(never)
     func style(_ index: Int, parentWidth: Double?) -> FlexStyle {
-        guard let width = parentWidth, !nodes[index].variants.isEmpty else {
+        guard !nodes[index].variants.isEmpty else { return nodes[index].style }
+
+        guard let width = parentWidth else {
+            variantsWithoutWidth.indices.insert(index)
             return nodes[index].style
         }
 
@@ -351,6 +376,9 @@ struct Solver {
             )
             if let cached = cache[key] {
                 statistics.cacheHits += 1
+                if context.trace != nil {
+                    traceMeasure(index, known, available, cached, cached: true)
+                }
                 return cached
             }
 
@@ -364,6 +392,9 @@ struct Solver {
                 definite
             )
             cache[key] = size
+            if context.trace != nil {
+                traceMeasure(index, known, available, size, cached: false)
+            }
             return size
         }
 
@@ -404,6 +435,27 @@ struct Solver {
             mode: mode,
             contentOnly: contentOnly,
             definite: definite
+        )
+    }
+
+    private mutating func traceMeasure(
+        _ index: Int,
+        _ known: OptionalSize,
+        _ available: AvailableSize,
+        _ size: LayoutSize,
+        cached: Bool
+    ) {
+        let id = nodes[index].id
+        guard let request = context.trace, request.includes(.measure, id) else { return }
+
+        trace.append(
+            .measured(
+                id,
+                width: known.width.map { .definite($0) } ?? available.width,
+                height: known.height.map { .definite($0) } ?? available.height,
+                size: size,
+                cached: cached
+            )
         )
     }
 

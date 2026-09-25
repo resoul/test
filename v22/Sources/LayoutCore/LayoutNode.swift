@@ -90,13 +90,33 @@ public struct LayoutResult: Sendable {
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public let duplicateIDs: Set<LayoutID>
 
+    /// Nodes whose width variants had to be chosen without a definite width at least once:
+    /// their parent was sizing itself to its content, so the base style was taken instead
+    /// of guessing. Their size can then come from one variant and their layout from another.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public let variantsWithoutWidth: Set<LayoutID>
+
+    /// What the pass did for the nodes `LayoutContext.trace` asked about, in the order it
+    /// did it; empty when nothing was asked.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public let trace: [LayoutTraceEvent]
+
     /// The work the pass did.
     let statistics: SolveStatistics
 
     private let index: [LayoutID: Int]
 
-    init(frames: [(id: LayoutID, frame: LayoutRect)], statistics: SolveStatistics = .init()) {
+    init(
+        frames: [(id: LayoutID, frame: LayoutRect)],
+        variantsWithoutWidth: Set<LayoutID> = [],
+        trace: [LayoutTraceEvent] = [],
+        statistics: SolveStatistics = .init()
+    ) {
         self.frames = frames
+        self.variantsWithoutWidth = variantsWithoutWidth
+        self.trace = trace
         self.statistics = statistics
         var index: [LayoutID: Int] = [:]
         var duplicates: Set<LayoutID> = []
@@ -120,7 +140,7 @@ public struct LayoutResult: Sendable {
     }
 }
 
-/// Execution context of one layout pass: currently the cancellation check.
+/// Execution context of one layout pass: the cancellation check and what to trace.
 ///
 /// Ownership: value type; the closure is owned by whoever scheduled the pass. Isolation:
 /// `isCancelled` is called from the solving task. Errors: none. Cancellation: see
@@ -132,9 +152,19 @@ public struct LayoutContext: Sendable {
     /// returning `true` makes the pass throw `LayoutCancelled`.
     public var isCancelled: @Sendable () -> Bool
 
+    /// What the pass records in `LayoutResult.trace`; `nil` records nothing and costs
+    /// nothing.
+    ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public init(isCancelled: @escaping @Sendable () -> Bool = { false }) {
+    public var trace: LayoutTraceRequest?
+
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public init(
+        isCancelled: @escaping @Sendable () -> Bool = { false },
+        trace: LayoutTraceRequest? = nil
+    ) {
         self.isCancelled = isCancelled
+        self.trace = trace
     }
 
     /// A context that cancels when the current `Task` is cancelled.

@@ -3,6 +3,10 @@
     import Nodes
     import NodesRender
     import UIKit
+    import os
+
+    /// Where the adapter writes layout reports.
+    private let layoutLog = Logger(subsystem: "Nodes", category: "layout")
 
     /// A view that shows a tree of nodes: it lays the tree out in its bounds and draws it into
     /// its layer. Outside, it is an ordinary view — frames, Auto Layout (through
@@ -59,6 +63,17 @@
             host.onFocusRequest = { [weak self] node in
                 self?.requestFocus(on: node)
             }
+            #if DEBUG
+                // Problems in the layouts, and a trace the app asked for, go to the unified log
+                // while debugging; a pass without either stays quiet.
+                host.onLayoutReport = { report in
+                    guard report.hasProblems || !report.trace.isEmpty else { return }
+
+                    for line in report.lines {
+                        layoutLog.log("\(line, privacy: .public)")
+                    }
+                }
+            #endif
         }
 
         /// Not supported: a node tree is built in code.

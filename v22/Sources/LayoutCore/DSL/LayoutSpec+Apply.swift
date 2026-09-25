@@ -44,6 +44,77 @@ public struct PreparedLayout {
     public let requiresMainThread: Bool
 
     let elements: [LayoutTree.Entry]
+    let owners: [LayoutID: Int]
+
+    /// The element `id` stands for in `input`: the element itself, or for a container of an
+    /// element's layout, that element. `nil` for a container of the spec itself.
+    ///
+    /// Ownership: returns a borrowed element. Isolation: MainActor. Errors: none.
+    /// Cancellation: not applicable.
+    public func element(for id: LayoutID) -> (any LayoutElement)? {
+        let index = id.raw < UInt64(elements.count) ? Int(id.raw) : owners[id]
+        return index.map { elements[$0].element }
+    }
+
+    /// The ids `element` has in `input` — more than one when the spec mentions it in several
+    /// places.
+    ///
+    /// Ownership: returns values. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    public func ids(of element: any LayoutElement) -> [LayoutID] {
+        let key = ObjectIdentifier(element)
+        return elements.indices.filter { ObjectIdentifier(elements[$0].element) == key }
+            .map { LayoutID(UInt64($0)) }
+    }
+
+    /// The ids of the elements `isIncluded` accepts, with the containers of their embedded
+    /// layouts.
+    ///
+    /// Ownership: returns values; `isIncluded` is not kept. Isolation: MainActor. Errors:
+    /// none. Cancellation: not applicable.
+    public func ids(where isIncluded: (any LayoutElement) -> Bool) -> Set<LayoutID> {
+        var included: Set<Int> = []
+        var ids: Set<LayoutID> = []
+        for (offset, entry) in elements.enumerated() where isIncluded(entry.element) {
+            included.insert(offset)
+            ids.insert(LayoutID(UInt64(offset)))
+        }
+        for (id, owner) in owners where included.contains(owner) {
+            ids.insert(id)
+        }
+        return ids
+    }
+
+    /// The number of places the spec mentions elements in.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var elementCount: Int { elements.count }
+
+    /// Whether `id` is an element's rather than a container's.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func isElement(_ id: LayoutID) -> Bool { id.raw < UInt64(elements.count) }
+
+    /// Elements that `result` gives a frame in more than one place, in the order the spec
+    /// first mentions them. Mentioning an element several times is fine as long as one place
+    /// at most is laid out — both branches of a `Breakpoint` — but an element has one frame,
+    /// so two laid-out places are a mistake in the spec.
+    ///
+    /// Ownership: returns borrowed elements. Isolation: MainActor. Errors: none.
+    /// Cancellation: not applicable.
+    public func elementsPlacedMoreThanOnce(in result: LayoutResult) -> [any LayoutElement] {
+        var placed: Set<ObjectIdentifier> = []
+        var reported: Set<ObjectIdentifier> = []
+        var duplicates: [any LayoutElement] = []
+        for (offset, entry) in elements.enumerated()
+        where result.frame(for: LayoutID(UInt64(offset))) != nil {
+            let key = ObjectIdentifier(entry.element)
+            if !placed.insert(key).inserted, reported.insert(key).inserted {
+                duplicates.append(entry.element)
+            }
+        }
+        return duplicates
+    }
 
     /// Gives every element its frame from `result`, the engine's layout of `input` in
     /// `rect.size`: in the coordinate space of `rect`, or of the element whose
@@ -137,7 +208,8 @@ extension LayoutSpec {
         return PreparedLayout(
             input: input,
             requiresMainThread: tree.requiresMainThread,
-            elements: tree.elements
+            elements: tree.elements,
+            owners: tree.owners
         )
     }
 
@@ -196,6 +268,8 @@ struct LayoutTree {
     /// Some leaf's content can only be measured on the main thread.
     private(set) var requiresMainThread = false
     private var containers: UInt64 = 0
+    /// Containers of an element's embedded layout, to that element's index.
+    private(set) var owners: [LayoutID: Int] = [:]
     /// Elements whose embedded layout is being expanded: one that mentions itself, directly
     /// or through its subelements, is placed as a leaf there instead of recursing forever.
     private var expanding: Set<ObjectIdentifier> = []
@@ -310,6 +384,9 @@ struct LayoutTree {
         case let .container(items):
             let id = LayoutID(UInt64.max - containers)
             containers += 1
+            if let container {
+                owners[id] = container
+            }
             var children: [LayoutNode] = []
             for item in items {
                 children += nodes(

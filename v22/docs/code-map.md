@@ -33,6 +33,13 @@
 | `LayoutResult.duplicateIDs` | дубликаты id — диагностика в результате | Trellis weave-analysis §3.1; AGENTS.md v22 «Печать» |
 | `LayoutContext` / `LayoutCancelled` | отмена через `throws`, без частичного результата | Trellis D09, D10 |
 | `LayoutContext.checkpoint()` и вызовы в `flexLayout` (каждый контейнер, каждые 256 item) | точки отмены | Trellis D09, дефект #16 |
+| `LayoutResult.variantsWithoutWidth`, `Solver.variantsWithoutWidth` (`NodeSet`), запись в `Solver.style` | вариант выбран без определённой ширины | [04](04-conditionals-and-responsive.md#5-breakpoint--смена-структуры-по-размеру), [10](10-layout-engine.md#диагностика) |
+
+## `Sources/LayoutCore/LayoutTrace.swift`
+
+| Код | Что | Основание |
+|---|---|---|
+| `LayoutTraceRequest`, `LayoutTraceEvent`, `LayoutContext.trace`, `LayoutResult.trace`, `Solver.traceMeasure` | трассировка — значение в результате, не объект | [10](10-layout-engine.md#диагностика): решение 2026-09-25 (нет `Mutex` на macOS 14) |
 
 ## `Sources/LayoutCore/LeafContent.swift`
 
@@ -52,6 +59,8 @@
 | `StylePatch`, `resolvedStyle(_:)`, `from:` у модификаторов | правки по порядку, варианты по ширине | [04](04-conditionals-and-responsive.md#6-адаптивные-значения--смена-параметра-по-размеру) |
 | `LayoutTree`, `.alternatives` | `Breakpoint`: обе ветки в списке родителя, каждая видна по свою сторону порога | [04](04-conditionals-and-responsive.md#5-breakpoint--смена-структуры-по-размеру) |
 | `hidden`, `invisible`, `applyLayoutVisibility` | видимость | [04](04-conditionals-and-responsive.md#3-видимость) |
+| `PreparedLayout.elementsPlacedMoreThanOnce(in:)` | кадр в двух местах — ошибка спеки | [03](03-layout-api.md#управление-subnodes): проход отклоняется |
+| `PreparedLayout.element(for:)`, `ids(of:)`, `ids(where:)`, `LayoutTree.owners` | id движка ↔ элемент, контейнер ↔ его владелец | отчёт и трассировка по нодам |
 | `if(_:_:)` | условный модификатор | [04](04-conditionals-and-responsive.md#4-условный-модификатор) |
 | `collapsesWhenEmpty()` — `display: none` при пустом списке элементов | пустой контейнер | [04](04-conditionals-and-responsive.md#8-пустой-контейнер) |
 | `Tokens.swift` | `Spacing`, `SpacingScale`, `BreakpointWidth` | [09](09-theme.md), [04](04-conditionals-and-responsive.md#именованные-пороги) |
@@ -191,4 +200,6 @@
 | `NodeNSView` `keyDown/keyUp`, `becomeFirstResponder` | AppKit без фокус-элементов: клавиатуру ведёт view; фокус при входе только от Tab | — |
 | `NodeView` на iPad: `usesFocus`, `selects` | система фокуса iPadOS с клавиатурой; групп фокуса нет — свойство недоступно на tvOS | дефект #135 |
 | `NodeView.zoom`, `contentLayer`, `zoomed` | дерево раскладывается в `bounds / zoom`, слой содержимого увеличен от левого верхнего угла; `host.scale` = экран × zoom, чтобы текст был чётким; `nil` — 2 на TV, 1 иначе | интерфейс для TV: размеры под телефон с 2–3 м читаются примерно вдвое крупнее |
+| `LayoutReport`, `NodeHost.onLayoutReport`, `number`, `traceAreas`, `tracedNodes`; `finish` — отклонение прохода | отчёт прохода, дубликаты | [03](03-layout-api.md#управление-subnodes), [10](10-layout-engine.md#диагностика) |
+| `NodeView`/`NodeNSView` — `onLayoutReport` в `DEBUG`, `os.Logger` | вывод решает адаптер | [10](10-layout-engine.md#диагностика) |
 | `DemotvOS/` | tvOS-приложение с демо-экраном (`project.pbxproj` написан вручную, по образцу `Playground`) | — |

@@ -851,7 +851,9 @@ private final class Rows: Node {
     }
 
     override func layoutSpec() -> LayoutSpec? {
-        FlexContainer(.column) { first; second; plain }
+        FlexContainer(.column) {
+            first; second; plain
+        }
     }
 }
 
@@ -887,8 +889,12 @@ private final class Grid: Node {
 
     override func layoutSpec() -> LayoutSpec? {
         FlexContainer(.column) {
-            FlexContainer(.row) { cells[0]; cells[1] }.gap(10)
-            FlexContainer(.row) { cells[2]; cells[3] }.gap(10)
+            FlexContainer(.row) {
+                cells[0]; cells[1]
+            }.gap(10)
+            FlexContainer(.row) {
+                cells[2]; cells[3]
+            }.gap(10)
         }
         .gap(10)
         .alignItems(.start)
@@ -965,5 +971,111 @@ func aFocusRequestGoesToTheAdapterOrFocusesAtOnce() {
 
     #expect(requested == [row.badge.id])
     #expect(host.focusedNode == nil)
+    host.detach()
+}
+
+// MARK: - Reports
+
+@MainActor
+private final class Twice: Node {
+    let badge = Box(10, 10)
+    let repeats = State(false)
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.row) {
+            badge
+            if repeats.value { badge }
+        }
+    }
+}
+
+@Test @MainActor
+func aNodeLaidOutTwiceRejectsThePass() {
+    let root = Twice()
+    let host = NodeHost(root: root, size: LayoutSize(width: 100, height: 50))
+    var reports: [LayoutReport] = []
+    host.onLayoutReport = { reports.append($0) }
+    host.layoutIfNeeded()
+    let frame = root.badge.frame
+
+    root.repeats.value = true
+    host.layoutIfNeeded()
+
+    #expect(reports.count == 2)
+    #expect(reports[0].isRejected == false)
+    #expect(reports[1].isRejected)
+    #expect(reports[1].duplicates == [root.badge.id])
+    #expect(host.passes == 1)
+    #expect(root.badge.frame == frame)
+    #expect(root.subnodes.map(\.id) == [root.badge.id])
+    host.detach()
+}
+
+@MainActor
+private final class BranchedBox: Node {
+    let item = Box(10, 10)
+
+    override func layoutSpec() -> LayoutSpec? {
+        Breakpoint(from: 100) {
+            item
+        } otherwise: {
+            item.size(20)
+        }
+    }
+}
+
+@MainActor
+private final class AdaptiveRow: Node {
+    let branched = BranchedBox()
+    let grows = State(false)
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.row) { branched.flex(grow: grows.value ? 1 : 0) }
+    }
+}
+
+@Test @MainActor
+func aBreakpointWithoutAWidthIsReported() {
+    let root = AdaptiveRow()
+    let host = NodeHost(root: root, size: LayoutSize(width: 300, height: 50))
+    var last: LayoutReport?
+    host.onLayoutReport = { last = $0 }
+    host.layoutIfNeeded()
+
+    // The row sizes `branched` to its content: there is no width to choose a branch by.
+    #expect(last?.variantsWithoutWidth == [root.branched.item.id])
+    #expect(last?.hasProblems == true)
+    host.detach()
+}
+
+@Test @MainActor
+func aTraceFollowsTheNodesAskedFor() throws {
+    let screen = Screen()
+    let host = NodeHost(root: screen, size: LayoutSize(width: 400, height: 300))
+    var last: LayoutReport?
+    host.onLayoutReport = { last = $0 }
+    host.traceAreas = [.place]
+    host.tracedNodes = [screen.card.id]
+    host.layoutIfNeeded()
+
+    let report = try #require(last)
+    #expect(report.trace.map(\.node) == [screen.card.id])
+    #expect(
+        report.trace.first?.event
+            == .placed(
+                try #require(report.trace.first?.event.id),
+                frame: LayoutRect(x: 20, y: 20, width: 360, height: 60)
+            )
+    )
+    #expect(report.hasProblems == false)
+
+    let lines = report.lines
+    #expect(lines.count == 2)
+    #expect(lines[0].hasPrefix("[layout] pass host=\(host.number) gen=1 elements="))
+    #expect(lines[0].hasSuffix("rejected=no duplicates=none widthless=none"))
+    #expect(
+        lines[1]
+            == "[layout] place host=\(host.number) gen=1 \(screen.card.id) x=20 y=20 size=360x60"
+    )
     host.detach()
 }

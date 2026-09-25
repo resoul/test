@@ -283,6 +283,63 @@ func anEmptyContainerCollapsesOnlyWhenAsked() {
 
 @MainActor
 @Test
+func anElementLaidOutInTwoPlacesIsReported() throws {
+    let badge = Box(10, 10)
+    let other = Box(10, 10)
+    let rect = LayoutRect(x: 0, y: 0, width: 100, height: 20)
+    func check(_ spec: LayoutSpec) throws -> [ObjectIdentifier] {
+        let prepared = spec.prepare()
+        let result = try FlexboxEngine.layout(prepared.input, size: rect.size)
+        return prepared.elementsPlacedMoreThanOnce(in: result).map { ObjectIdentifier($0) }
+    }
+
+    #expect(
+        try check(
+            FlexContainer(.row) {
+                badge; other; badge; badge
+            }
+        ) == [ObjectIdentifier(badge)]
+    )
+    // Both branches mention it; only one is laid out.
+    #expect(
+        try check(
+            Breakpoint(from: 50) {
+                badge
+            } otherwise: {
+                badge
+            }
+        ).isEmpty
+    )
+    // A hidden place has no frame.
+    #expect(
+        try check(
+            FlexContainer(.row) {
+                badge; badge.hidden()
+            }
+        ).isEmpty
+    )
+}
+
+@MainActor
+@Test
+func idsLeadBackToTheirElements() {
+    let first = Box(10, 10)
+    let second = Box(10, 10)
+    let prepared = FlexContainer(.row) {
+        first
+        second
+        first
+    }
+    .prepare()
+
+    let ids = prepared.ids(of: first)
+    #expect(ids.count == 2)
+    #expect(ids.allSatisfy { prepared.element(for: $0) === first })
+    #expect(prepared.element(for: prepared.input.id) == nil)
+}
+
+@MainActor
+@Test
 func breakpointAtTheRootChoosesByTheWidth() {
     let avatar = Box()
     let text = Box(50, 10)
