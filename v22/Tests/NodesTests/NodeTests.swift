@@ -1208,7 +1208,7 @@ func walksOfAVeryDeepTreeDoNotRunOutOfStack() {
     }
 }
 
-/// Takes a transaction the way `StateFlux`'s `bind(to:animation:)` does.
+/// Takes a transaction the way `StateAsyncRay`'s `bind(to:animation:)` does.
 @MainActor
 private func write(_ transaction: some StateTransaction, _ writes: () -> Void) {
     transaction.perform(writes)

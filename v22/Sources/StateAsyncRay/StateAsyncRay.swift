@@ -1,11 +1,11 @@
-import Flux
+import AsyncRay
 import StateCore
 
-// The boundary between `StateCore` and Flux. Flux streams are asynchronous; states are
+// The boundary between `StateCore` and AsyncRay. Streams are asynchronous; states are
 // synchronous and live on the main actor. Values cross in both directions on the main
 // actor, and a state seen as a stream behaves as a state: the latest value, not events.
 
-extension Flux {
+extension AsyncRay {
     /// Writes every value of the stream into `state`, on the main actor. What reads the state
     /// sees the values at the next flush; values that arrive before it collapse into the
     /// last one.
@@ -23,7 +23,7 @@ extension Flux {
     }
 
     /// Writes every value of the stream into `state` inside `transaction` — with nodes, an
-    /// animation: `flux.bind(to: state, animation: .default)` moves the screen to each new
+    /// animation: `asyncRay.bind(to: state, animation: .default)` moves the screen to each new
     /// value. Each value is written, and its updates run, in a transaction of its own.
     ///
     /// Ownership: the returned subscription owns the delivery; the state is held weakly, so a
@@ -49,8 +49,8 @@ extension State where Value: Sendable {
     /// Ownership: each subscription holds the state until it ends. Isolation: values are read
     /// on the main actor; the stream is consumed anywhere. Errors: none. Cancellation: ending
     /// the subscription stops watching the state.
-    public nonisolated var flux: Flux<Value> {
-        Flux { [self] in
+    public nonisolated var asyncRay: AsyncRay<Value> {
+        AsyncRay { [self] in
             AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
                 let watch = Watch()
                 continuation.onTermination = { _ in

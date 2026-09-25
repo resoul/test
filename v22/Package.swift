@@ -5,7 +5,7 @@ import PackageDescription
 // LayoutCore depends only on Foundation, so the package builds and tests on Linux as well as
 // on Apple platforms. LayoutUIKit and LayoutAppKit adapt it to views; on a platform without
 // that framework they build as empty modules. StateCore is synchronous main-actor state with
-// dependency tracking; StateFlux connects it to Flux streams, the package's one dependency.
+// dependency tracking; StateAsyncRay connects it to AsyncRay streams, the package's dependency.
 // Nodes is the tree of nodes laid out by LayoutCore and driven by StateCore; NodesRender draws
 // it into CALayers (Apple platforms), NodesUIKit and NodesAppKit put it into views.
 let package = Package(
@@ -16,16 +16,14 @@ let package = Package(
         .library(name: "LayoutUIKit", targets: ["LayoutUIKit"]),
         .library(name: "LayoutAppKit", targets: ["LayoutAppKit"]),
         .library(name: "StateCore", targets: ["StateCore"]),
-        .library(name: "StateFlux", targets: ["StateFlux"]),
+        .library(name: "StateAsyncRay", targets: ["StateAsyncRay"]),
         .library(name: "Nodes", targets: ["Nodes"]),
         .library(name: "NodesRender", targets: ["NodesRender"]),
         .library(name: "NodesUIKit", targets: ["NodesUIKit"]),
         .library(name: "NodesAppKit", targets: ["NodesAppKit"]),
     ],
     dependencies: [
-        // The lowest release StateFlux works with: packages that also use Trellis, which pins
-        // Flux 1.2.1, still resolve. On its own the package gets the newest release.
-        .package(url: "https://github.com/resoul/flux.git", from: "1.2.1")
+        .package(url: "https://github.com/resoul/AsyncRay.git", exact: "1.0.0")
     ],
     targets: [
         .target(name: "LayoutCore"),
@@ -37,8 +35,8 @@ let package = Package(
         .target(name: "NodesUIKit", dependencies: ["Nodes", "NodesRender", "LayoutCore"]),
         .target(name: "NodesAppKit", dependencies: ["Nodes", "NodesRender", "LayoutCore"]),
         .target(
-            name: "StateFlux",
-            dependencies: ["StateCore", .product(name: "Flux", package: "flux")]
+            name: "StateAsyncRay",
+            dependencies: ["StateCore", .product(name: "AsyncRay", package: "asyncray")]
         ),
         .testTarget(name: "LayoutCoreTests", dependencies: ["LayoutCore"]),
         .testTarget(name: "StateCoreTests", dependencies: ["StateCore"]),
@@ -47,7 +45,10 @@ let package = Package(
             name: "NodesRenderTests",
             dependencies: ["Nodes", "NodesRender", "NodesUIKit", "NodesAppKit", "LayoutCore"]
         ),
-        .testTarget(name: "StateFluxTests", dependencies: ["StateFlux", "StateCore"]),
+        .testTarget(
+            name: "StateAsyncRayTests",
+            dependencies: ["AsyncRay", "StateAsyncRay", "StateCore"]
+        ),
         .testTarget(
             name: "LayoutAdapterTests",
             dependencies: ["LayoutCore", "LayoutUIKit", "LayoutAppKit"]

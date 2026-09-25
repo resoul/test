@@ -25,8 +25,8 @@
 - `Package.swift` — отдельный пакет: `LayoutCore` (движок и DSL, собирается и на Linux),
   `LayoutUIKit`, `LayoutAppKit` (адаптеры view); тесты `LayoutCoreTests`,
   `LayoutAdapterTests` (только macOS).
-- `StateCore` (синхронное состояние с отслеживанием чтений) и `StateFlux` (мост к
-  [Flux](https://github.com/resoul/flux) ≥ 1.2.1) — тесты `StateCoreTests`, `StateFluxTests`.
+- `StateCore` (синхронное состояние с отслеживанием чтений) и `StateAsyncRay` (мост к
+  [AsyncRay](https://github.com/resoul/AsyncRay) 1.0.0) — тесты `StateCoreTests`, `StateAsyncRayTests`.
 - `Nodes`, `NodesRender`, `NodesUIKit`, `NodesAppKit` — дерево нод, отрисовка в
   `CALayer`, текст на CoreText, `view.addSubnode(node)`.
 - `Demo/` — экран на нодах (`DemoScreens`) и окно для Mac: `cd Demo && swift run`.
@@ -64,5 +64,5 @@
 - [Texture](https://github.com/TextureGroup/Texture) — модель «подкласс ноды + раскладка
   внутри + `addSubnode` в UIKit», layout spec'и без собственных view/слоёв. Код Texture
   не копируется (см. [source-provenance.md](https://github.com/resoul/test/blob/main/docs/source-provenance.md)).
-- [Flux](https://github.com/resoul/flux) — реактивные потоки на Swift Concurrency;
+- [AsyncRay](https://github.com/resoul/AsyncRay) — реактивные потоки на Swift Concurrency;
   в Espalier рассматривается как адаптер к состоянию, а не как его ядро.

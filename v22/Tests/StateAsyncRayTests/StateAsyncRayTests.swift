@@ -1,6 +1,6 @@
-import Flux
+import AsyncRay
 import StateCore
-import StateFlux
+import StateAsyncRay
 import Testing
 
 @MainActor
@@ -19,7 +19,7 @@ private func waitUntil(_ condition: () -> Bool) async {
 @Test @MainActor
 func aBoundStreamWritesIntoTheState() async {
     let state = State(0)
-    let subscription = Flux.from([1, 2, 3]).bind(to: state)
+    let subscription = AsyncRay.from([1, 2, 3]).bind(to: state)
 
     await waitUntil { state.value == 3 }
 
@@ -31,7 +31,7 @@ func aBoundStreamWritesIntoTheState() async {
 func aStateStreamStartsWithTheCurrentValueThenFollowsChanges() async {
     let state = State("Ann")
     let received = Received<String>()
-    let subscription = state.flux.sinkOnMain { received.values.append($0) }
+    let subscription = state.asyncRay.sinkOnMain { received.values.append($0) }
 
     await waitUntil { received.values == ["Ann"] }
     state.value = "Bob"
@@ -45,7 +45,7 @@ func aStateStreamStartsWithTheCurrentValueThenFollowsChanges() async {
 func changesBetweenTwoFlushesArriveAsTheLatestValue() async {
     let state = State(0)
     let received = Received<Int>()
-    let subscription = state.flux.sinkOnMain { received.values.append($0) }
+    let subscription = state.asyncRay.sinkOnMain { received.values.append($0) }
     await waitUntil { received.values == [0] }
 
     state.value = 1
@@ -61,7 +61,7 @@ func changesBetweenTwoFlushesArriveAsTheLatestValue() async {
 func aCancelledStreamNoLongerWatchesTheState() async {
     let state = State(0)
     let received = Received<Int>()
-    let subscription = state.flux.sinkOnMain { received.values.append($0) }
+    let subscription = state.asyncRay.sinkOnMain { received.values.append($0) }
     await waitUntil { received.values == [0] }
 
     subscription.cancel()
@@ -74,10 +74,10 @@ func aCancelledStreamNoLongerWatchesTheState() async {
 }
 
 @Test @MainActor
-func aStateCanFeedAnotherThroughFlux() async {
+func aStateCanFeedAnotherThroughAsyncRay() async {
     let query = State("")
     let echo = State("")
-    let subscription = query.flux.map { $0.uppercased() }.bind(to: echo)
+    let subscription = query.asyncRay.map { $0.uppercased() }.bind(to: echo)
 
     query.value = "swift"
     await waitUntil { echo.value == "SWIFT" }
@@ -103,7 +103,7 @@ func aStreamBoundWithATransactionWritesEachValueInsideIt() async {
     let state = State(0)
     let received = Received<Int>()
     let transaction = Recording(state: state, received: received)
-    let subscription = Flux.from([1, 2]).bind(to: state, animation: transaction)
+    let subscription = AsyncRay.from([1, 2]).bind(to: state, animation: transaction)
 
     await waitUntil { received.values.count == 2 }
 

@@ -160,13 +160,13 @@
 | `StateUpdates.flush`, `scheduler`, `roundLimit` | слияние записей до flush; flush «перед кадром» подставит слой нод | как D14 Trellis: burst → одна доставка |
 | `StateTransaction` | «как выполнить запись» — чтобы адаптер писал с анимацией, не зная про `Nodes` | [08](08-open-questions.md#состояние-и-реактивность); реализует `Animation` в `Nodes` |
 
-## `Sources/StateFlux`
+## `Sources/StateAsyncRay`
 
 | Код | Что | Основание |
 |---|---|---|
-| `Flux.bind(to:)` | значения потока → `State` на MainActor, состояние держится слабо | [08](08-open-questions.md#состояние-и-реактивность): Flux — адаптер на границе |
-| `Flux.bind(to:animation:)` | то же, каждое значение — в своей `StateTransaction` (анимации) | аналог `bindFlux(animation:)` Trellis |
-| `State.flux` | текущее значение, затем значения после flush; `bufferingNewest(1)` | состояние — последнее значение, не события |
+| `AsyncRay.bind(to:)` | значения потока → `State` на MainActor, состояние держится слабо | [08](08-open-questions.md#состояние-и-реактивность): AsyncRay — адаптер на границе |
+| `AsyncRay.bind(to:animation:)` | то же, каждое значение — в своей `StateTransaction` (анимации) | аналог `bindFlux(animation:)` Trellis |
+| `State.asyncRay` | текущее значение, затем значения после flush; `bufferingNewest(1)` | состояние — последнее значение, не события |
 | `Watch` | остановка, пришедшая раньше старта, побеждает | порядок двух задач MainActor не обещан |
 
 ## Встраивание раскладки (`LayoutCore/DSL`)
