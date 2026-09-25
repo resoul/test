@@ -406,17 +406,16 @@ private func run(_ testCase: Case) -> Outcome {
 private let conformanceRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()  // LayoutCoreTests
     .deletingLastPathComponent()  // Tests
-    .deletingLastPathComponent()  // v22
-    .deletingLastPathComponent()  // repository root
+    .deletingLastPathComponent()  // package root
     .appendingPathComponent("Conformance/CSSFlexbox")
 
 private func report(_ fixture: Fixture, _ outcomes: [(name: String, outcome: Outcome)]) -> String {
     let count = { (name: String) in outcomes.filter { $0.outcome.name == name }.count }
     var lines = [
-        "# v22 FlexboxEngine против CSS",
+        "# FlexboxEngine против CSS",
         "",
         "Эталон: \(fixture.browser). Допуск: \(tolerance) pt.",
-        "Сгенерировано `CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance` в `v22/`.",
+        "Сгенерировано `CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance` в корне пакета.",
         "",
         "| Итог | Кейсов |",
         "|---|---|",
@@ -500,7 +499,7 @@ func cssFlexboxConformance() throws {
 
     guard let data = try? Data(contentsOf: expectationsURL) else {
         let hint = "CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance"
-        Issue.record("No v22 CSS conformance baseline at \(expectationsURL.path); record: \(hint)")
+        Issue.record("No CSS conformance baseline at \(expectationsURL.path); record: \(hint)")
         return
     }
 

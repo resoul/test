@@ -48,25 +48,25 @@
 ## Первый шаг
 
 **Статус: выполнен.** Baseline старого движка:
-[expectations/engine-legacy.json](../../Conformance/CSSFlexbox/expectations/engine-legacy.json),
-отчёт — [reports/engine-legacy.md](../../Conformance/CSSFlexbox/reports/engine-legacy.md):
+[expectations/engine-legacy.json](https://github.com/resoul/test/blob/main/Conformance/CSSFlexbox/expectations/engine-legacy.json),
+отчёт — [reports/engine-legacy.md](https://github.com/resoul/test/blob/main/Conformance/CSSFlexbox/reports/engine-legacy.md):
 **107 pass, 29 fail, 6 unsupported из 142.** Все 29 падений покрыты дефектами #95–#106
 (шесть не сверенных вручную — остальные варианты `wrap-reverse`, #102).
 
-Сделано: [Conformance/CSSFlexbox](../../Conformance/CSSFlexbox/README.md) — 142 кейса в 18
+Сделано: [Conformance/CSSFlexbox](../Conformance/CSSFlexbox/README.md) — 142 кейса в 18
 группах, эталонные frame сняты в Chromium 141 (с 2026-09-25 — в Chromium 153), Swift-прогон
 `Tests/TrellisCoreTests/Layout/CSSConformanceTests.swift`. Swift-прогон собрался и
 отработал на Mac в режиме записи.
 
 Сначала расхождения были сверены по логу для 23 кейсов, затем подтверждены отчётом. Это
-расхождения, записанные в [реестр дефектов](../../docs/defects.md) как #95–#106: margin в
+расхождения, записанные в [реестр дефектов Trellis](https://github.com/resoul/test/blob/main/docs/defects.md) как #95–#106: margin в
 размещении, stretch без margin и min/max, перераспределение grow после clamp, сумма grow
 < 1, `min > max`, автоматический минимальный размер (`min-width: auto`), `wrap-reverse`,
 absolute (растяжение `left`+`right`, padding box, статическая позиция), `aspect-ratio`
 при stretch, обрезка явного размера. Пробелы словаря (`unsupported`): `margin: auto`,
 `order`. Совпадают с Chromium: `justify-content`, `align-items`/`align-self`,
 обычный `wrap` с `align-content`, grow/shrink/basis без clamp, gap, проценты, вложенность,
-RTL без отступов — и `nested/profile-card` из примеров v22.
+RTL без отступов — и `nested/profile-card` из примеров Espalier.
 
 Итог: по результату решено писать новый движок на основе старого, старый не чинить —
 [10-layout-engine.md](10-layout-engine.md).

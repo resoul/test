@@ -10,23 +10,23 @@ let package = Package(
     products: [
         .library(name: "DemoScreens", targets: ["DemoScreens"])
     ],
-    dependencies: [.package(name: "Layout", path: "..")],
+    dependencies: [.package(name: "Espalier", path: "..")],
     targets: [
         .target(
             name: "DemoScreens",
             dependencies: [
-                .product(name: "LayoutCore", package: "Layout"),
-                .product(name: "StateCore", package: "Layout"),
-                .product(name: "Nodes", package: "Layout"),
-                .product(name: "NodesRender", package: "Layout"),
+                .product(name: "LayoutCore", package: "Espalier"),
+                .product(name: "StateCore", package: "Espalier"),
+                .product(name: "Nodes", package: "Espalier"),
+                .product(name: "NodesRender", package: "Espalier"),
             ]
         ),
         .executableTarget(
             name: "LayoutDemo",
             dependencies: [
                 "DemoScreens",
-                .product(name: "Nodes", package: "Layout"),
-                .product(name: "NodesAppKit", package: "Layout"),
+                .product(name: "Nodes", package: "Espalier"),
+                .product(name: "NodesAppKit", package: "Espalier"),
             ]
         ),
     ],

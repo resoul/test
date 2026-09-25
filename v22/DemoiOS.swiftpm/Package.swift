@@ -29,14 +29,14 @@ let package = Package(
     ],
     dependencies: [
         .package(name: "LayoutDemo", path: "../Demo"),
-        .package(name: "Layout", path: ".."),
+        .package(name: "Espalier", path: ".."),
     ],
     targets: [
         .executableTarget(
             name: "AppModule",
             dependencies: [
                 .product(name: "DemoScreens", package: "LayoutDemo"),
-                .product(name: "NodesUIKit", package: "Layout"),
+                .product(name: "NodesUIKit", package: "Espalier"),
             ],
             path: "."
         )

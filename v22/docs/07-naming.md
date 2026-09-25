@@ -14,7 +14,7 @@ AGENTS.md Trellis).
 
 ## Таблица переименований
 
-| Trellis | v22 | Примечание |
+| Trellis | Espalier | Примечание |
 |---|---|---|
 | `Node` | `Node` | базовый класс |
 | `TextNode` | `Text` | совпадает со SwiftUI — допустимо |
@@ -31,29 +31,31 @@ AGENTS.md Trellis).
 
 ## Следствия совпадений со SwiftUI
 
-Конфликт проявляется только в файле, где импортированы **и** SwiftUI, **и** модуль v22:
+Конфликт проявляется только в файле, где импортированы **и** SwiftUI, **и** модуль Espalier:
 там тип указывается с модулем (`<Модуль>.Text`). На практике это редко, поэтому принято.
 
 ## Прочие имена
 
 | Имя | Статус |
 |---|---|
-| `layoutSpec()` — метод раскладки (`layout()` занят в `NSView`) | реализовано |
+| `layoutSpec()` — метод раскладки (`layout()` занят в `NSView`; `arrange()`/`makeLayout()` отклонены) | согласовано (2026-09-25) |
 | `LayoutSpec` — тип описания раскладки (не `Layout`: в файлах с SwiftUI была бы неоднозначность с `SwiftUI.Layout`); `FlexContainer` — его псевдоним | реализовано |
-| `LayoutElement`, `LayoutSpecProviding`, `LayoutView`, `LayoutNSView`, `applyLayoutSpec()` | реализовано |
+| `LayoutElement`, `LayoutSpecProviding`, `applyLayoutSpec()` | реализовано |
 | `FlexContainer` | согласовано (по примеру) |
 | `Breakpoint` | реализовано (`Breakpoint(from:) { } otherwise: { }`) |
 | `BreakpointWidth` (`.sm` … `.xxl`, число) — тип порога; вместо `Breakpoint.Width` из черновика, потому что `Breakpoint` — псевдоним `LayoutSpec` и не может иметь вложенных типов | реализовано |
 | `Spacing` (`.s1` … `.s9`, `.points`), `SpacingScale` (`.standard`) | реализовано |
 | Пороги `.sm` / `.md` / `.lg` / `.xl` / `.xxl` | согласовано (значения — предложено, [04](04-conditionals-and-responsive.md#именованные-пороги)) |
-| `from:` — единое слово порога в `Breakpoint` и модификаторах | предложено |
+| `from:` — единое слово порога в `Breakpoint` и модификаторах | согласовано (2026-09-25) |
 | Имена токенов отступов — номера шагов `.s1` … `.s9` | согласовано, [09](09-theme.md#имена-отступов--вариант-b) |
-| `NodeCache` | предложено |
-| `.hidden(_:)` / `.invisible(_:)` | предложено |
+| `NodeCache` | согласовано (2026-09-25) |
+| `.hidden(_:)` — убирает из раскладки (CSS `display: none`, `isHidden` в `UIStackView`) / `.invisible(_:)` — оставляет место. В SwiftUI `.hidden()` место оставляет — смысл обратный; это сказано в doc-комментарии | согласовано (2026-09-25) |
 | `.collapsesWhenEmpty()` | реализовано |
 | `.if(_:_:)` — условный модификатор | реализовано |
-| `LayoutView` / `LayoutNSView` — базовые view-классы адаптеров | открыто |
-| Названия модулей (`Nodes`, `State`, …) | предложено; окончательное — после решения «Trellis v2 или новая библиотека» |
+| `LayoutView` / `LayoutNSView`, `NodeView` / `NodeNSView` — view-классы адаптеров: UIKit без префикса, AppKit с `NS` | согласовано (2026-09-25) |
+| «Раскладку надо пересчитать»: `Node.setNeedsLayout()`; у view — `setNeedsLayoutSpec()`, потому что системный `setNeedsLayout` не сбрасывает `intrinsicContentSize`, а переопределить его нельзя — UIKit зовёт его сам при смене bounds, и Auto Layout зациклится | согласовано (2026-09-25) |
+| Названия модулей (`Nodes`, `StateCore`, …) | предложено; вопрос «Trellis v2 или новая библиотека» закрыт — отдельная библиотека, совместимость с API Trellis не нужна |
+| Название продукта и пакета — `Espalier` (`Trellis` занят другим Swift-пакетом) | согласовано (2026-09-25) |
 | Модуль раскладки — `LayoutCore`; `Layout` нельзя (протокол SwiftUI) | принято |
-| Имена модулей, папок, файлов, переменных окружения — по содержимому, без названия продукта (`Trellis`) и кодового имени (`v22`) | согласовано, [AGENTS.md](../AGENTS.md#имена) |
+| Имена модулей, папок, файлов, переменных окружения — по содержимому, без названия продукта (`Espalier`, `Trellis`) и кодового имени (`v22`) | согласовано, [AGENTS.md](../AGENTS.md#имена) |
 | Тип длины — `Length` (`.auto`, `.points`, `.fraction`); `Dimension` нельзя (класс Foundation) | принято |

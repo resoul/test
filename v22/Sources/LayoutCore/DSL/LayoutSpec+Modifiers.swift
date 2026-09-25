@@ -326,6 +326,9 @@ extension LayoutSpecConvertible {
     /// hidden. With `false` it is laid out and its elements are shown. Keep the modifier with
     /// a condition rather than removing it, so the elements are shown again.
     ///
+    /// This is CSS `display: none` and what `isHidden` does in a `UIStackView`. SwiftUI's
+    /// `.hidden()` means the opposite — it keeps the space; here that is `invisible(_:)`.
+    ///
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
     public func hidden(_ isHidden: Bool = true, from: BreakpointWidth? = nil) -> LayoutSpec {
         var spec =
@@ -335,7 +338,8 @@ extension LayoutSpecConvertible {
     }
 
     /// Keeps the item's space in the layout but hides its elements — for content that comes
-    /// and goes without the layout jumping (a spinner in a button, room for a badge).
+    /// and goes without the layout jumping (a spinner in a button, room for a badge). CSS
+    /// `visibility: hidden`, and what SwiftUI's `.hidden()` does.
     ///
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
     public func invisible(_ isInvisible: Bool = true) -> LayoutSpec {

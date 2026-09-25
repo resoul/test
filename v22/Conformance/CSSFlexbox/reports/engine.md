@@ -1,4 +1,4 @@
-# v22 FlexboxEngine против CSS
+# FlexboxEngine против CSS
 
 Эталон: chromium 153.0.8010.12. Допуск: 0.05 pt.
 Сгенерировано `CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance` в `v22/`.

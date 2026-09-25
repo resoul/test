@@ -1,4 +1,4 @@
-# Карта кода v22 → документы
+# Карта кода Espalier → документы
 
 Здесь — связь между кодом и документами проектирования, которая **не пишется в
 комментариях кода** ([AGENTS.md](../AGENTS.md#комментарии-в-коде)). Когда документы
@@ -30,7 +30,7 @@
 | Код | Что | Основание |
 |---|---|---|
 | `LayoutID` | непрозрачный id, сопоставляет адаптер | [10](10-layout-engine.md#вход-и-выход): модуль не знает про ноды |
-| `LayoutResult.duplicateIDs` | дубликаты id — диагностика в результате | Trellis weave-analysis §3.1; AGENTS.md v22 «Печать» |
+| `LayoutResult.duplicateIDs` | дубликаты id — диагностика в результате | Trellis weave-analysis §3.1; AGENTS.md Espalier «Печать» |
 | `LayoutNode.dismantle`, `LayoutTreeOwner`, `PreparedLayout.tree` | глубокое дерево освобождается по уровню за раз | дефект #140 |
 | `LayoutContext` / `LayoutCancelled` | отмена через `throws`, без частичного результата | Trellis D09, D10 |
 | `LayoutContext.stackBudget`, `currentThreadStackBudget`, `LayoutStackExhausted`, `Solver.checkStack`/`stackAddress`, проверка в `flatten` и `flexLayout` | бюджет стека вместо падения | дефект #124; [10](10-layout-engine.md#статус-e3-производительность) |

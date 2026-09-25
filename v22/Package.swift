@@ -9,7 +9,7 @@ import PackageDescription
 // Nodes is the tree of nodes laid out by LayoutCore and driven by StateCore; NodesRender draws
 // it into CALayers (Apple platforms), NodesUIKit and NodesAppKit put it into views.
 let package = Package(
-    name: "Layout",
+    name: "Espalier",
     platforms: [.macOS(.v14), .iOS(.v16), .tvOS(.v16)],
     products: [
         .library(name: "LayoutCore", targets: ["LayoutCore"]),
