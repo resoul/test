@@ -149,6 +149,9 @@ struct FlatNode {
     /// variants. Otherwise the containing block is left out of its cache keys, so the same
     /// request from different ancestors' passes is computed once.
     let dependsOnParent: Bool
+    /// The node's layout depends on its own width before its content decides it: a child's
+    /// width is a percentage of it (or has width variants), or it is a row that wraps.
+    var sizesWidthFirst = false
 }
 
 struct BaselineKey: Hashable {
@@ -297,6 +300,9 @@ struct Solver {
             children.append(try flatten(child))
         }
         nodes[index].children = children
+        nodes[index].sizesWidthFirst =
+            node.style.wrapsRow || node.variants.contains { $0.style.wrapsRow }
+            || node.children.contains { !$0.variants.isEmpty || $0.style.hasPercentageWidth }
         return index
     }
 
@@ -489,7 +495,9 @@ struct Solver {
 
     /// A leaf is its content plus padding, unless a size is known or specified. With an
     /// aspect ratio, a missing side follows from the other one — but never smaller than the
-    /// content when that side's minimum is `auto` (CSS Sizing 4 §5.2.1), so content does not
+    /// content when that side's minimum is `auto` (CSS Sizing 4 §5.2.1) — for a height, when
+    /// the height is `auto` too: a percentage height that behaves as `auto` does not count in
+    /// Chromium — so content does not
     /// overflow a box that only got its size from the ratio. A content size (`contentOnly`)
     /// ignores the leaf's own width/height, but still follows the ratio from a known side.
     @inline(never)
@@ -522,11 +530,15 @@ struct Solver {
 
         if let ratio = style.aspectRatio, ratio > 0 {
             if width == nil && height == nil {
-                // Min/max heights limit the width too, through the ratio (CSS Sizing 4 §5.2).
+                // Min/max heights limit the width too, through the ratio (CSS Sizing 4 §5.2); so
+                // does the vertical padding, below which the height cannot go.
                 let minHeight = style.minHeight.resolve(parent.height) ?? 0
                 let maxHeight = style.maxHeight.resolve(parent.height) ?? .infinity
                 width = clamp(
-                    max(minHeight * ratio, min(maxHeight * ratio, contentWidth)),
+                    max(
+                        max(minHeight, own.paddingHeight) * ratio,
+                        min(maxHeight * ratio, contentWidth)
+                    ),
                     own.minWidth,
                     own.maxWidth,
                     own.paddingWidth
@@ -541,11 +553,15 @@ struct Solver {
                     maximum: own.maxHeight,
                     floor: own.paddingHeight,
                     automaticMinimum: style.minHeight == .auto
+                        && (style.height == .auto || contentOnly == .vertical)
                 )
             } else if let base = height, width == nil {
+                // The automatic minimum of a width is the content's min-content width.
+                let minContentWidth =
+                    (nodes[index].content?.minContentWidth ?? 0) + own.paddingWidth
                 width = ratioDependent(
                     base * ratio,
-                    content: contentWidth,
+                    content: minContentWidth,
                     minimum: own.minWidth,
                     maximum: own.maxWidth,
                     floor: own.paddingWidth,

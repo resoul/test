@@ -29,7 +29,8 @@ extension Solver {
                 child,
                 style: style,
                 known: OptionalSize(),
-                parent: containingBlock
+                parent: containingBlock,
+                ratio: .none
             )
             let margin = style.margin.physical(nodes[child].direction)
             var margins = Physical(
@@ -71,12 +72,43 @@ extension Solver {
                 )
             }
 
-            // With an aspect ratio a missing side is left to the measurement below, which
-            // transfers it from the other one within the content's automatic minimum.
+            // With an aspect ratio Chromium settles the width first: specified — but, when the
+            // height is specified too and the minimum is `auto`, not below the content's
+            // min-content width — or between two
+            // insets, or through the ratio from a height (specified or between two insets).
+            // The height then follows from the width through the ratio, raised to the
+            // content, unless it is specified: insets no longer stretch it.
+            let hasRatio = (style.aspectRatio ?? 0) > 0
+            if hasRatio {
+                let insetHeight = childOwn.height == nil ? height : nil
+                height = childOwn.height
+                if let specified = childOwn.width, childOwn.height != nil,
+                    style.minWidth == .auto
+                {
+                    let minContent = try minContentWidth(child, parent: containingBlock)
+                    width = max(specified, min(minContent, childOwn.maxWidth))
+                } else if width == nil, let base = height ?? insetHeight {
+                    width =
+                        try compute(
+                            child,
+                            known: OptionalSize(width: nil, height: base),
+                            parent: containingBlock,
+                            available: AvailableSize(width: .maxContent, height: .definite(base)),
+                            mode: .size
+                        )
+                        .width
+                }
+            }
+
             if width == nil || height == nil {
+                // Without horizontal insets the box starts at its static position, inside the
+                // parent's padding on the start side: that padding is not space it can take.
+                let staticStart =
+                    insets.left == nil && insets.right == nil
+                    ? (direction == .rightToLeft ? own.padding.right : own.padding.left) : 0
                 let availableWidth =
-                    size.width - (insets.left ?? 0) - (insets.right ?? 0) - margins.left
-                    - margins.right
+                    size.width - (insets.left ?? 0) - (insets.right ?? 0) - staticStart
+                    - margins.left - margins.right
                 let availableHeight =
                     size.height - (insets.top ?? 0) - (insets.bottom ?? 0) - margins.top
                     - margins.bottom
@@ -98,7 +130,7 @@ extension Solver {
             // A height is definite when it is specified or pinned by both insets; a
             // shrink-to-fit height comes from the content, like an auto height anywhere.
             let heightIsDefinite =
-                childOwn.height != nil
+                childOwn.height != nil || hasRatio
                 || (insets.top != nil && insets.bottom != nil && verticalAlignment == nil)
 
             // Auto margins of a box pinned by both insets take what is left, even when that is
@@ -157,17 +189,21 @@ extension Solver {
             }
 
             let y: Double
-            if let alignment = verticalAlignment, let top = insets.top, let bottom = insets.bottom,
+            if style.alignSelf != .auto, let top = insets.top, let bottom = insets.bottom,
                 !margin.top.isAuto, !margin.bottom.isAuto
             {
+                // Aligned — `stretch` of a box that has a height too, at the start — and then,
+                // unlike a box placed by `top` alone, kept inside the containing block where
+                // it overflows the space between the insets, its top edge first.
                 let start = top + margins.top
                 let end = size.height - bottom - margins.bottom - childSize.height
-                y =
-                    switch alignment {
+                let aligned =
+                    switch style.alignSelf {
                     case .end: end
                     case .center: (start + end) / 2
                     case .auto, .stretch, .start, .baseline: start
                     }
+                y = max(0, min(aligned, size.height - childSize.height))
             } else if let top = insets.top {
                 y = top + margins.top
             } else if let bottom = insets.bottom {
@@ -181,9 +217,14 @@ extension Solver {
                 size: childSize
             )
             frames[child] = frame
+            // A height that follows from the ratio is left to the child, so that it keeps the
+            // ratio's height as its children's percentage base when raised to its content.
             _ = try compute(
                 child,
-                known: OptionalSize(width: childSize.width, height: childSize.height),
+                known: OptionalSize(
+                    width: childSize.width,
+                    height: hasRatio && childOwn.height == nil ? nil : childSize.height
+                ),
                 parent: containingBlock,
                 available: AvailableSize(
                     width: .definite(childSize.width),
@@ -193,6 +234,33 @@ extension Solver {
                 definite: DefiniteAxes(width: true, height: heightIsDefinite)
             )
         }
+    }
+
+    /// The narrowest width `index` takes by its content, without its own sizes or ratio.
+    @inline(never)
+    private mutating func minContentWidth(_ index: Int, parent: OptionalSize) throws -> Double {
+        guard nodes[index].children.isEmpty else {
+            return try flexLayout(
+                index,
+                known: OptionalSize(),
+                parent: parent,
+                available: AvailableSize(width: .minContent, height: .maxContent),
+                mode: .size,
+                contentOnly: .horizontal,
+                definite: DefiniteAxes(width: false, height: false),
+                ratio: .none
+            )
+            .width
+        }
+
+        let own = ownSize(
+            index,
+            known: OptionalSize(),
+            parent: parent,
+            contentOnly: .horizontal,
+            ratio: .none
+        )
+        return (nodes[index].content?.minContentWidth ?? 0) + own.paddingWidth
     }
 
     /// §4.1: the static position of an absolute child is where it would be as the sole flex
@@ -233,11 +301,14 @@ extension Solver {
             case .center: .center
             case .baseline: .baseline
             }
+        // A sole item has no baseline to share: it falls back to the start of the writing
+        // mode, which `wrap-reverse` does not turn over.
         let crossOffset: Double =
             switch alignment {
             case .end: freeCross
             case .center: freeCross / 2
-            case .stretch, .start, .baseline: 0
+            case .stretch, .start: 0
+            case .baseline: container.styleWrap == .wrapReverse ? freeCross : 0
             }
 
         let mainLogical = mainOffset + marginMainStart

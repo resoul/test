@@ -13,6 +13,8 @@ fixtures/random.json    400 случайных деревьев (seed 2026) из
 fixtures/text.json      ручные кейсы с «текстом» и выравниванием по базовой линии
 fixtures/random-text.json  200 случайных деревьев с текстовыми листьями (seed 7)
 fixtures/random-baseline.json  150 случайных деревьев с текстом и `align-items: baseline` (seed 11)
+cases/reduced.json      уменьшенные деревья из разбора падений (дефект #118): исходник группы `reduced`
+fixtures/reduced.json   они же с эталоном
 expectations/*.json     известный итог каждого кейса для конкретного движка (baseline)
 reports/*.md            отчёт последней записи baseline: сводка и все расхождения
 ```
@@ -60,6 +62,22 @@ swift test --filter cssFlexboxConformance
 CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance
 ```
 
+Прогнать движок v22 на любом файле в формате фикстуры (например, уменьшенных деревьях с
+эталоном из браузера) — итог каждого кейса пишется рядом, в `<файл>.engine.json`:
+
+```sh
+cd v22
+CSS_CONFORMANCE_LAB=/путь/к/кейсам.json swift test --filter cssFlexboxLab
+```
+
+## Версии Chromium
+
+Эталоны `flexbox`, `random*`, `text` сняты Chromium 141, `reduced` — Chromium 152 (встроенный
+браузер приложения: Playwright на машине не было; HTML тот же, что строит `generate.cjs`). На
+всём наборе они расходятся в двух кейсах — `random/0328` и `random-text/0066`: там Chromium
+141 и 152 раскладывают по-разному, движок v22 следует 152, и в baseline эти кейсы `fail`.
+Перегенерация всего набора одним Chromium уберёт эту разницу (команда выше).
+
 ## Общие правила кейсов
 
 Одинаковы для HTML-стороны и для движка; причина каждого — в скобках.
@@ -90,3 +108,7 @@ CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance
 Не покрыто и должно быть добавлено следующими наборами: проценты от неопределённого
 размера, `flex-basis: content`, `display: none`. Текст и базовая линия — в `text.json`,
 `random-text.json`, `random-baseline.json`.
+
+`reduced` — 81 дерево из 2–5 нод: каждое — наименьшее дерево, которое ещё расходилось с
+Chromium, найденное уменьшением падающего случайного кейса (убирались ноды и свойства, пока
+расхождение оставалось). Имя — `reduced/<исходный кейс>`; дефекты #143–#152.

@@ -470,6 +470,7 @@ func cssFlexboxConformance() throws {
         "fixtures/text.json",
         "fixtures/random-text.json",
         "fixtures/random-baseline.json",
+        "fixtures/reduced.json",
     ]
     let expectationsURL = conformanceRoot.appendingPathComponent("expectations/engine.json")
     let reportURL = conformanceRoot.appendingPathComponent("reports/engine.md")
@@ -480,7 +481,9 @@ func cssFlexboxConformance() throws {
             from: Data(contentsOf: conformanceRoot.appendingPathComponent(file))
         )
     }
-    let fixture = Fixture(browser: fixtures[0].browser, cases: fixtures.flatMap(\.cases))
+    // Fixtures can come from different browser versions: the report names each of them.
+    let browsers = Set(fixtures.map(\.browser)).sorted().joined(separator: ", ")
+    let fixture = Fixture(browser: browsers, cases: fixtures.flatMap(\.cases))
     let outcomes = fixture.cases.map { (name: $0.name, outcome: run($0)) }
     #expect(!outcomes.isEmpty)
 
