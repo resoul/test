@@ -54,7 +54,7 @@
 (шесть не сверенных вручную — остальные варианты `wrap-reverse`, #102).
 
 Сделано: [Conformance/CSSFlexbox](../../Conformance/CSSFlexbox/README.md) — 142 кейса в 18
-группах, эталонные frame сняты в Chromium 141, Swift-прогон
+группах, эталонные frame сняты в Chromium 141 (с 2026-09-25 — в Chromium 153), Swift-прогон
 `Tests/TrellisCoreTests/Layout/CSSConformanceTests.swift`. Swift-прогон собрался и
 отработал на Mac в режиме записи.
 
