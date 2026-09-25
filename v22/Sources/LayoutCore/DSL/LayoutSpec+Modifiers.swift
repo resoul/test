@@ -318,7 +318,37 @@ extension LayoutSpecConvertible {
         return spec
     }
 
+    // MARK: Conditions
+
+    /// Applies `transform` when `condition` holds and leaves the item as it is otherwise —
+    /// for several modifiers that come and go together. A single value is simpler as a value
+    /// (`.padding(isCompact ? 8 : 16)`). The spec is rebuilt on every pass and the element
+    /// keeps its identity, so switching the condition only changes the item's place.
+    ///
+    ///     title.if(isHighlighted) { $0.padding(16).alignSelf(.center) }
+    ///
+    /// Ownership: returns a value; `transform` is not kept. Isolation: MainActor.
+    /// Errors: none. Cancellation: none.
+    public func `if`(
+        _ condition: Bool,
+        _ transform: (LayoutSpec) -> LayoutSpec
+    ) -> LayoutSpec {
+        condition ? transform(asLayoutSpec) : asLayoutSpec
+    }
+
     // MARK: Container
+
+    /// Takes a container with no items out of the layout, padding and all, as CSS
+    /// `:empty { display: none }` does. Items are counted as written: an `if` that is false
+    /// or a `nil` element adds none, a hidden item still counts. Has no effect on an element.
+    ///
+    /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
+    public func collapsesWhenEmpty() -> LayoutSpec {
+        let spec = asLayoutSpec
+        guard case let .container(items) = spec.content, items.isEmpty else { return spec }
+
+        return spec.patched(from: nil) { style, _ in style.display = .none }
+    }
 
     /// The main axis of a container.
     ///

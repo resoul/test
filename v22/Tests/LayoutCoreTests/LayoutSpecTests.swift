@@ -229,6 +229,60 @@ func invisibleKeepsItsSpace() {
 
 @MainActor
 @Test
+func ifAppliesItsModifiersOnlyWhileTheConditionHolds() {
+    let title = Box(20, 10)
+    let next = Box(10, 10)
+    func spec(_ isHighlighted: Bool) -> LayoutSpec {
+        FlexContainer(.row) {
+            title.if(isHighlighted) { $0.margin(8) }
+            next
+        }
+    }
+
+    spec(true).apply(in: LayoutRect(x: 0, y: 0, width: 100, height: 40))
+    #expect(title.frame?.minX == 8)
+    #expect(next.frame?.minX == 36)
+
+    spec(false).apply(in: LayoutRect(x: 0, y: 0, width: 100, height: 40))
+    #expect(title.frame?.minX == 0)
+    #expect(next.frame?.minX == 20)
+}
+
+@MainActor
+@Test
+func anEmptyContainerCollapsesOnlyWhenAsked() {
+    let after = Box(10, 10)
+    func spec(badge: Box?, collapses: Bool) -> LayoutSpec {
+        let badges = FlexContainer(.row) { badge }.padding(6)
+        return FlexContainer(.row) {
+            collapses ? badges.collapsesWhenEmpty() : badges
+            after
+        }
+    }
+
+    // CSS keeps the padding of an empty container.
+    spec(badge: nil, collapses: false).apply(in: LayoutRect(x: 0, y: 0, width: 100, height: 20))
+    #expect(after.frame?.minX == 12)
+
+    spec(badge: nil, collapses: true).apply(in: LayoutRect(x: 0, y: 0, width: 100, height: 20))
+    #expect(after.frame?.minX == 0)
+
+    // An item that is present keeps the container, even while it is hidden.
+    let badge = Box(10, 10)
+    spec(badge: badge, collapses: true).apply(in: LayoutRect(x: 0, y: 0, width: 100, height: 20))
+    #expect(badge.frame?.minX == 6)
+    #expect(after.frame?.minX == 22)
+
+    FlexContainer(.row) {
+        FlexContainer(.row) { badge.hidden() }.padding(6).collapsesWhenEmpty()
+        after
+    }
+    .apply(in: LayoutRect(x: 0, y: 0, width: 100, height: 20))
+    #expect(after.frame?.minX == 12)
+}
+
+@MainActor
+@Test
 func breakpointAtTheRootChoosesByTheWidth() {
     let avatar = Box()
     let text = Box(50, 10)
