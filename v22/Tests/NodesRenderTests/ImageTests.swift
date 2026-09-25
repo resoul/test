@@ -234,35 +234,104 @@
         #expect(try await cache.cachedData(for: url) == nil)
     }
 
-    @Test
-    func removingLocationMetadataPreservesEncodedImagePixels() async throws {
+    /// A camera-like JPEG: pixels stored turned (EXIF orientation 6), full GPS coordinates,
+    /// a capture date, and XMP with a headline and a city.
+    private func cameraJPEG() throws -> Data {
+        let pixels = try #require(
+            CGImageSourceCreateWithData(try encodedImage(width: 12, height: 8) as CFData, nil)
+                .flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) }
+        )
+        let xmp = try #require(CGImageMetadataCreateMutable())
+        for (path, value) in [("photoshop:Headline", "Bridge"), ("photoshop:City", "Kyiv")] {
+            #expect(CGImageMetadataSetValueWithPath(xmp, nil, path as CFString, value as CFString))
+        }
+        let output = NSMutableData()
+        let destination = try #require(
+            CGImageDestinationCreateWithData(output, "public.jpeg" as CFString, 1, nil)
+        )
+        let properties: [CFString: Any] = [
+            kCGImagePropertyOrientation: 6,
+            kCGImagePropertyGPSDictionary: [
+                kCGImagePropertyGPSLatitude: 50.45, kCGImagePropertyGPSLatitudeRef: "N",
+                kCGImagePropertyGPSLongitude: 30.52, kCGImagePropertyGPSLongitudeRef: "E",
+            ],
+            kCGImagePropertyExifDictionary: [
+                kCGImagePropertyExifDateTimeOriginal: "2026:09:25 10:00:00"
+            ],
+        ]
+        CGImageDestinationAddImageAndMetadata(destination, pixels, xmp, properties as CFDictionary)
+        #expect(CGImageDestinationFinalize(destination))
+        return output as Data
+    }
+
+    /// What of `cameraJPEG()`'s metadata some encoded bytes still carry.
+    struct Kept: Equatable, Sendable {
+        var orientation: Int?
+        var gps: Bool
+        var date: Bool
+        var headline: Bool
+        var city: Bool
+    }
+
+    private func kept(_ data: Data) throws -> Kept {
+        let source = try #require(CGImageSourceCreateWithData(data as CFData, nil))
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any]
+        let metadata = CGImageSourceCopyMetadataAtIndex(source, 0, nil)
+        func has(_ path: String) -> Bool {
+            metadata.flatMap { CGImageMetadataCopyTagWithPath($0, nil, path as CFString) } != nil
+        }
+        let exif = properties?[kCGImagePropertyExifDictionary as String] as? [String: Any]
+        return Kept(
+            orientation: (properties?[kCGImagePropertyOrientation as String] as? NSNumber)?
+                .intValue,
+            gps: properties?[kCGImagePropertyGPSDictionary as String] != nil
+                || has("exif:GPSLatitude"),
+            date: exif?[kCGImagePropertyExifDateTimeOriginal as String] != nil,
+            headline: has("photoshop:Headline"),
+            city: has("photoshop:City")
+        )
+    }
+
+    @Test(
+        arguments: [
+            (
+                ImageMetadataPolicy.removeLocation,
+                Kept(orientation: 6, gps: false, date: true, headline: true, city: true)
+            ),
+            (
+                ImageMetadataPolicy.removeLocationAndXMP,
+                Kept(orientation: 6, gps: false, date: false, headline: false, city: false)
+            ),
+        ]
+    )
+    func metadataPoliciesKeepOrientationAndPixels(
+        policy: ImageMetadataPolicy,
+        expected: Kept
+    ) async throws {
+        let original = try cameraJPEG()
+        #expect(
+            try kept(original)
+                == Kept(orientation: 6, gps: true, date: true, headline: true, city: true)
+        )
+
         let directory = temporaryCache()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let gps: [String: Any] = [kCGImagePropertyGPSLatitude as String: 51.5]
-        let original = try encodedImage(
-            width: 12,
-            height: 8,
-            type: "public.jpeg" as CFString,
-            metadata: [kCGImagePropertyGPSDictionary as String: gps]
-        )
         let cache = ImageCache(
-            configuration: ImageCacheConfiguration(
-                directory: directory,
-                metadata: .removeLocation
-            )
+            configuration: ImageCacheConfiguration(directory: directory, metadata: policy)
         )
-        let url = URL(string: "https://example.test/photo.jpg")!
+        let url = URL(string: "https://example.test/camera.jpg")!
         try await cache.store(original, for: url)
         let saved = try #require(await cache.cachedData(for: url))
+        #expect(try kept(saved) == expected)
+
         let before = try #require(CGImageSourceCreateWithData(original as CFData, nil))
         let after = try #require(CGImageSourceCreateWithData(saved as CFData, nil))
-        let properties = CGImageSourceCopyPropertiesAtIndex(after, 0, nil) as? [String: Any]
-        #expect(properties?[kCGImagePropertyGPSDictionary as String] == nil)
         let sourcePixels = try #require(CGImageSourceCreateImageAtIndex(before, 0, nil))
         let savedPixels = try #require(CGImageSourceCreateImageAtIndex(after, 0, nil))
-        #expect(sourcePixels.width == savedPixels.width)
-        #expect(sourcePixels.height == savedPixels.height)
         #expect(sourcePixels.dataProvider?.data as Data? == savedPixels.dataProvider?.data as Data?)
+        // Shown turned upright, as the original would be.
+        let shown = try await ImagePipeline().load(.data(saved), targetPixelDimension: 64)
+        #expect(shown.size == LayoutSize(width: 8, height: 12))
     }
 
     /// A lossless 1×1 WebP. Image I/O decodes WebP but cannot encode it.
@@ -515,6 +584,23 @@
             }
             .alignItems(.start)
         }
+    }
+
+    @Test @MainActor
+    func releasingTheNodeCancelsItsDownload() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = stubCache(directory)
+        let url = URL(string: "https://image-cache.test/released-slow.webp")!
+        var image: Image? = Image(source: .url(url), pipeline: ImagePipeline(cache: cache))
+        while await cache.downloadWaiters(for: url) < 1 { await Task.yield() }
+        weak let released = image
+
+        image = nil
+        #expect(released == nil)
+        while await cache.downloadWaiters(for: url) > 0 { await Task.yield() }
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(try await cache.cachedData(for: url) == nil)
     }
 
     @Test @MainActor
@@ -900,6 +986,32 @@
 
         await pipeline.clearDecodedCache()
         state = await pipeline.decodedCacheState()
+        #expect(state.entries == 0)
+        #expect(state.bytes == 0)
+    }
+
+    @Test
+    func decodedDimensionLimitCapsTheBitmapOnly() async throws {
+        let data = try encodedImage(width: 800, height: 400)
+        let pipeline = ImagePipeline(maximumDecodedPixelDimension: 50)
+        let loaded = try await pipeline.load(.data(data), targetPixelDimension: 600)
+        #expect(max(loaded.image.width, loaded.image.height) == 50)
+        #expect(loaded.size == LayoutSize(width: 800, height: 400))
+    }
+
+    @Test
+    func decodesRunningDuringAClearDoNotRefillTheCache() async throws {
+        let first = try encodedImage(width: 3000, height: 3000)
+        let second = try encodedImage(width: 2990, height: 3000)
+        let pipeline = ImagePipeline()
+        async let one = pipeline.load(.data(first), targetPixelDimension: 3000)
+        async let two = pipeline.load(.data(second), targetPixelDimension: 3000)
+        // Both decodes are under way (one runs, one waits its turn) before the clear.
+        while await pipeline.decodedCacheState().decodes < 2 { await Task.yield() }
+
+        await pipeline.clearDecodedCache()
+        _ = try await (one, two)
+        let state = await pipeline.decodedCacheState()
         #expect(state.entries == 0)
         #expect(state.bytes == 0)
     }

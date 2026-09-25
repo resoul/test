@@ -416,9 +416,17 @@
                         nil
                     )
                 else { throw ImageCacheError.processingFailed }
-                var options: [CFString: Any] = [kCGImageMetadataShouldExcludeGPS: true]
-                if configuration.metadata == .removeLocationAndXMP {
-                    options[kCGImageMetadataShouldExcludeXMP] = true
+                // Without metadata to write, Image I/O replaces the source's with none —
+                // orientation included, turning camera photos on their side. So the source's
+                // metadata is passed on, and the GPS flag drops the coordinates from it.
+                var options: [CFString: Any] = [
+                    kCGImageMetadataShouldExcludeGPS: true,
+                    kCGImageDestinationMergeMetadata: false,
+                ]
+                if let metadata = CGImageSourceCopyMetadataAtIndex(source, 0, nil) {
+                    options[kCGImageDestinationMetadata] =
+                        configuration.metadata == .removeLocationAndXMP
+                        ? Self.exifAndTIFF(of: metadata) : metadata
                 }
                 guard
                     CGImageDestinationCopyImageSource(
@@ -445,6 +453,28 @@
                         result = output as Data
                     }
                 }
+            }
+            return result
+        }
+
+        /// The tags stored as EXIF or TIFF — orientation among them — without XMP-only ones
+        /// or IPTC. With these as the whole metadata, the rest is not written: the XMP
+        /// exclusion flag has no effect once metadata is passed explicitly.
+        private static func exifAndTIFF(of metadata: CGImageMetadata) -> CGImageMetadata {
+            let kept: Set<String> = [
+                kCGImageMetadataNamespaceExif as String,
+                kCGImageMetadataNamespaceExifAux as String,
+                kCGImageMetadataNamespaceExifEX as String,
+                kCGImageMetadataNamespaceTIFF as String,
+            ]
+            let result = CGImageMetadataCreateMutable()
+            CGImageMetadataEnumerateTagsUsingBlock(metadata, nil, nil) { path, tag in
+                if let namespace = CGImageMetadataTagCopyNamespace(tag) as String?,
+                    kept.contains(namespace)
+                {
+                    CGImageMetadataSetTagWithPath(result, nil, path, tag)
+                }
+                return true
             }
             return result
         }
