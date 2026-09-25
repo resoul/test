@@ -69,6 +69,22 @@ final class ProfileCardView: UIView {
 frame выставляет раскладка. Снаружи сам view свободно живёт в Auto Layout через
 `intrinsicContentSize`.
 
+### Mac Catalyst
+
+Catalyst-приложение — UIKit-приложение: в нём работают `LayoutUIKit`/`NodesUIKit`, а
+`LayoutAppKit`/`NodesAppKit` собираются пустыми. В Catalyst импортируются и UIKit, и AppKit, но
+`NSView` недоступен, поэтому AppKit-адаптеры закрыты `#if canImport(AppKit) && !canImport(UIKit)`
+(реализовано 2026-09-25, дефект #153). Приложению с общим кодом для Mac и Catalyst нужно то же
+условие: `#if canImport(AppKit)` в Catalyst истинно и выбрало бы AppKit-адаптер.
+
+```swift
+#if canImport(AppKit) && !canImport(UIKit)
+    import NodesAppKit   // Mac
+#else
+    import NodesUIKit    // iOS, iPadOS, tvOS, Mac Catalyst
+#endif
+```
+
 «Рисование» остаётся за самими view (`draw(_:)`) или за `CALayer` нод; раскладка только
 расставляет frame.
 
