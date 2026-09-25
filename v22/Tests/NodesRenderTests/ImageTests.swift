@@ -34,6 +34,38 @@
         return output as Data
     }
 
+    /// Encodes pixels whose left half is red and right half blue, tagged with an EXIF
+    /// orientation, as a camera writes a JPEG it did not rotate.
+    private func halvesJPEG(width: Int, height: Int, orientation: Int) throws -> Data {
+        let context = try #require(
+            CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+            )
+        )
+        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width / 2, height: height))
+        context.setFillColor(CGColor(red: 0, green: 0, blue: 1, alpha: 1))
+        context.fill(CGRect(x: width / 2, y: 0, width: width - width / 2, height: height))
+        let bitmap = try #require(context.makeImage())
+        let output = NSMutableData()
+        let destination = try #require(
+            CGImageDestinationCreateWithData(output, "public.jpeg" as CFString, 1, nil)
+        )
+        let properties: [String: Any] = [
+            kCGImagePropertyOrientation as String: orientation,
+            kCGImageDestinationLossyCompressionQuality as String: 1.0,
+        ]
+        CGImageDestinationAddImage(destination, bitmap, properties as CFDictionary)
+        #expect(CGImageDestinationFinalize(destination))
+        return output as Data
+    }
+
     private func temporaryCache() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     }
@@ -602,6 +634,55 @@
         #expect(image.frame.size == LayoutSize(width: 100, height: 50))
     }
 
+    /// Where the red (left) half of the stored pixels shows after each EXIF orientation.
+    enum RedSide: Sendable {
+        case left, right, top, bottom
+    }
+
+    @Test(
+        arguments: [
+            (1, LayoutSize(width: 40, height: 20), RedSide.left),
+            (2, LayoutSize(width: 40, height: 20), RedSide.right),
+            (3, LayoutSize(width: 40, height: 20), RedSide.right),
+            (6, LayoutSize(width: 20, height: 40), RedSide.top),
+            (8, LayoutSize(width: 20, height: 40), RedSide.bottom),
+        ]
+    )
+    @MainActor
+    func exifOrientationIsAppliedToSizeLayoutAndPixels(
+        orientation: Int,
+        size: LayoutSize,
+        red: RedSide
+    ) async throws {
+        let data = try halvesJPEG(width: 40, height: 20, orientation: orientation)
+        let image = Image(source: .data(data))
+        try await loaded(image)
+        #expect(image.pixelSize == size)
+
+        let host = NodeHost(root: Column(image), size: LayoutSize(width: 200, height: 200))
+        defer { host.detach() }
+        host.layoutIfNeeded()
+        #expect(image.frame.size == size)
+
+        // The layer shows this image as it is, top row at the top.
+        let shown = try #require(image.layerImage?.image)
+        #expect(shown.width == Int(size.width))
+        #expect(shown.height == Int(size.height))
+        let width = shown.width
+        let height = shown.height
+        let (near, far) =
+            switch red {
+            case .left, .right: ((2, height / 2), (width - 3, height / 2))
+            case .top, .bottom: ((width / 2, 2), (width / 2, height - 3))
+            }
+        let redNear = red == .left || red == .top
+        let first = pixel(of: shown, x: near.0, y: near.1)
+        let second = pixel(of: shown, x: far.0, y: far.1)
+        let (redPixel, bluePixel) = redNear ? (first, second) : (second, first)
+        #expect(redPixel.red > 200 && redPixel.blue < 60, "orientation \(orientation)")
+        #expect(bluePixel.blue > 200 && bluePixel.red < 60, "orientation \(orientation)")
+    }
+
     @Test @MainActor
     func changingContentModeRedrawsTheSameFrame() async throws {
         let data = try encodedImage(width: 40, height: 10)
@@ -954,6 +1035,26 @@
         )
         layer.render(in: context)
         return try #require(context.makeImage())
+    }
+
+    /// The pixel at `x`, `y` counted from the top left, as the image is shown.
+    private func pixel(of image: CGImage, x: Int, y: Int) -> (red: UInt8, blue: UInt8) {
+        var pixels = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        pixels.withUnsafeMutableBytes { bytes in
+            let context = CGContext(
+                data: bytes.baseAddress,
+                width: image.width,
+                height: image.height,
+                bitsPerComponent: 8,
+                bytesPerRow: image.width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+            // The first row in memory is the top row of the image.
+            context?.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        }
+        let index = (y * image.width + x) * 4
+        return (pixels[index], pixels[index + 2])
     }
 
     private func alphaAtCorner(_ image: CGImage) -> UInt8 {
