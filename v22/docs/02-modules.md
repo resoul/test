@@ -17,12 +17,13 @@ LayoutCore      чистая математика и описание раскл
 LayoutUIKit     та же раскладка для UIView (в layoutSubviews)
 LayoutAppKit    та же раскладка для NSView (в layout())
 Nodes           дерево нод: Node, NodeHost; раскладка всего дерева одним проходом,
-                подписка по чтению в layoutSpec()/update(). Использует LayoutCore, StateCore.
+                подписка по чтению в layoutSpec()/update(); расчёт в фоне
+                (NodeHost.solvesInBackground). Использует LayoutCore, StateCore.
 NodesRender     дерево нод → дерево CALayer (QuartzCore), общий для UIKit и AppKit.
-                (Снимок и фоновый расчёт — следующие срезы.)
 NodesUIKit      встраивание нод в UIKit: view.addSubnode(node)
 NodesAppKit     встраивание нод в AppKit
-Theme           тема: шкала отступов, цвета, типографика; тема по умолчанию (см. 09)
+Theme           (ещё не создан) тема: шкала отступов, цвета, типографика; тема по
+                умолчанию (см. 09). Шкала отступов пока живёт в LayoutCore.
 StateCore       синхронное состояние на MainActor с отслеживанием чтений: State, Computed,
                 Observer, Effect (см. 08). Только стандартная библиотека.
 StateFlux       адаптер Flux ↔ StateCore (Flux ≥ 1.2.1)
@@ -31,10 +32,10 @@ StateFlux       адаптер Flux ↔ StateCore (Flux ≥ 1.2.1)
 Зависимости направлены только вниз:
 
 ```
-NodesUIKit ──► Nodes ──► LayoutCore ◄── LayoutUIKit
-NodesAppKit ─┘                      ◄── LayoutAppKit
-Nodes ──► Theme ──► LayoutCore
+NodesUIKit ──► NodesRender ──► Nodes ──► LayoutCore ◄── LayoutUIKit
+NodesAppKit ─┘                                      ◄── LayoutAppKit
 StateFlux ──► StateCore ◄── Nodes   (Nodes отслеживает чтения в layoutSpec()/update())
+Nodes ──► Theme ──► LayoutCore      (план: модуля Theme ещё нет, см. 09)
 ```
 
 ## Правила

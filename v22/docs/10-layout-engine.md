@@ -49,7 +49,7 @@
 | Один массив placements на весь проход | дефект #23 | O(nodes), не O(nodes × depth) |
 | Индекс результата по id, дубликаты — диагностика | weave-analysis §3.1 | O(1) `placement(for:)` |
 | `PixelRoundingPolicy` | Trellis | округление к пикселям экрана |
-| Трассировка `Log.on(.measure/.place, …)` с `#id` | AGENTS.md | читаемый лог на устройстве |
+| Трассировка measure/place с `#id` — через записывающий объект в контексте, не `Log.on` (см. «Диагностика»); не сделано | AGENTS.md | читаемый лог на устройстве |
 | Замеры Bench: `deep-local-edit`, `overflow-chain`, `cancel-latency`, `text-list`, `wide` | C31 | новый движок не должен быть медленнее |
 
 ## Что пишется заново: алгоритм по шагам CSS §9
@@ -127,7 +127,7 @@
 Код — `v22/Sources/LayoutCore`, прогон — `v22/Tests/LayoutCoreTests`, baseline —
 [expectations/engine.json](../../Conformance/CSSFlexbox/expectations/engine.json), отчёт —
 [reports/engine.md](../../Conformance/CSSFlexbox/reports/engine.md). Собирается и проходит на
-Linux (Swift 6.4); на Mac не прогонялось.
+Linux (Swift 6.4); на Mac (macOS 27, arm64, Swift 6.4) проходит — проверено 2026-09-25.
 
 Честная оговорка: алгоритм писался при известном наборе из 142 кейсов, поэтому 142/142 —
 необходимое, но не достаточное условие. Поэтому набор расширен 400 случайными деревьями
@@ -178,7 +178,8 @@ padding-top; лист без текста — его содержимое; пу�
 
 ## Статус: `FlexContainer` для `UIView`/`NSView`
 
-**Сделано (2026-09-24), на Apple-платформах ещё не прогонялось.**
+**Сделано (2026-09-24).** На Mac тесты проходят, включая `LayoutAdapterTests` для AppKit
+(2026-09-25); `LayoutUIKit` на iOS/tvOS Simulator тестами не прогонялся.
 
 - `LayoutCore/DSL` — платформо-нейтральный DSL: `LayoutSpec` (`FlexContainer` — его
   псевдоним), `LayoutBuilder` (`if`, `if let`, `switch`, `for`, опциональные элементы),
@@ -202,7 +203,8 @@ padding-top; лист без текста — его содержимое; пу�
 на ширину, которую элементу даёт родитель (ту же, от которой считаются его проценты); у
 корня — ширина view. 18 тестов на Linux, AppKit-тест видимости.
 
-Не сделано: встраивание нод (`addSubnode`), демо.
+Встраивание нод (`addSubnode`) и демо сделаны позже в модулях `Nodes*` — см.
+[03](03-layout-api.md#управление-subnodes).
 
 ## Статус E3: производительность
 
