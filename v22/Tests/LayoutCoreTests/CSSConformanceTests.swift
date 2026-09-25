@@ -413,7 +413,7 @@ private let conformanceRoot = URL(fileURLWithPath: #filePath)
 private func report(_ fixture: Fixture, _ outcomes: [(name: String, outcome: Outcome)]) -> String {
     let count = { (name: String) in outcomes.filter { $0.outcome.name == name }.count }
     var lines = [
-        "# v22 FlexboxEngine против CSS",
+        "# FlexboxEngine против CSS",
         "",
         "Эталон: \(fixture.browser). Допуск: \(tolerance) pt.",
         "Сгенерировано `CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance` в `v22/`.",

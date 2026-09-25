@@ -9,14 +9,14 @@ let package = Package(
     name: "LayoutBenchmarks",
     platforms: [.macOS(.v14)],
     dependencies: [
-        .package(name: "Layout", path: ".."),
+        .package(name: "Espalier", path: ".."),
         .package(name: "Trellis", path: "../.."),
     ],
     targets: [
         .executableTarget(
             name: "LayoutBench",
             dependencies: [
-                .product(name: "LayoutCore", package: "Layout"),
+                .product(name: "LayoutCore", package: "Espalier"),
                 .product(name: "TrellisCore", package: "Trellis"),
             ]
         )

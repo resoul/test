@@ -66,7 +66,7 @@ absolute (растяжение `left`+`right`, padding box, статическа
 при stretch, обрезка явного размера. Пробелы словаря (`unsupported`): `margin: auto`,
 `order`. Совпадают с Chromium: `justify-content`, `align-items`/`align-self`,
 обычный `wrap` с `align-content`, grow/shrink/basis без clamp, gap, проценты, вложенность,
-RTL без отступов — и `nested/profile-card` из примеров v22.
+RTL без отступов — и `nested/profile-card` из примеров Espalier.
 
 Итог: по результату решено писать новый движок на основе старого, старый не чинить —
 [10-layout-engine.md](10-layout-engine.md).
