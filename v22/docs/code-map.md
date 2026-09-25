@@ -176,6 +176,7 @@
 | `NodeNSView` — layer-hosting, `isGeometryFlipped` | AppKit не меняет геометрию своего слоя; начало координат — сверху слева | [05](05-platform-adapters.md#что-адаптер-обязан-закрыть) |
 | `NodeView.layoutSubviews`, `NodeNSView.layout` | размер/масштаб/направление → `NodeHost`, проход, отрисовка | [05](05-platform-adapters.md#встраивание-нод) |
 | `UIView/NSView.addSubnode` | нода в обычном view | [05](05-platform-adapters.md#встраивание-нод) |
+| `LayerRenderer.sync`/`enter`/`attach`, `Level` | сверка слоёв явным стеком, в порядке рекурсии | дефект #141 |
 | `LayerDrawing`, `LayerRenderer.draw` | содержимое ноды — bitmap в `contents`, всегда прямо | дефект #129 |
 | `Text`, `TextMeasurer`, `TextLayout` | одна `TextLayout` для замера и рисования | правило Trellis: измерение и рисование — одна строка (дефект #37 Trellis) |
 | `Node.hitTest`, `Node.onTap`, `pressChanged` | нажатия: ближайшая нода с действием, засчитывается над той же нодой | как `UIButton` (touch up inside) |
