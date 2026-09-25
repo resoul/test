@@ -13,10 +13,12 @@
         ///
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         public enum Alignment: Sendable, Hashable {
-            /// At the start of the writing direction.
+            /// At the start of the layout: the right edge when the host lays out right to
+            /// left; otherwise the start of the text's own writing direction (the left edge
+            /// for Latin text, the right one for Arabic).
             case leading
             case center
-            /// At the right edge. (Right-to-left text: the same, for now.)
+            /// At the right edge, in either direction.
             case right
         }
 
@@ -97,8 +99,15 @@
             didSet { if style != oldValue { contentChanged() } }
         }
 
+        /// Grows with the text and the style, and changes with the host's direction, which
+        /// moves `leading` text to the other edge.
+        ///
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
-        public private(set) var drawingRevision: UInt64 = 0
+        public var drawingRevision: UInt64 { revision &* 2 &+ (isRightToLeft ? 1 : 0) }
+
+        private var revision: UInt64 = 0
+
+        private var isRightToLeft: Bool { host?.direction == .rightToLeft }
 
         /// Ownership: the caller owns the node. Isolation: MainActor. Errors: none.
         /// Cancellation: not applicable.
@@ -116,7 +125,8 @@
         /// Ownership: draws into `context`. Isolation: MainActor. Errors: none.
         /// Cancellation: none.
         public func draw(in context: CGContext, size: CGSize) {
-            TextLayout(text: text, style: style).draw(in: context, size: size)
+            TextLayout(text: text, style: style, rightToLeft: isRightToLeft)
+                .draw(in: context, size: size)
         }
 
         /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
@@ -126,7 +136,7 @@
         public override var accessibilityContentTraits: AccessibilityTraits { .staticText }
 
         private func contentChanged() {
-            drawingRevision &+= 1
+            revision &+= 1
             setNeedsLayout()
         }
     }
@@ -167,13 +177,15 @@
         let maxLines: Int?
         private let attributes: CFDictionary
 
-        init(text: String, style: TextStyle) {
+        /// `rightToLeft` is the layout's direction; it moves `leading` text to the right edge.
+        /// Alignment does not change where lines break, so measuring leaves it out.
+        init(text: String, style: TextStyle, rightToLeft: Bool = false) {
             font = TextLayout.font(for: style)
             maxLines = style.maxLines.map { max(1, $0) }
 
             let alignment: CTTextAlignment =
                 switch style.alignment {
-                case .leading: .natural
+                case .leading: rightToLeft ? .right : .natural
                 case .center: .center
                 case .right: .right
                 }

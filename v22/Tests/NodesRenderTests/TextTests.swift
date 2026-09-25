@@ -23,6 +23,20 @@
         }
     }
 
+    /// Text in a fixed 200-point box, wider than the text.
+    @MainActor
+    private final class Box: Node {
+        let text: Text
+
+        init(_ text: Text) {
+            self.text = text
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.row) { text.width(.points(200)) }.alignItems(.start)
+        }
+    }
+
     /// Rows of `image`, top to bottom, that have any ink.
     private func inkRows(_ image: CGImage) -> [Int] {
         let width = image.width
@@ -74,6 +88,85 @@
 
         #expect(host.passes == 2)
         #expect(column.text.frame.size.width > before)
+        host.detach()
+    }
+
+    /// Columns of `image`, left to right, that have any ink.
+    private func inkColumns(_ image: CGImage) -> [Int] {
+        let width = image.width
+        let height = image.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        pixels.withUnsafeMutableBytes { bytes in
+            let context = CGContext(
+                data: bytes.baseAddress,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+            context?.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        }
+        return (0..<width).filter { column in
+            (0..<height).contains { pixels[($0 * width + column) * 4 + 3] > 0 }
+        }
+    }
+
+    @Test @MainActor
+    func changedTextFadesInWhenTheChangeIsAnimated() throws {
+        let column = Column(Text("Hello"))
+        let host = NodeHost(root: column, size: LayoutSize(width: 300, height: 100))
+        let renderer = LayerRenderer()
+        let container = CALayer()
+        // Checked before Core Animation commits: outside a window a commit drops animations.
+        CATransaction.begin()
+        defer {
+            host.detach()
+            CATransaction.commit()
+        }
+        func render() {
+            host.layoutIfNeeded()
+            renderer.render(column, in: container, animation: host.renderAnimation)
+            host.didRender()
+        }
+        render()
+        let layer = try #require(renderer.layer(for: column.text))
+        let before = try #require(layer.contents)
+
+        withAnimation {
+            column.text.text = "Hello there"
+        }
+        render()
+        let fade = try #require(layer.animation(forKey: "contents") as? CABasicAnimation)
+        #expect(fade.fromValue as AnyObject === before as AnyObject)
+        #expect(fade.toValue as AnyObject === layer.contents as AnyObject)
+        #expect(fade.duration == 0.25)
+
+        // Without an animation the new text shows at once.
+        column.text.text = "Hi"
+        render()
+        #expect(layer.animation(forKey: "contents") == nil)
+    }
+
+    @Test @MainActor
+    func leadingTextStartsAtTheRightInARightToLeftLayout() throws {
+        let text = Text("Hi")
+        let box = Box(text)
+        let host = NodeHost(root: box, size: LayoutSize(width: 300, height: 100))
+        host.layoutIfNeeded()
+        let renderer = LayerRenderer()
+        let root = CALayer()
+        renderer.render(box, in: root, scale: 1)
+        let leftToRight = inkColumns(try #require(renderer.layer(for: text)?.contents) as! CGImage)
+        #expect(try #require(leftToRight.max()) < 100)
+
+        // The host turns right to left: the same frame, drawn again at the other edge.
+        host.direction = .rightToLeft
+        host.layoutIfNeeded()
+        renderer.render(box, in: root, scale: 1)
+        let rightToLeft = inkColumns(try #require(renderer.layer(for: text)?.contents) as! CGImage)
+        #expect(try #require(rightToLeft.min()) > 100)
         host.detach()
     }
 

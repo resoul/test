@@ -55,9 +55,16 @@
         /// took out of their superlayers.
         private struct Pass {
             let animation: Animation?
+            /// The layer the tree is rendered into: coordinates of the pass start there.
+            let container: CALayer
             var visited: Set<NodeID> = []
             var drawings: [(node: Node, drawing: any LayerDrawing, layer: CALayer)] = []
             var detached: [(layer: CALayer, superlayer: CALayer, index: Int)] = []
+            /// Where the coordinate space of each layer handled so far starts, in the root's
+            /// superlayer, as it was shown before this render.
+            var shownOrigins: [ObjectIdentifier: CGPoint] = [:]
+            /// The superlayers layers were taken out of during this render.
+            var formerSuperlayers: [ObjectIdentifier: CALayer] = [:]
         }
 
         /// Ownership: the caller owns the renderer. Isolation: MainActor. Errors: none.
@@ -91,14 +98,20 @@
             CATransaction.setDisableActions(true)
             defer { CATransaction.commit() }
 
-            var pass = Pass(animation: animation)
+            var pass = Pass(animation: animation, container: container)
             let rootLayer = sync(root, pass: &pass)
             if rootLayer.superlayer !== container {
                 container.addSublayer(rootLayer)
             }
 
             for entry in pass.drawings {
-                draw(entry.drawing, of: entry.node, into: entry.layer, scale: scale)
+                draw(
+                    entry.drawing,
+                    of: entry.node,
+                    into: entry.layer,
+                    scale: scale,
+                    animation: animation
+                )
             }
 
             var gone: [ObjectIdentifier: NodeID] = [:]
@@ -127,14 +140,19 @@
         /// than it allows. Each node is handled before its subnodes and its sublayers are set
         /// after them, as a recursive walk would.
         private func sync(_ root: Node, pass: inout Pass) -> CALayer {
-            var levels = [enter(root, parentIsNew: true, pass: &pass)]
+            var levels = [enter(root, parent: nil, parentIsNew: true, pass: &pass)]
             while true {
                 let top = levels.count - 1
                 if levels[top].next < levels[top].subnodes.count {
                     let subnode = levels[top].subnodes[levels[top].next]
                     levels[top].next += 1
                     levels.append(
-                        enter(subnode, parentIsNew: levels[top].subnodesAreNew, pass: &pass)
+                        enter(
+                            subnode,
+                            parent: levels[top].layer,
+                            parentIsNew: levels[top].subnodesAreNew,
+                            pass: &pass
+                        )
                     )
                     continue
                 }
@@ -148,8 +166,14 @@
         }
 
         /// Brings the layer of `node` itself in line: frame, appearance, visibility, and the
-        /// animation from what it showed.
-        private func enter(_ node: Node, parentIsNew: Bool, pass: inout Pass) -> Level {
+        /// animation from what it showed. `parent` is the layer it goes into — the parent
+        /// node's, already in line — or `nil` for the root's.
+        private func enter(
+            _ node: Node,
+            parent: CALayer?,
+            parentIsNew: Bool,
+            pass: inout Pass
+        ) -> Level {
             pass.visited.insert(node.id)
             var isNew = false
             var cameBack = false
@@ -166,8 +190,16 @@
                 isNew = true
             }
 
-            let before: (model: Look, shown: Look)? =
+            var before: (model: Look, shown: Look)? =
                 isNew ? nil : (Look(layer), Look(presentedBy: layer))
+            let oldParent = layer.superlayer ?? pass.formerSuperlayers[ObjectIdentifier(layer)]
+            let oldParentOrigin = oldParent.map { shownOrigin(of: $0, pass: pass) } ?? .zero
+            if let shown = before?.shown {
+                pass.shownOrigins[ObjectIdentifier(layer)] = LayerRenderer.origin(
+                    of: shown,
+                    in: oldParentOrigin
+                )
+            }
             // Position and bounds rather than `frame`, which a scale transform would distort.
             let frame = node.frame
             layer.bounds = CGRect(x: 0, y: 0, width: frame.size.width, height: frame.size.height)
@@ -182,6 +214,22 @@
                 // stretched with it.
                 layer.contentsGravity = .left
                 pass.drawings.append((node, drawing, layer))
+            }
+
+            if isNew || before == nil {
+                pass.shownOrigins[ObjectIdentifier(layer)] = LayerRenderer.origin(
+                    of: Look(layer),
+                    in: parent.map { shownOrigin(of: $0, pass: pass) } ?? .zero
+                )
+            }
+            if let parent, let oldParent, oldParent !== parent, var moved = before {
+                // A node that moved to another parent starts where it was shown, in the
+                // coordinates of the parent it moves into.
+                let newParentOrigin = shownOrigin(of: parent, pass: pass)
+                moved.shown.position.x += oldParentOrigin.x - newParentOrigin.x
+                moved.shown.position.y += oldParentOrigin.y - newParentOrigin.y
+                moved.model.position = moved.shown.position
+                before = moved
             }
 
             if let before {
@@ -204,6 +252,36 @@
             return Level(layer: layer, subnodes: node.subnodes, subnodesAreNew: isNew || cameBack)
         }
 
+        /// Where the coordinate space of `layer` starts, as shown before this render: recorded
+        /// when the render handled it, else summed up its superlayers.
+        private func shownOrigin(of layer: CALayer, pass: Pass) -> CGPoint {
+            var chain: [CALayer] = []
+            var current: CALayer? = layer
+            var base = CGPoint.zero
+            while let next = current, next !== pass.container {
+                if let known = pass.shownOrigins[ObjectIdentifier(next)] {
+                    base = known
+                    break
+                }
+
+                chain.append(next)
+                current = next.superlayer
+            }
+            for next in chain.reversed() {
+                base = LayerRenderer.origin(of: Look(presentedBy: next), in: base)
+            }
+            return base
+        }
+
+        /// The start of the coordinate space of a layer showing `look` inside a superlayer
+        /// whose own space starts at `base`.
+        private static func origin(of look: Look, in base: CGPoint) -> CGPoint {
+            CGPoint(
+                x: base.x + look.position.x - look.bounds.width / 2 - look.bounds.minX,
+                y: base.y + look.position.y - look.bounds.height / 2 - look.bounds.minY
+            )
+        }
+
         /// Puts `sublayers` into `layer` in that order; layers taken out go to `pass.detached`.
         private func attach(_ sublayers: [CALayer], to layer: CALayer, pass: inout Pass) {
             let current = layer.sublayers ?? []
@@ -212,6 +290,7 @@
                 for (index, sublayer) in current.enumerated()
                 where !kept.contains(ObjectIdentifier(sublayer)) {
                     pass.detached.append((sublayer, layer, index))
+                    pass.formerSuperlayers[ObjectIdentifier(sublayer)] = layer
                 }
                 layer.sublayers = sublayers.isEmpty ? nil : sublayers
             }
@@ -393,16 +472,23 @@
         }
 
         /// Draws `drawing` into a bitmap that becomes the layer's contents, unless the
-        /// contents already show this revision at this size and scale.
+        /// contents already show this revision at this size and scale. With `animation`, new
+        /// content — a new revision, not the same content at a new size — fades in over what
+        /// was shown; without one it shows at once, stopping such a fade.
         private func draw(
             _ drawing: any LayerDrawing,
             of node: Node,
             into layer: CALayer,
-            scale: Double
+            scale: Double,
+            animation: Animation?
         ) {
+            if animation == nil {
+                layer.removeAnimation(forKey: "contents")
+            }
             let size = CGSize(width: node.frame.size.width, height: node.frame.size.height)
             let wanted = Drawing(revision: drawing.drawingRevision, size: size, scale: scale)
-            guard drawn[node.id] != wanted else { return }
+            let before = drawn[node.id]
+            guard before != wanted else { return }
 
             drawn[node.id] = wanted
             let pixelWidth = Int((Double(size.width) * scale).rounded(.up))
@@ -427,8 +513,25 @@
             // geometry of the layers around it — so it is drawn upright.
             context.scaleBy(x: CGFloat(scale), y: CGFloat(scale))
             drawing.draw(in: context, size: size)
+            let shown = layer.contents
+            let image = context.makeImage()
             layer.contentsScale = CGFloat(scale)
-            layer.contents = context.makeImage()
+            layer.contents = image
+            if let animation, let before, before.revision != wanted.revision, let shown,
+                let image
+            {
+                // A spring would overshoot a cross-fade: the fade keeps the timing, eased.
+                let curve =
+                    if case .spring = animation.curve {
+                        Animation.easeInOut(duration: animation.duration)
+                    } else {
+                        animation
+                    }
+                layer.add(
+                    makeAnimation("contents", from: shown, to: image, curve),
+                    forKey: "contents"
+                )
+            }
         }
 
         private func makeLayer(for node: Node) -> CALayer {

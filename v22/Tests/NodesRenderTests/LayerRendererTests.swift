@@ -105,6 +105,27 @@
     }
 
     @Test @MainActor
+    func zoomLaysTheTreeOutSmallerAndDrawsItBigger() throws {
+        let card = Card()
+        let view = NodeNSView(root: card)
+        view.zoom = 2
+        view.frame = CGRect(x: 0, y: 0, width: 400, height: 120)
+        view.layout()
+
+        #expect(view.host.size == LayoutSize(width: 200, height: 60))
+        #expect(view.host.scale == 2)
+        let avatar = try #require(view.renderedLayer(for: card.avatar))
+        #expect(avatar.frame == CGRect(x: 10, y: 10, width: 40, height: 40))
+        // In the view's own layer the tree is twice as big.
+        #expect(
+            view.layer?.convert(avatar.bounds, from: avatar)
+                == CGRect(x: 20, y: 20, width: 80, height: 80)
+        )
+        #expect(view.intrinsicContentSize == CGSize(width: NSView.noIntrinsicMetric, height: 120))
+        view.host.detach()
+    }
+
+    @Test @MainActor
     func addSubnodeEmbedsANodeInAView() {
         let parent = NSView(frame: CGRect(x: 0, y: 0, width: 300, height: 300))
         let card = Card()

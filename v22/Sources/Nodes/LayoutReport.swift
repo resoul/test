@@ -86,51 +86,24 @@ public struct LayoutReport: Sendable {
     /// Ownership: returns values. Isolation: none. Errors: none. Cancellation: not
     /// applicable.
     public var lines: [String] {
-        let milliseconds =
-            Double(duration.components.seconds) * 1000
-            + Double(duration.components.attoseconds) / 1e15
         var lines = [
             "[layout] pass host=\(host) gen=\(generation) elements=\(elements) "
-                + "ms=\(Self.format(milliseconds)) rejected=\(isRejected ? "yes" : "no") "
-                + "stack=\(stack) duplicates=\(Self.list(duplicates)) "
-                + "widthless=\(Self.list(variantsWithoutWidth))"
+                + "ms=\(LayoutReportFormat.milliseconds(duration)) "
+                + "rejected=\(isRejected ? "yes" : "no") "
+                + "stack=\(stack) duplicates=\(LayoutReportFormat.list(duplicates.map(\.description))) "
+                + "widthless=\(LayoutReportFormat.list(variantsWithoutWidth.map(\.description)))"
         ]
         for entry in trace {
             let node = entry.node.map { "\($0)\(entry.isContainer ? "/container" : "")" } ?? "none"
-            switch entry.event {
-            case let .measured(_, width, height, size, cached):
-                lines.append(
-                    "[layout] measure host=\(host) gen=\(generation) \(node) "
-                        + "width=\(Self.space(width)) height=\(Self.space(height)) "
-                        + "size=\(Self.format(size.width))x\(Self.format(size.height)) "
-                        + "cached=\(cached ? "yes" : "no")"
+            lines.append(
+                LayoutReportFormat.line(
+                    entry.event,
+                    host: "\(host)",
+                    generation: generation,
+                    subject: node
                 )
-            case let .placed(_, frame):
-                lines.append(
-                    "[layout] place host=\(host) gen=\(generation) \(node) "
-                        + "x=\(Self.format(frame.origin.x)) y=\(Self.format(frame.origin.y)) "
-                        + "size=\(Self.format(frame.size.width))x\(Self.format(frame.size.height))"
-                )
-            }
+            )
         }
         return lines
-    }
-
-    private static func list(_ nodes: [NodeID]) -> String {
-        nodes.isEmpty ? "none" : nodes.map(\.description).joined(separator: ",")
-    }
-
-    private static func space(_ space: AvailableSpace) -> String {
-        switch space {
-        case let .definite(value): format(value)
-        case .minContent: "min-content"
-        case .maxContent: "max-content"
-        }
-    }
-
-    /// Up to three decimals, without trailing zeros.
-    private static func format(_ value: Double) -> String {
-        let rounded = (value * 1000).rounded() / 1000
-        return rounded == rounded.rounded() ? String(Int(rounded)) : String(rounded)
     }
 }
