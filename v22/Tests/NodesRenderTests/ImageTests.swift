@@ -2,7 +2,7 @@
     import ImageIO
     import LayoutCore
     import Nodes
-    import NodesRender
+    @testable import NodesRender
     import QuartzCore
     import Testing
 
@@ -227,6 +227,72 @@
             try await Task.sleep(for: .milliseconds(5))
         }
         #expect(image.decodedPixelSize?.width == 800)
+    }
+
+    @Test
+    func decodedImagesAreSharedWithinTheMemoryBudget() async throws {
+        let firstData = try encodedImage(width: 100, height: 100)
+        let secondData = try encodedImage(width: 90, height: 90)
+        let thirdData = try encodedImage(width: 80, height: 80)
+        let pipeline = ImagePipeline(maximumDecodedCacheBytes: 80_000)
+
+        let first = try await pipeline.load(.data(firstData), targetPixelDimension: 100)
+        let reused = try await pipeline.load(.data(firstData), targetPixelDimension: 100)
+        #expect(first.image === reused.image)
+        var state = await pipeline.decodedCacheState()
+        #expect(state.entries == 1)
+        #expect(state.decodes == 1)
+        #expect(state.bytes <= 80_000)
+
+        _ = try await pipeline.load(.data(secondData), targetPixelDimension: 90)
+        state = await pipeline.decodedCacheState()
+        #expect(state.entries == 2)
+        #expect(state.decodes == 2)
+        #expect(state.bytes <= 80_000)
+
+        _ = try await pipeline.load(.data(firstData), targetPixelDimension: 100)
+        _ = try await pipeline.load(.data(thirdData), targetPixelDimension: 80)
+        state = await pipeline.decodedCacheState()
+        #expect(state.decodes == 3)
+        #expect(state.entries == 2)
+        #expect(state.bytes <= 80_000)
+        _ = try await pipeline.load(.data(firstData), targetPixelDimension: 100)
+        #expect(await pipeline.decodedCacheState().decodes == 3)
+        _ = try await pipeline.load(.data(secondData), targetPixelDimension: 90)
+        #expect(await pipeline.decodedCacheState().decodes == 4)
+
+        await pipeline.clearDecodedCache()
+        state = await pipeline.decodedCacheState()
+        #expect(state.entries == 0)
+        #expect(state.bytes == 0)
+    }
+
+    @Test
+    func simultaneousRequestsShareOneDecode() async throws {
+        let data = try encodedImage(width: 800, height: 400)
+        let pipeline = ImagePipeline()
+        async let first = pipeline.load(.data(data), targetPixelDimension: 600)
+        async let second = pipeline.load(.data(data), targetPixelDimension: 600)
+        let (one, two) = try await (first, second)
+        #expect(one.image === two.image)
+        let state = await pipeline.decodedCacheState()
+        #expect(state.decodes == 1)
+    }
+
+    @Test
+    func replacingFileBytesDoesNotReuseAnOldBitmap() async throws {
+        let file = temporaryCache().appendingPathExtension("png")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try encodedImage(width: 20, height: 10).write(to: file)
+        let pipeline = ImagePipeline()
+        let first = try await pipeline.load(.url(file), targetPixelDimension: 40)
+        #expect(first.image.width == 20)
+
+        try encodedImage(width: 30, height: 10).write(to: file)
+        let second = try await pipeline.load(.url(file), targetPixelDimension: 40)
+        #expect(second.image.width == 30)
+        let state = await pipeline.decodedCacheState()
+        #expect(state.decodes == 2)
     }
 
     private func alphaAtCorner(_ image: CGImage) -> UInt8 {

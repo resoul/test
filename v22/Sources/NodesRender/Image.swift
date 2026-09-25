@@ -1,4 +1,5 @@
 #if canImport(ImageIO)
+    import CryptoKit
     import Foundation
     import ImageIO
     import LayoutCore
@@ -23,10 +24,11 @@
     }
 
     /// Loads and decodes static images. The disk cache holds encoded bytes; decoding happens
-    /// away from the main actor. A small preview is followed by pixels matched to the frame.
+    /// away from the main actor. Decoded sizes are shared within a bounded memory cache.
     ///
     /// Ownership: the caller owns the pipeline and its cache. Isolation: actor. Errors: image,
-    /// file, and network errors are thrown. Cancellation: the caller's task cancels loading.
+    /// file, and network errors are thrown. Cancellation: a caller leaves a shared decode;
+    /// the last departing caller cancels it.
     public actor ImagePipeline {
         /// Ownership: shared actor. Isolation: actor. Errors: none. Cancellation: not applicable.
         public static let shared = ImagePipeline()
@@ -46,16 +48,52 @@
         /// Ownership: value. Isolation: actor. Errors: none. Cancellation: not applicable.
         public let previewPixelDimension: Int
 
+        /// Maximum estimated pixel bytes retained by the pipeline for decoded images.
+        /// The estimate is `bytesPerRow * height`; zero disables reuse.
+        /// Nodes and rendered layers can hold the same images beyond this cache's lifetime.
+        ///
+        /// Ownership: value. Isolation: actor. Errors: none. Cancellation: not applicable.
+        public let maximumDecodedCacheBytes: Int
+
+        private struct DecodedKey: Hashable, Sendable {
+            let digest: Data
+            let pixelDimension: Int
+        }
+
+        private struct DecodedEntry {
+            let image: LoadedImage
+            let bytes: Int
+            var lastUse: UInt64
+        }
+
+        private struct InFlight {
+            let id: UInt64
+            let cacheGeneration: UInt64
+            let task: Task<LoadedImage, Error>
+            var waiters: Set<UInt64>
+        }
+
+        private var decoded: [DecodedKey: DecodedEntry] = [:]
+        private var inFlight: [DecodedKey: InFlight] = [:]
+        private var decodedBytes = 0
+        private var clock: UInt64 = 0
+        private var nextFlightID: UInt64 = 0
+        private var nextWaiterID: UInt64 = 0
+        private var cacheGeneration: UInt64 = 0
+        private var decodeCount = 0
+
         /// Ownership: the caller owns the pipeline. Isolation: actor. Errors: none.
         /// Cancellation: not applicable.
         public init(
             cache: ImageCache = ImageCache(),
             maximumDecodedPixelDimension: Int? = nil,
-            previewPixelDimension: Int = 256
+            previewPixelDimension: Int = 256,
+            maximumDecodedCacheBytes: Int = 64 * 1024 * 1024
         ) {
             self.cache = cache
             self.maximumDecodedPixelDimension = maximumDecodedPixelDimension.map { max(1, $0) }
             self.previewPixelDimension = max(1, previewPixelDimension)
+            self.maximumDecodedCacheBytes = max(0, maximumDecodedCacheBytes)
         }
 
         func load(_ source: ImageSource, targetPixelDimension: Int) async throws -> LoadedImage {
@@ -64,6 +102,116 @@
             case let .data(value): data = value
             case let .url(url): data = try await cache.load(url)
             }
+            try Task.checkCancellation()
+
+            let limit =
+                maximumDecodedPixelDimension.map {
+                    min(max(1, targetPixelDimension), $0)
+                } ?? max(1, targetPixelDimension)
+            // A URL can be overwritten without changing its spelling. Hash the bytes that
+            // will actually be decoded so an old bitmap cannot stand in for new contents.
+            let key = DecodedKey(digest: Data(SHA256.hash(data: data)), pixelDimension: limit)
+            if var entry = decoded[key] {
+                clock &+= 1
+                entry.lastUse = clock
+                decoded[key] = entry
+                return entry.image
+            }
+
+            nextWaiterID &+= 1
+            let waiterID = nextWaiterID
+            let flight: InFlight
+            if var existing = inFlight[key] {
+                existing.waiters.insert(waiterID)
+                inFlight[key] = existing
+                flight = existing
+            } else {
+                nextFlightID &+= 1
+                let id = nextFlightID
+                // The pipeline serializes large decodes on its own executor so several
+                // simultaneous images do not create several full-sized bitmaps at once.
+                let task = Task { try Self.decode(data, pixelDimension: limit) }
+                flight = InFlight(
+                    id: id,
+                    cacheGeneration: cacheGeneration,
+                    task: task,
+                    waiters: [waiterID]
+                )
+                inFlight[key] = flight
+                decodeCount &+= 1
+            }
+
+            let flightID = flight.id
+            return try await withTaskCancellationHandler {
+                do {
+                    let image = try await flight.task.value
+                    try Task.checkCancellation()
+                    if inFlight[key]?.id == flightID {
+                        inFlight[key] = nil
+                        if flight.cacheGeneration == cacheGeneration {
+                            retain(image, for: key)
+                        }
+                    }
+                    return image
+                } catch {
+                    removeWaiter(waiterID, from: key, flightID: flightID)
+                    throw error
+                }
+            } onCancel: {
+                Task {
+                    await self.removeWaiter(waiterID, from: key, flightID: flightID)
+                }
+            }
+        }
+
+        /// Drops the pipeline's retained decoded images. Mounted nodes keep what they show.
+        ///
+        /// Ownership: releases the pipeline's references. Isolation: actor. Errors: none.
+        /// Cancellation: in-flight decoding continues for its callers but does not refill
+        /// the cache after this call.
+        public func clearDecodedCache() {
+            decoded.removeAll()
+            decodedBytes = 0
+            cacheGeneration &+= 1
+        }
+
+        func decodedCacheState() -> (entries: Int, bytes: Int, decodes: Int) {
+            (decoded.count, decodedBytes, decodeCount)
+        }
+
+        private func removeWaiter(_ id: UInt64, from key: DecodedKey, flightID: UInt64) {
+            guard var flight = inFlight[key], flight.id == flightID else { return }
+            flight.waiters.remove(id)
+            if flight.waiters.isEmpty {
+                flight.task.cancel()
+                inFlight[key] = nil
+            } else {
+                inFlight[key] = flight
+            }
+        }
+
+        private func retain(_ image: LoadedImage, for key: DecodedKey) {
+            guard maximumDecodedCacheBytes > 0 else { return }
+            let (bytes, overflow) = image.image.bytesPerRow.multipliedReportingOverflow(
+                by: image.image.height
+            )
+            guard !overflow, bytes > 0, bytes <= maximumDecodedCacheBytes else { return }
+
+            while decodedBytes > maximumDecodedCacheBytes - bytes,
+                let oldest = decoded.min(by: { $0.value.lastUse < $1.value.lastUse })
+            {
+                decoded.removeValue(forKey: oldest.key)
+                decodedBytes -= oldest.value.bytes
+            }
+            clock &+= 1
+            decoded[key] = DecodedEntry(image: image, bytes: bytes, lastUse: clock)
+            decodedBytes += bytes
+        }
+
+        private nonisolated static func decode(
+            _ data: Data,
+            pixelDimension: Int
+        ) throws -> LoadedImage {
             try Task.checkCancellation()
             guard let imageSource = CGImageSourceCreateWithData(data as CFData, nil),
                 CGImageSourceGetCount(imageSource) > 0
@@ -81,14 +229,10 @@
             let width = swapsAxes ? rawHeight : rawWidth
             let height = swapsAxes ? rawWidth : rawHeight
 
-            let limit =
-                maximumDecodedPixelDimension.map {
-                    min(max(1, targetPixelDimension), $0)
-                } ?? max(1, targetPixelDimension)
             let options: [String: Any] = [
                 kCGImageSourceCreateThumbnailFromImageAlways as String: true,
                 kCGImageSourceCreateThumbnailWithTransform as String: true,
-                kCGImageSourceThumbnailMaxPixelSize as String: limit,
+                kCGImageSourceThumbnailMaxPixelSize as String: pixelDimension,
                 kCGImageSourceShouldCacheImmediately as String: true,
             ]
             guard

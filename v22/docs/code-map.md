@@ -199,7 +199,7 @@
 | `LayerRenderer.sync`/`enter`/`attach`, `Level` | сверка слоёв явным стеком, в порядке рекурсии | дефект #141 |
 | `LayerDrawing`, `LayerRenderer.draw` | содержимое ноды — bitmap в `contents`, всегда прямо | дефект #129 |
 | `Text`, `TextMeasurer`, `TextLayout` | одна `TextLayout` для замера и рисования | правило Trellis: измерение и рисование — одна строка (дефект #37 Trellis) |
-| `Image`, `ImagePipeline` | статичная картинка как нода; превью, декодирование под рамку × масштаб и защита от запоздавшего результата | [11](11-image.md) |
+| `Image`, `ImagePipeline` | статичная картинка как нода; превью, декодирование под рамку × масштаб, общий ограниченный кэш bitmap и защита от запоздавшего результата | [11](11-image.md) |
 | `LayerDrawing.prepareDrawing`, `LayerRenderer.draw` | рендерер сообщает размер и масштаб до рисования, чтобы нода могла обновить детализацию | [11](11-image.md) |
 | `ImageCache`, `ImageCacheConfiguration` | дисковый кэш URL, предел/возраст, отдельные настройки метаданных и PNG-оптимизации | [11](11-image.md) |
 | `TextLayout(rightToLeft:)`, `Text.drawingRevision` с направлением хоста | `leading` у правого края в RTL; смена направления перерисовывает | [03](03-layout-api.md) |
