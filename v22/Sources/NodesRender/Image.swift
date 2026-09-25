@@ -507,6 +507,9 @@
         private var detailGeneration: UInt64 = 0
         private var requestedPixelDimension: Int?
         private var revision: UInt64 = 0
+        /// Set while the node is out of the tree after having been in it: nothing loads and
+        /// no pixels are held until it returns.
+        private var isSuspended = false
 
         /// Ownership: the caller owns the node. Isolation: MainActor. Errors: none.
         /// Cancellation: the load stops when the source changes or the node is released.
@@ -531,6 +534,36 @@
             detailTask?.cancel()
         }
 
+        /// Leaving the tree cancels loading and lets go of the decoded pixels; the original
+        /// size stays, so the layout does not jump when the node returns. Returning resumes an
+        /// unfinished first load; the renderer then asks for pixels for the frame, which the
+        /// pipeline's memory cache often still holds.
+        ///
+        /// Ownership: cancels or starts node-owned tasks. Isolation: MainActor. Errors: none.
+        /// Cancellation: leaving cancels both loads.
+        public override func mountedChanged(_ isMounted: Bool) {
+            if isMounted {
+                guard isSuspended else { return }
+
+                isSuspended = false
+                if source != nil, pixelSize == nil, phaseState.value == .loading {
+                    startFirstLoad()
+                }
+                host?.setNeedsRender()
+            } else {
+                isSuspended = true
+                loadTask?.cancel()
+                detailTask?.cancel()
+                loadTask = nil
+                detailTask = nil
+                detailGeneration &+= 1
+                requestedPixelDimension = nil
+                loaded = nil
+                decodedPixelSize = nil
+                revision &+= 1
+            }
+        }
+
         /// Tries the current source again after an initial failure or a changed resource.
         ///
         /// Ownership: starts a node-owned task. Isolation: MainActor. Errors: none.
@@ -547,7 +580,7 @@
         /// refinement leaves the last decoded image visible. Cancellation: a new request
         /// cancels the old one.
         public func prepareDrawing(size: CGSize, scale: Double) {
-            guard let source, let pixelSize,
+            guard !isSuspended, let source, let pixelSize,
                 size.width > 0, size.height > 0, scale > 0,
                 pixelSize.width > 0, pixelSize.height > 0
             else { return }
@@ -643,6 +676,12 @@
             phaseState.value = source == nil ? .empty : .loading
             setNeedsLayout()
             host?.setNeedsRender()
+            guard !isSuspended else { return }
+
+            startFirstLoad()
+        }
+
+        private func startFirstLoad() {
             guard let source else { return }
 
             let request = sourceGeneration

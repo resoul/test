@@ -464,6 +464,93 @@
         #expect(image.pixelSize != nil)
     }
 
+    /// Holds an image it shows or leaves out of its layout, as a screen keeps an optional
+    /// element in a property.
+    @MainActor
+    private final class Shelf: Node {
+        let image: Image
+        var shows = true {
+            didSet { setNeedsLayout() }
+        }
+
+        init(_ image: Image) {
+            self.image = image
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                if shows { image }
+            }
+            .alignItems(.start)
+        }
+    }
+
+    @Test @MainActor
+    func imageLeavingTheTreeReleasesPixelsAndGetsThemBack() async throws {
+        let pipeline = ImagePipeline(previewPixelDimension: 64)
+        let image = Image(
+            source: .data(try encodedImage(width: 400, height: 200)),
+            pipeline: pipeline
+        )
+        try await loaded(image)
+        let shelf = Shelf(image)
+        let host = NodeHost(root: shelf, size: LayoutSize(width: 600, height: 600))
+        defer { host.detach() }
+        let renderer = LayerRenderer()
+        host.layoutIfNeeded()
+        renderer.render(shelf, in: CALayer())
+        for _ in 0..<100 where image.decodedPixelSize?.width != 400 {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(image.decodedPixelSize?.width == 400)
+
+        shelf.shows = false
+        host.layoutIfNeeded()
+        #expect(!image.isMounted)
+        #expect(image.decodedPixelSize == nil)
+        #expect(image.pixelSize == LayoutSize(width: 400, height: 200))
+        #expect(image.phase == .ready)
+
+        shelf.shows = true
+        host.layoutIfNeeded()
+        renderer.render(shelf, in: CALayer())
+        for _ in 0..<100 where image.decodedPixelSize?.width != 400 {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(image.decodedPixelSize?.width == 400)
+    }
+
+    @Test @MainActor
+    func imageLeavingTheTreeCancelsItsDownloadAndResumesOnReturn() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = stubCache(directory)
+        let url = URL(string: "https://image-cache.test/away-slow.webp")!
+        let image = Image(source: .url(url), pipeline: ImagePipeline(cache: cache))
+        let shelf = Shelf(image)
+        let host = NodeHost(root: shelf, size: LayoutSize(width: 600, height: 600))
+        defer { host.detach() }
+        host.layoutIfNeeded()
+        while await cache.downloadWaiters(for: url) < 1 { await Task.yield() }
+
+        shelf.shows = false
+        host.layoutIfNeeded()
+        while await cache.downloadWaiters(for: url) > 0 { await Task.yield() }
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(image.phase == .loading)
+        #expect(image.pixelSize == nil)
+        #expect(try await cache.cachedData(for: url) == nil)
+
+        shelf.shows = true
+        host.layoutIfNeeded()
+        // Other tests' slow stub responses can hold the loading threads, so allow seconds.
+        for _ in 0..<1000 where image.phase != .ready {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(image.phase == .ready)
+        #expect(image.pixelSize == LayoutSize(width: 1, height: 1))
+    }
+
     /// Chromium 152 lays out a 400×200 `<img>` the same way in these containers.
     @Test @MainActor
     func imageKeepsItsProportionsForTheWidthItGets() async throws {

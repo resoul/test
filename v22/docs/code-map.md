@@ -209,6 +209,7 @@
 | `ImageCache.session`, `maximumDownloadBytes`, `DownloadLimit` | сеть через переданную сессию; предел тела ответа по счётчикам байтов задачи (асинхронный `URLSession` не отдаёт делегату задачи колбэки данных); дефект #159 | [11](11-image.md), [defects](defects.md) |
 | `ImageCache.removeAll`, `remove(for:)`, `removeExpired`, `entries`, `storedBytes` | только свои записи (имя — 64 hex); очистка; счётчик размера с пересчётом при лимите и раз в 64 записи; загрузка после `removeAll` не пишется; дефект #161 | [11](11-image.md), [defects](defects.md) |
 | `ImageCache.policyTag`, `fileURL`, `Naming` | имя записи — метка политик и отпечаток URL; лимит и срок — по записям своих политик в общей папке; прежние имена удаляются; дефект #162 | [11](11-image.md), [defects](defects.md) |
+| `Image.mountedChanged`, `isSuspended`, `startFirstLoad` | уход из дерева отменяет загрузки и отпускает bitmap, возвращение возобновляет; дефект #163 | [11](11-image.md), [defects](defects.md) |
 | `ImageCache.download(removalsAtStart:)` | счётчик `removeAll()` берётся при создании загрузки, не при старте её задачи; дефект #164 | [defects](defects.md) |
 | `ImageCache.load` (`processingFailed`) | формат, к которому политика метаданных неприменима, показывается без записи на диск; дефект #156 | [11](11-image.md), [defects](defects.md) |
 | `TextLayout(rightToLeft:)`, `Text.drawingRevision` с направлением хоста | `leading` у правого края в RTL; смена направления перерисовывает | [03](03-layout-api.md) |
@@ -230,6 +231,7 @@
 | `LayerRenderer.draw` — анимация `contents` | новое содержимое проявляется поверх прежнего при анимированном проходе | [03](03-layout-api.md) |
 | `Pass.shownOrigins`, `formerSuperlayers`, `shownOrigin(of:)` | нода, перешедшая к другому родителю, начинает анимацию там, где была показана | [03](03-layout-api.md) |
 | `LayerRenderer.settle`, `leaving` | ушедшая нода гаснет на месте; слой отпускается на первой отрисовке после конца анимации; вернувшаяся — тот же слой | без колбэков завершения CA |
+| `Node.mountedChanged`, `mount`, `unmount` | событие входа в дерево и выхода — только на переходах: `mount` зовётся на каждом проходе | дефект #163 |
 | `Node.isFocusable`, `isFocused`, `focusChanged` | фокусируема нода с `onTap` (или по флагу), целиком — без вложенных | как `UIButton` на tvOS |
 | `NodeHost.focusItems`, `focus`, `focusedNode`, `focusAnimation` | куда идёт фокус, решает система платформы; хост только узнаёт и сообщает ноде в анимации | правило Trellis: платформенный фокус на tvOS — единственный владелец |
 | `NodeHost.selectBegan/Ended` | кнопка Select пульта нажимает сфокусированную ноду | как `pointerDown/Up` |

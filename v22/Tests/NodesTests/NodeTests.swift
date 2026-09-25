@@ -1183,6 +1183,48 @@ func aDeepTreeOfNodesIsPreparedWithoutRunningOutOfStack() {
     #expect(prepared.ids(of: root.deepest).count == 1)
 }
 
+/// A leaf that records when it joins or leaves the tree.
+@MainActor
+private final class Witness: Node {
+    var changes: [Bool] = []
+
+    override var layoutContent: LeafContent? { .size(width: 10, height: 10) }
+
+    override func mountedChanged(_ isMounted: Bool) {
+        changes.append(isMounted)
+    }
+}
+
+@MainActor
+private final class Toggle: Node {
+    let witness = Witness()
+    let shows = State(true)
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.column) {
+            if shows.value { witness }
+        }
+    }
+}
+
+@Test @MainActor
+func mountedChangedRunsOnJoiningAndLeavingOnly() {
+    let toggle = Toggle()
+    let host = host(toggle)
+    host.size = LayoutSize(width: 300, height: 300)
+    host.layoutIfNeeded()
+    #expect(toggle.witness.changes == [true])
+
+    toggle.shows.value = false
+    host.layoutIfNeeded()
+    toggle.shows.value = true
+    host.layoutIfNeeded()
+    #expect(toggle.witness.changes == [true, false, true])
+
+    host.detach()
+    #expect(toggle.witness.changes == [true, false, true, false])
+}
+
 @Test @MainActor
 func walksOfAVeryDeepTreeDoNotRunOutOfStack() {
     // Mounted by hand: no layout goes this deep, but the walks must not depend on that.
