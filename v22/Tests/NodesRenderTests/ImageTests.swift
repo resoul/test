@@ -62,6 +62,105 @@
     }
 
     @Test
+    func evictionAndRemovalLeaveOtherFilesInTheDirectory() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let image = try encodedImage(width: 20, height: 20)
+        let cache = ImageCache(
+            configuration: ImageCacheConfiguration(
+                directory: directory,
+                maximumBytes: image.count
+            )
+        )
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let notes = directory.appendingPathComponent("notes.txt")
+        try Data(repeating: 1, count: image.count * 4).write(to: notes)
+
+        let first = URL(string: "https://example.test/first.png")!
+        let second = URL(string: "https://example.test/second.png")!
+        try await cache.store(image, for: first)
+        try await cache.store(image, for: second)
+        #expect(try await cache.cachedData(for: first) == nil)
+        #expect(try await cache.cachedData(for: second) == image)
+
+        try await cache.removeAll()
+        #expect(try await cache.cachedData(for: second) == nil)
+        #expect(FileManager.default.fileExists(atPath: notes.path))
+    }
+
+    @Test
+    func removingOneURLKeepsTheOthers() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let image = try encodedImage(width: 8, height: 8)
+        let cache = ImageCache(configuration: ImageCacheConfiguration(directory: directory))
+        let kept = URL(string: "https://example.test/kept.png")!
+        let removed = URL(string: "https://example.test/removed.png")!
+        try await cache.store(image, for: kept)
+        try await cache.store(image, for: removed)
+        try await cache.remove(for: removed)
+        try await cache.remove(for: removed)
+        #expect(try await cache.cachedData(for: removed) == nil)
+        #expect(try await cache.cachedData(for: kept) == image)
+    }
+
+    @Test
+    func expiredEntriesAreRemovedWithoutBeingRead() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let image = try encodedImage(width: 8, height: 8)
+        let cache = ImageCache(
+            configuration: ImageCacheConfiguration(directory: directory, maximumAge: 0.2)
+        )
+        try await cache.store(image, for: URL(string: "https://example.test/old.png")!)
+        try await Task.sleep(for: .milliseconds(300))
+        let fresh = URL(string: "https://example.test/fresh.png")!
+        try await cache.store(image, for: fresh)
+
+        try await cache.removeExpired()
+        let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        #expect(names.count == 1)
+        #expect(try await cache.cachedData(for: fresh) == image)
+    }
+
+    @Test
+    func writesDoNotScanTheDirectoryEachTime() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let image = try encodedImage(width: 8, height: 8)
+        let cache = ImageCache(
+            configuration: ImageCacheConfiguration(
+                directory: directory,
+                maximumBytes: image.count * 10
+            )
+        )
+        for index in 0..<10 {
+            try await cache.store(image, for: URL(string: "https://example.test/\(index).png")!)
+        }
+        #expect(await cache.directoryScanCount() == 1)
+
+        // Past the limit the running total asks for a recount, which evicts.
+        try await cache.store(image, for: URL(string: "https://example.test/10.png")!)
+        #expect(await cache.directoryScanCount() == 2)
+        let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        #expect(names.count == 10)
+    }
+
+    @Test
+    func downloadFinishingAfterRemoveAllIsNotStored() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = stubCache(directory)
+        let url = URL(string: "https://image-cache.test/sign-out-slow.webp")!
+        let loading = Task { try await cache.load(url) }
+        while await cache.downloadWaiters(for: url) < 1 { await Task.yield() }
+
+        try await cache.removeAll()
+        #expect(try await loading.value == webP)
+        #expect(try await cache.cachedData(for: url) == nil)
+    }
+
+    @Test
     func removingLocationMetadataPreservesEncodedImagePixels() async throws {
         let directory = temporaryCache()
         defer { try? FileManager.default.removeItem(at: directory) }

@@ -95,6 +95,14 @@
 
         private var downloads: [URL: Download] = [:]
         private var nextID: UInt64 = 0
+        /// Bytes of this cache's entries as last counted plus the writes since, or `nil`
+        /// before the first count.
+        private var storedBytes: Int?
+        private var writesSinceCount = 0
+        private var directoryScans = 0
+        /// Grows with every removal of all entries; a download started before one does not
+        /// write its result after it.
+        private var removals: UInt64 = 0
 
         /// Ownership: the caller owns the cache and the session. Isolation: actor. Errors: none.
         /// Cancellation: not applicable.
@@ -179,25 +187,31 @@
             return ImageFileStamp(size: size, created: created, modified: nil)
         }
 
-        /// Reads a disk entry without fetching its URL.
+        /// Reads a disk entry without fetching its URL. An expired entry is deleted.
         ///
-        /// Ownership: returns data. Isolation: actor. Errors: file errors. Cancellation: none.
+        /// Ownership: returns data. Isolation: actor. Errors: none thrown today; a missing or
+        /// unreadable entry is a miss. Cancellation: none.
         public func cachedData(for url: URL) throws -> Data? {
             let file = fileURL(for: url)
-            guard FileManager.default.fileExists(atPath: file.path) else { return nil }
-            let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
-            if let date = attributes[.creationDate] as? Date,
-                Date().timeIntervalSince(date) > max(configuration.maximumAge, 0)
-            {
-                try FileManager.default.removeItem(at: file)
+            let manager = FileManager.default
+            // Another cache sharing the directory can delete the entry at any moment, so a
+            // missing file is a miss rather than an error.
+            guard let attributes = try? manager.attributesOfItem(atPath: file.path) else {
                 return nil
             }
 
-            let data = try Data(contentsOf: file)
-            try FileManager.default.setAttributes(
-                [.modificationDate: Date()],
-                ofItemAtPath: file.path
-            )
+            if let date = attributes[.creationDate] as? Date,
+                Date().timeIntervalSince(date) > max(configuration.maximumAge, 0)
+            {
+                try? manager.removeItem(at: file)
+                let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
+                storedBytes = storedBytes.map { max(0, $0 - size) }
+                return nil
+            }
+
+            guard let data = try? Data(contentsOf: file) else { return nil }
+
+            try? manager.setAttributes([.modificationDate: Date()], ofItemAtPath: file.path)
             return data
         }
 
@@ -217,9 +231,82 @@
                 at: configuration.directory,
                 withIntermediateDirectories: true
             )
-            try prepared.write(to: fileURL(for: url), options: .atomic)
-            try evictIfNeeded()
+            let file = fileURL(for: url)
+            let replaced =
+                (try? manager.attributesOfItem(atPath: file.path))
+                .flatMap { ($0[.size] as? NSNumber)?.intValue } ?? 0
+            try prepared.write(to: file, options: .atomic)
+            storedBytes = storedBytes.map { $0 + prepared.count - replaced }
+            writesSinceCount += 1
+            // The running total spares a directory scan on each write. It is recounted when
+            // it passes the limit, and every 64 writes, since another cache or process sharing
+            // the directory changes it unseen.
+            if storedBytes.map({ $0 > configuration.maximumBytes }) ?? true
+                || writesSinceCount >= 64
+            {
+                try removeExpired()
+            }
         }
+
+        /// Deletes every entry in the directory, whatever policies wrote it; other files there
+        /// are left alone. A download already running still returns its image but does not
+        /// store it. Decoded images held by pipelines and nodes are not affected.
+        ///
+        /// Ownership: deletes files in the cache directory. Isolation: actor. Errors: file
+        /// errors. Cancellation: none.
+        public func removeAll() throws {
+            removals &+= 1
+            for entry in try entries() {
+                try FileManager.default.removeItem(at: entry.url)
+            }
+            storedBytes = 0
+            writesSinceCount = 0
+        }
+
+        /// Deletes the entry for `url` under this cache's policies. Entries written for the
+        /// same URL under other policies stay.
+        ///
+        /// Ownership: deletes one file. Isolation: actor. Errors: file errors other than a
+        /// missing entry. Cancellation: none.
+        public func remove(for url: URL) throws {
+            let file = fileURL(for: url)
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: file.path)
+            else { return }
+
+            try FileManager.default.removeItem(at: file)
+            let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
+            storedBytes = storedBytes.map { max(0, $0 - size) }
+        }
+
+        /// Deletes expired entries, then the least recently used ones while the total is over
+        /// `maximumBytes`. Writes do this as needed; call it at launch to reclaim space from
+        /// entries that are no longer read.
+        ///
+        /// Ownership: deletes files in the cache directory. Isolation: actor. Errors: file
+        /// errors. Cancellation: none.
+        public func removeExpired() throws {
+            let manager = FileManager.default
+            let now = Date()
+            var kept: [Entry] = []
+            for entry in try entries() {
+                if now.timeIntervalSince(entry.created) > max(configuration.maximumAge, 0) {
+                    try manager.removeItem(at: entry.url)
+                } else {
+                    kept.append(entry)
+                }
+            }
+
+            var total = kept.reduce(0) { $0 + $1.size }
+            for entry in kept.sorted(by: { $0.used < $1.used })
+            where total > configuration.maximumBytes {
+                try manager.removeItem(at: entry.url)
+                total -= entry.size
+            }
+            storedBytes = total
+            writesSinceCount = 0
+        }
+
+        func directoryScanCount() -> Int { directoryScans }
 
         func downloadWaiters(for url: URL) -> Int {
             downloads[url]?.waiters.count ?? 0
@@ -229,11 +316,16 @@
             // Later loads find the file on disk, or start over after a failure.
             defer { if downloads[url]?.id == id { downloads[url] = nil } }
 
+            let removalsAtStart = removals
             let (data, response) = try await fetch(url)
             try Task.checkCancellation()
             guard let response = response as? HTTPURLResponse,
                 (200...299).contains(response.statusCode)
             else { throw ImageCacheError.invalidResponse }
+
+            // After a removal of all entries, such as at sign-out, nothing fetched before it
+            // is written back.
+            guard removals == removalsAtStart else { return data }
 
             do {
                 try store(data, for: url)
@@ -332,27 +424,46 @@
             return result
         }
 
-        private func evictIfNeeded() throws {
+        private struct Entry {
+            let url: URL
+            let size: Int
+            let created: Date
+            let used: Date
+        }
+
+        /// The cache's own files in the directory: those named like an entry. Anything else
+        /// placed there is neither counted nor deleted.
+        private func entries() throws -> [Entry] {
+            directoryScans += 1
             let manager = FileManager.default
-            let files = try manager.contentsOfDirectory(
+            guard manager.fileExists(atPath: configuration.directory.path) else { return [] }
+
+            let keys: [URLResourceKey] = [
+                .fileSizeKey, .creationDateKey, .contentModificationDateKey, .isRegularFileKey,
+            ]
+            var result: [Entry] = []
+            for file in try manager.contentsOfDirectory(
                 at: configuration.directory,
-                includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey]
-            )
-            var entries: [(url: URL, size: Int, date: Date)] = []
-            var total = 0
-            for file in files {
-                let values = try file.resourceValues(forKeys: [
-                    .fileSizeKey, .contentModificationDateKey,
-                ])
-                let size = values.fileSize ?? 0
-                total += size
-                entries.append((file, size, values.contentModificationDate ?? .distantPast))
+                includingPropertiesForKeys: keys
+            ) where Self.isEntryName(file.lastPathComponent) {
+                let values = try file.resourceValues(forKeys: Set(keys))
+                guard values.isRegularFile == true else { continue }
+
+                result.append(
+                    Entry(
+                        url: file,
+                        size: values.fileSize ?? 0,
+                        created: values.creationDate ?? .distantPast,
+                        used: values.contentModificationDate ?? .distantPast
+                    )
+                )
             }
-            for entry in entries.sorted(by: { $0.date < $1.date })
-            where total > configuration.maximumBytes {
-                try manager.removeItem(at: entry.url)
-                total -= entry.size
-            }
+            return result
+        }
+
+        private static func isEntryName(_ name: String) -> Bool {
+            name.utf8.count == 64
+                && name.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
         }
     }
 
