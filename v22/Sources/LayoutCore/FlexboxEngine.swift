@@ -507,7 +507,7 @@ struct Solver {
             known: known,
             parent: parent,
             contentOnly: contentOnly,
-            transferRatio: false
+            ratio: .none
         )
         // Measured content (text) gets its width first — the known width, or the constraint
         // on the width — and its height from that width.
@@ -580,7 +580,7 @@ struct Solver {
     /// A size that follows from the aspect ratio, raised to the content size when the axis has
     /// an automatic minimum (capped by the maximum), then clamped as usual.
     @inline(never)
-    private func ratioDependent(
+    func ratioDependent(
         _ value: Double,
         content: Double,
         minimum: Double,
@@ -601,7 +601,7 @@ struct Solver {
         known: OptionalSize,
         parent: OptionalSize,
         contentOnly: Axis? = nil,
-        transferRatio: Bool = true,
+        ratio: RatioTransfer = .size,
         definite: DefiniteAxes = .both
     ) -> OwnSize {
         ownSize(
@@ -610,7 +610,7 @@ struct Solver {
             known: known,
             parent: parent,
             contentOnly: contentOnly,
-            transferRatio: transferRatio,
+            ratio: ratio,
             definite: definite
         )
     }
@@ -623,7 +623,7 @@ struct Solver {
         known: OptionalSize,
         parent: OptionalSize,
         contentOnly: Axis? = nil,
-        transferRatio: Bool = true,
+        ratio: RatioTransfer = .size,
         definite: DefiniteAxes = .both
     ) -> OwnSize {
         let padding = style.padding.physical(nodes[index].direction)
@@ -647,16 +647,25 @@ struct Solver {
         // containing block. Only a height can be known without being definite.
         var definiteWidth = known.width ?? specifiedWidth
         var definiteHeight = known.height.map { definite.height ? $0 : nil } ?? specifiedHeight
-        if transferRatio, let ratio = style.aspectRatio, ratio > 0 {
+        if ratio != .none, let aspectRatio = style.aspectRatio, aspectRatio > 0 {
             if let base = width, height == nil {
-                height = clamp(base / ratio, minHeight, maxHeight, paddingHeight)
+                if ratio == .size {
+                    height = clamp(base / aspectRatio, minHeight, maxHeight, paddingHeight)
+                }
                 definiteHeight = definiteWidth.map {
-                    clamp($0 / ratio, minHeight, maxHeight, paddingHeight)
+                    clamp($0 / aspectRatio, minHeight, maxHeight, paddingHeight)
                 }
             } else if let base = height, width == nil {
-                width = clamp(base * ratio, minWidth, maxWidth, paddingWidth)
-                definiteWidth = definiteHeight.map {
-                    clamp($0 * ratio, minWidth, maxWidth, paddingWidth)
+                if ratio == .size {
+                    width = clamp(base * aspectRatio, minWidth, maxWidth, paddingWidth)
+                }
+                // A content width is an intrinsic width: percentages of the width stay cyclic
+                // while it is measured. A content height is a layout at a known width, where
+                // the height the ratio gives is definite.
+                if !ignoreWidth {
+                    definiteWidth = definiteHeight.map {
+                        clamp($0 * aspectRatio, minWidth, maxWidth, paddingWidth)
+                    }
                 }
             }
         }
@@ -675,6 +684,16 @@ struct Solver {
             padding: padding
         )
     }
+}
+
+/// How `ownSize` carries a known side over to the other one through the aspect ratio.
+enum RatioTransfer {
+    /// The other side's size, and its definite size when the known side is definite.
+    case size
+    /// Only the definite size — the base for percentages and stretching: the size itself is
+    /// left to the content.
+    case definiteSize
+    case none
 }
 
 struct OwnSize {

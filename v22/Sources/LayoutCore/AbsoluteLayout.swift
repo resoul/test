@@ -39,6 +39,14 @@ extension Solver {
                 right: margin.right.points
             )
             let insets = style.insets.physical(nodes[child].direction)
+            // CSS Align §5.1 as Chromium has it: pinned by `top` and `bottom`, a box with an
+            // `align-self` other than `auto`/`stretch` is not stretched between them but sized
+            // by its content and aligned in the space they leave — vertically in any flex
+            // direction, `flex-start` at the top even in `wrap-reverse`.
+            let verticalAlignment: AlignSelf? =
+                insets.top != nil && insets.bottom != nil
+                    && style.alignSelf != .auto && style.alignSelf != .stretch
+                ? style.alignSelf : nil
 
             // Size: specified, else stretched between two insets, else shrink-to-fit.
             var width = childOwn.width
@@ -52,7 +60,9 @@ extension Solver {
             }
 
             var height = childOwn.height
-            if height == nil, let top = insets.top, let bottom = insets.bottom {
+            if height == nil, verticalAlignment == nil, let top = insets.top,
+                let bottom = insets.bottom
+            {
                 height = clamp(
                     size.height - top - bottom - margins.top - margins.bottom,
                     childOwn.minHeight,
@@ -61,24 +71,8 @@ extension Solver {
                 )
             }
 
-            if let ratio = style.aspectRatio, ratio > 0 {
-                if let definite = width, height == nil {
-                    height = clamp(
-                        definite / ratio,
-                        childOwn.minHeight,
-                        childOwn.maxHeight,
-                        childOwn.paddingHeight
-                    )
-                } else if let definite = height, width == nil {
-                    width = clamp(
-                        definite * ratio,
-                        childOwn.minWidth,
-                        childOwn.maxWidth,
-                        childOwn.paddingWidth
-                    )
-                }
-            }
-
+            // With an aspect ratio a missing side is left to the measurement below, which
+            // transfers it from the other one within the content's automatic minimum.
             if width == nil || height == nil {
                 let availableWidth =
                     size.width - (insets.left ?? 0) - (insets.right ?? 0) - margins.left
@@ -104,7 +98,8 @@ extension Solver {
             // A height is definite when it is specified or pinned by both insets; a
             // shrink-to-fit height comes from the content, like an auto height anywhere.
             let heightIsDefinite =
-                childOwn.height != nil || (insets.top != nil && insets.bottom != nil)
+                childOwn.height != nil
+                || (insets.top != nil && insets.bottom != nil && verticalAlignment == nil)
 
             // Auto margins of a box pinned by both insets take what is left, even when that is
             // negative; horizontally a negative remainder goes to the end margin.
@@ -162,7 +157,18 @@ extension Solver {
             }
 
             let y: Double
-            if let top = insets.top {
+            if let alignment = verticalAlignment, let top = insets.top, let bottom = insets.bottom,
+                !margin.top.isAuto, !margin.bottom.isAuto
+            {
+                let start = top + margins.top
+                let end = size.height - bottom - margins.bottom - childSize.height
+                y =
+                    switch alignment {
+                    case .end: end
+                    case .center: (start + end) / 2
+                    case .auto, .stretch, .start, .baseline: start
+                    }
+            } else if let top = insets.top {
                 y = top + margins.top
             } else if let bottom = insets.bottom {
                 y = size.height - bottom - margins.bottom - childSize.height

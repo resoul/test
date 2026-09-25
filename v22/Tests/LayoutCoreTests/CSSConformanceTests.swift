@@ -445,6 +445,22 @@ private func report(_ fixture: Fixture, _ outcomes: [(name: String, outcome: Out
     return lines.joined(separator: "\n")
 }
 
+/// Lays out every case of the fixture at `CSS_CONFORMANCE_LAB` and writes each outcome next to
+/// it (`<file>.engine.json`): a way to check trees reduced from a failing case.
+@Test
+func cssFlexboxLab() throws {
+    guard let path = ProcessInfo.processInfo.environment["CSS_CONFORMANCE_LAB"] else { return }
+
+    let url = URL(fileURLWithPath: path)
+    let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url))
+    let outcomes = Dictionary(
+        uniqueKeysWithValues: fixture.cases.map { ($0.name, run($0).detail ?? "pass") }
+    )
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    try encoder.encode(outcomes).write(to: url.appendingPathExtension("engine.json"))
+}
+
 @Test
 func cssFlexboxConformance() throws {
     // Hand-written cases, then seeded random trees; both rendered by the same browser.

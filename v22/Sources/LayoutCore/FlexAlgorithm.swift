@@ -49,7 +49,9 @@ struct FlexItem {
     /// percentage.
     let basisIsDefinite: Bool
     /// Whether the item's flexed main size counts as definite for its own children (§9.8):
-    /// yes when the container's main size is definite or the item specifies its main size.
+    /// yes when the container's main size is definite or the item specifies its main size or
+    /// its flex basis. The last one is Chromium's reading: a column item with `flex-basis: 0`
+    /// in a content-sized column resolves its children's percentages against its flexed height.
     let mainIsDefinite: Bool
 
     var basis = 0.0
@@ -183,13 +185,14 @@ extension Solver {
         available: AvailableSize,
         mode: RunMode,
         contentOnly: Axis? = nil,
-        definite: DefiniteAxes = .both
+        definite: DefiniteAxes = .both,
+        ratio: RatioTransfer = .size
     ) throws -> LayoutSize {
         try context.checkpoint()
         try checkStack()
         let reportsBaseline = wantsBaseline
         wantsBaseline = false
-        if nodes[index].hasAspectRatio,
+        if ratio == .size, nodes[index].hasAspectRatio,
             let size = try ratioLayout(
                 index,
                 known: known,
@@ -210,7 +213,8 @@ extension Solver {
             parent: parent,
             available: available,
             contentOnly: contentOnly,
-            definite: definite
+            definite: definite,
+            ratio: ratio
         )
 
         let children = flowChildren(run)
@@ -222,13 +226,24 @@ extension Solver {
             try measureItem(&items, items.count - 1, axes: run.axes)
         }
 
-        // §9.3: collect items into flex lines.
+        // §9.3: collect items into flex lines — at the inner main size, or where it is not
+        // definite, at the space a row is offered. A column is offered no height: it breaks
+        // at a definite height it does not take yet (the aspect ratio's, while its content is
+        // measured), else at its maximum height, and without one it is a single line (as in
+        // Chromium).
+        let lineLimit =
+            run.innerMainDefinite
+            ?? (run.axes.isRow
+                ? run.itemsAvailableMain.definiteValue
+                : run.itemParent.height
+                    ?? (run.maxMain.isFinite ? max(0, run.maxMain - run.axes.paddingMain) : nil))
         var lines = collectLines(
             items,
             wrap: run.wrap,
             gap: run.axes.mainGap,
-            limit: run.innerMainDefinite ?? run.itemsAvailableMain.definiteValue,
-            minContent: run.innerMainDefinite == nil && run.itemsAvailableMain == .minContent
+            limit: lineLimit,
+            minContent: run.innerMainDefinite == nil && run.axes.isRow
+                && run.itemsAvailableMain == .minContent
         )
         let innerMain = try innerMainSize(run, items: items, lines: lines)
 
@@ -289,7 +304,8 @@ extension Solver {
         parent: OptionalSize,
         available: AvailableSize,
         contentOnly: Axis?,
-        definite: DefiniteAxes
+        definite: DefiniteAxes,
+        ratio: RatioTransfer
     ) -> ContainerRun {
         let style = self.style(index, parentWidth: parent.width)
         let own = ownSize(
@@ -298,6 +314,7 @@ extension Solver {
             known: known,
             parent: parent,
             contentOnly: contentOnly,
+            ratio: ratio,
             definite: definite
         )
         let axes = ContainerAxes(style: style, direction: nodes[index].direction, own: own)
@@ -321,7 +338,9 @@ extension Solver {
             own: own,
             axes: axes,
             styleWrap: style.wrap,
-            wrap: !isRow && innerCrossDefinite == nil ? .noWrap : style.wrap,
+            // Under a min-content width a column is as wide as its widest item, not its lines
+            // side by side (Chromium): it is measured as one line.
+            wrap: !isRow && available.width == .minContent ? .noWrap : style.wrap,
             justifyContent: style.justifyContent,
             alignItems: style.alignItems,
             alignContent: style.alignContent,
@@ -340,9 +359,13 @@ extension Solver {
         )
     }
 
-    /// A container with an aspect ratio and neither side given: the width comes from the
-    /// content (within min/max width), and the height follows from it through the ratio.
-    /// `nil` when a side is given, or the ratio does not apply.
+    /// A container with an aspect ratio and no height: the width is known, specified or comes
+    /// from the content (within min/max width), and the height follows from it through the
+    /// ratio — but, with an `auto` minimum height, never below the content's height (CSS Sizing 4
+    /// §5.2.1), as for a leaf. The content is measured as Chromium does it: against the ratio's
+    /// height, so a stretched child takes that height instead of its own content's and only
+    /// children sized otherwise can raise it. `nil` when the height is given, or the ratio does
+    /// not apply.
     @inline(never)
     private mutating func ratioLayout(
         _ index: Int,
@@ -361,32 +384,187 @@ extension Solver {
             known: known,
             parent: parent,
             contentOnly: contentOnly,
+            ratio: .none,
             definite: definite
         )
-        guard let ratio = style.aspectRatio, ratio > 0, own.width == nil, own.height == nil,
-            contentOnly != .horizontal
-        else { return nil }
+        guard let ratio = style.aspectRatio, ratio > 0 else { return nil }
 
-        let content = try compute(
-            index,
-            known: known,
-            parent: parent,
-            available: available,
-            mode: .size,
-            contentOnly: .horizontal,
-            definite: definite
-        )
-        let width = clamp(content.width, own.minWidth, own.maxWidth, own.paddingWidth)
+        if let axis = contentOnly {
+            return try ratioContent(
+                index,
+                axis: axis,
+                ratio: ratio,
+                own: own,
+                known: known,
+                parent: parent,
+                available: available,
+                mode: mode,
+                definite: definite,
+                reportsBaseline: reportsBaseline
+            )
+        }
+
+        if let height = own.height {
+            // The width follows from the height — but, with an `auto` minimum width, never
+            // below the content's min-content width.
+            guard own.width == nil, style.minWidth == .auto else { return nil }
+
+            let minContent = try compute(
+                index,
+                known: known,
+                parent: parent,
+                available: AvailableSize(width: .minContent, height: available.height),
+                mode: .size,
+                contentOnly: .horizontal,
+                definite: definite
+            )
+            let width = ratioDependent(
+                height * ratio,
+                content: minContent.width,
+                minimum: own.minWidth,
+                maximum: own.maxWidth,
+                floor: own.paddingWidth,
+                automaticMinimum: true
+            )
+            wantsBaseline = reportsBaseline
+            return try flexLayout(
+                index,
+                known: OptionalSize(width: width, height: known.height),
+                parent: parent,
+                available: available,
+                mode: mode,
+                definite: DefiniteAxes(width: true, height: definite.height)
+            )
+        }
+
+        let automaticMinimum = style.minHeight == .auto
+        // Without an automatic minimum a known width leaves the transfer to `ownSize`.
+        guard own.width == nil || automaticMinimum else { return nil }
+
+        var width = own.width
+        if width == nil {
+            let content = try compute(
+                index,
+                known: known,
+                parent: parent,
+                available: available,
+                mode: .size,
+                contentOnly: .horizontal,
+                definite: definite
+            )
+            // Min/max heights limit the width too, through the ratio (CSS Sizing 4 §5.2).
+            width = clamp(
+                max(own.minHeight * ratio, min(own.maxHeight * ratio, content.width)),
+                own.minWidth,
+                own.maxWidth,
+                own.paddingWidth
+            )
+        }
+
+        var height: Double?
+        if automaticMinimum, let width {
+            let content = try flexLayout(
+                index,
+                known: OptionalSize(width: width, height: nil),
+                parent: parent,
+                available: available,
+                mode: .size,
+                definite: DefiniteAxes(width: true, height: definite.height),
+                ratio: .definiteSize
+            )
+            height = ratioDependent(
+                width / ratio,
+                content: content.height,
+                minimum: own.minHeight,
+                maximum: own.maxHeight,
+                floor: own.paddingHeight,
+                automaticMinimum: true
+            )
+        }
+
         wantsBaseline = reportsBaseline
         return try flexLayout(
             index,
-            known: OptionalSize(width: width, height: known.height),
+            known: OptionalSize(width: width, height: height ?? known.height),
             parent: parent,
             available: available,
             mode: mode,
             contentOnly: contentOnly,
-            definite: DefiniteAxes(width: true, height: definite.height)
+            definite: DefiniteAxes(width: true, height: height != nil || definite.height)
         )
+    }
+
+    /// The content size along `axis` of a container with an aspect ratio whose other side is
+    /// known: the content's size, but not below the size the ratio transfers from the other
+    /// side — as Chromium measures it, a transferred size is a floor even for the content
+    /// size, and the content can raise it. Without a known width the height is transferred
+    /// from the content's width; without a known height the content's width is limited by the
+    /// min/max heights through the ratio.
+    @inline(never)
+    private mutating func ratioContent(
+        _ index: Int,
+        axis: Axis,
+        ratio: Double,
+        own: OwnSize,
+        known: OptionalSize,
+        parent: OptionalSize,
+        available: AvailableSize,
+        mode: RunMode,
+        definite: DefiniteAxes,
+        reportsBaseline: Bool
+    ) throws -> LayoutSize? {
+        let transferred: Double
+        // Min/max heights limit the content width through the ratio as well.
+        var limit = Double.infinity
+        var measuredKnown = known
+        switch axis {
+        case .horizontal:
+            if let height = own.height {
+                transferred = max(own.paddingWidth, height * ratio)
+            } else {
+                transferred = own.minHeight * ratio
+                limit = max(transferred, own.maxHeight * ratio)
+            }
+        case .vertical:
+            var width = own.width
+            if width == nil {
+                let content = try compute(
+                    index,
+                    known: known,
+                    parent: parent,
+                    available: available,
+                    mode: .size,
+                    contentOnly: .horizontal,
+                    definite: definite
+                )
+                width = clamp(content.width, own.minWidth, own.maxWidth, own.paddingWidth)
+            }
+            transferred = max(own.paddingHeight, (width ?? 0) / ratio)
+            // The width is settled, so the height it transfers is the one stretched children
+            // take while the content is measured.
+            measuredKnown.width = width
+        }
+
+        wantsBaseline = reportsBaseline
+        let content = try flexLayout(
+            index,
+            known: measuredKnown,
+            parent: parent,
+            available: available,
+            mode: mode,
+            contentOnly: axis,
+            definite: definite,
+            ratio: .definiteSize
+        )
+        switch axis {
+        case .horizontal:
+            return LayoutSize(
+                width: max(transferred, min(limit, content.width)),
+                height: content.height
+            )
+        case .vertical:
+            return LayoutSize(width: content.width, height: max(content.height, transferred))
+        }
     }
 
     /// §9.1, §5.4: in-flow children in `order`, document order breaking ties.
@@ -491,6 +669,16 @@ extension Solver {
                 continue
             }
 
+            if run.singleLine, items[itemIndex].stretches,
+                let cross = items[itemIndex].crossForBasis
+            {
+                // The container's own cross size is still open, but a definite one is at hand
+                // (the aspect ratio's, while its content is measured): Chromium stretches the
+                // item to it rather than measuring it.
+                items[itemIndex].hypotheticalCross = cross
+                continue
+            }
+
             items[itemIndex].hypotheticalCross = try hypotheticalCross(
                 items[itemIndex],
                 axes: run.axes,
@@ -570,16 +758,19 @@ extension Solver {
         }
 
         // §9.4 step 15 (applied early: stretching needs it): the container's inner cross size.
+        // A column's lines side by side are its max-content width, its widest item the
+        // min-content one; in a definite space it takes the fit-content width between them.
         let crossGaps = axes.crossGap * Double(max(0, lines.count - 1))
+        var crossContent = lines.reduce(0) { $0 + $1.crossSize } + crossGaps
+        if !run.isRow, !singleLine, case let .definite(space) = run.itemsAvailableCross {
+            let widest = items.reduce(0) { max($0, $1.hypotheticalCross + $1.marginsCross) }
+            crossContent = min(crossContent, max(widest, space))
+        }
         let innerCross =
             run.innerCrossDefinite
             ?? max(
                 0,
-                clamp(
-                    lines.reduce(0) { $0 + $1.crossSize } + crossGaps + axes.paddingCross,
-                    run.minCross,
-                    run.maxCross
-                )
+                clamp(crossContent + axes.paddingCross, run.minCross, run.maxCross)
                     - axes.paddingCross
             )
 
@@ -778,7 +969,7 @@ extension Solver {
             style: style,
             known: OptionalSize(),
             parent: itemParent,
-            transferRatio: false
+            ratio: .none
         )
         let margin = style.margin.physical(nodes[child].direction)
         let margins = Physical(
@@ -827,6 +1018,8 @@ extension Solver {
         }
 
         let ratio = style.aspectRatio.flatMap { $0 > 0 ? (isRow ? $0 : 1 / $0) : nil }
+        let basisIsDefinite =
+            style.basis.resolve(isRow ? itemParent.width : itemParent.height) != nil
         var item = FlexItem(
             node: child,
             marginMainStart: axes.mainStart(margins),
@@ -851,9 +1044,9 @@ extension Solver {
             stretches: stretches,
             ratio: ratio,
             crossForBasis: crossForBasis,
-            basisIsDefinite: style.basis.resolve(isRow ? itemParent.width : itemParent.height)
-                != nil,
-            mainIsDefinite: sizeMain != nil || (isRow ? itemParent.width : itemParent.height) != nil
+            basisIsDefinite: basisIsDefinite,
+            mainIsDefinite: sizeMain != nil || basisIsDefinite
+                || (isRow ? itemParent.width : itemParent.height) != nil
         )
         let measureDefinite = DefiniteAxes(main: false, cross: crossForBasis != nil, isRow: isRow)
 
