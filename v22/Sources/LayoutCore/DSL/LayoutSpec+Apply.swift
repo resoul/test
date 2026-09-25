@@ -175,6 +175,9 @@ public struct PreparedLayout {
             if let frame {
                 entry.element.applyLayoutFrame(frame)
             }
+            entry.element.applyLayoutSticky(
+                sticky(of: entry, placed: placed, result: result, rect: rect, absolute: absolute)
+            )
             placements.append(
                 LayoutPlacement(
                     element: entry.element,
@@ -198,6 +201,37 @@ public struct PreparedLayout {
             }
         }
         return placements
+    }
+
+    /// Where a sticky element keeps itself: its insets, and its flex container's frame in
+    /// the coordinates of the element's frame — those of the element owning it.
+    private func sticky(
+        of entry: LayoutTree.Entry,
+        placed: LayoutRect?,
+        result: LayoutResult,
+        rect: LayoutRect,
+        absolute: [LayoutRect?]
+    ) -> StickyPosition? {
+        guard let insets = entry.sticky, placed != nil else { return nil }
+
+        let origin = entry.container.flatMap { absolute[$0]?.origin } ?? .zero
+        // Without a container (the spec's own root) nothing bounds it: far beyond any scroll.
+        var bounds = LayoutRect(x: -1e12, y: -1e12, width: 2e12, height: 2e12)
+        if let parent = entry.flexParent, let frame = result.frame(for: parent) {
+            bounds = LayoutRect(
+                x: rect.origin.x + frame.origin.x - origin.x,
+                y: rect.origin.y + frame.origin.y - origin.y,
+                width: frame.size.width,
+                height: frame.size.height
+            )
+        }
+        return StickyPosition(
+            top: insets.top,
+            left: insets.left,
+            bottom: insets.bottom,
+            right: insets.right,
+            bounds: bounds
+        )
     }
 }
 
@@ -306,6 +340,11 @@ struct LayoutTree {
         let container: Int?
         let managesVisibility: Bool
         let isInvisible: Bool
+        /// Physical distances from a scroll's edges, for a `sticky` element.
+        let sticky: Physical<Double?>?
+        /// The flex container the element is an item of — the element owning it, or a
+        /// container of a layout — whose frame bounds a sticky element.
+        let flexParent: LayoutID?
     }
 
     let direction: LayoutDirection
@@ -333,6 +372,8 @@ struct LayoutTree {
         var fill: Bool
         /// Index of the element whose embedded layout the items belong to.
         var container: Int?
+        /// The flex container the items are items of.
+        var flexParent: LayoutID? = nil
     }
 
     /// A list of items being turned into nodes, and what the finished list becomes.
@@ -422,7 +463,9 @@ struct LayoutTree {
                     element: element,
                     container: place.container,
                     managesVisibility: managesVisibility,
-                    isInvisible: isInvisible
+                    isInvisible: isInvisible,
+                    sticky: spec.stickyInsets?.physical(direction),
+                    flexParent: place.flexParent
                 )
             )
             let key = ObjectIdentifier(element)
@@ -446,7 +489,8 @@ struct LayoutTree {
                             managesVisibility: false,
                             isInvisible: false,
                             fill: false,
-                            container: index
+                            container: index,
+                            flexParent: id
                         )
                     )
                 )
@@ -482,7 +526,8 @@ struct LayoutTree {
                         managesVisibility: managesVisibility,
                         isInvisible: isInvisible,
                         fill: false,
-                        container: place.container
+                        container: place.container,
+                        flexParent: id
                     )
                 )
             )
@@ -527,7 +572,8 @@ struct LayoutTree {
                         managesVisibility: true,
                         isInvisible: isInvisible,
                         fill: false,
-                        container: place.container
+                        container: place.container,
+                        flexParent: place.flexParent
                     )
                 )
             )

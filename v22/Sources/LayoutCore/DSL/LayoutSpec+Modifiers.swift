@@ -142,6 +142,26 @@ extension LayoutSpecConvertible {
         }
     }
 
+    /// Keeps the element in its place in the layout, but while the scroll it is in moves,
+    /// holds it within `top` points of the scroll's top edge (or of the other edges given)
+    /// for as long as its container is in view: a section's header stays at the top while
+    /// its section passes under it, and the next section pushes it out — CSS
+    /// `position: sticky`. It is drawn over the other items of its container. Only an
+    /// element sticks (a node); outside a scroll nothing moves. Following the scroll costs no
+    /// layout pass.
+    ///
+    /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
+    public func sticky(
+        top: Double? = nil,
+        leading: Double? = nil,
+        bottom: Double? = nil,
+        trailing: Double? = nil
+    ) -> LayoutSpec {
+        var spec = asLayoutSpec
+        spec.stickyInsets = Edges(top: top, leading: leading, bottom: bottom, trailing: trailing)
+        return spec
+    }
+
     // MARK: Margin
 
     /// The same margin on every side; `.auto` absorbs free space.

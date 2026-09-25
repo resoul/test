@@ -202,10 +202,29 @@
         }
     }
 
-    /// What scrolls: the row of tiles, the cards and the actions.
+    /// A section title on the screen's gray, so what scrolls under it does not show through.
+    @MainActor
+    final class SectionTitle: Node {
+        let label: Text
+
+        init(_ title: String) {
+            label = Text(title, style: TextStyle(size: 17, weight: .semibold, color: ink))
+            super.init()
+            appearance.background = Color(red: 0.96, green: 0.96, blue: 0.97)
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer { label }
+                .padding(top: 8, leading: 24, bottom: 8, trailing: 24)
+        }
+    }
+
+    /// What scrolls: the row of tiles, a title that sticks to the top, the cards and the
+    /// actions.
     @MainActor
     final class Feed: Node {
         let tiles = Scroll(.horizontal, content: Tiles())
+        let people = SectionTitle("People")
         let cards: [ProfileCard]
         let actions: Actions
 
@@ -217,6 +236,9 @@
         override func layoutSpec() -> LayoutSpec? {
             FlexContainer(.column) {
                 tiles.margin(top: 0, leading: -24, bottom: 0, trailing: -24)
+                people
+                    .margin(top: 0, leading: -24, bottom: -8, trailing: -24)
+                    .sticky(top: 0)
                 for card in cards { card }
                 actions
             }

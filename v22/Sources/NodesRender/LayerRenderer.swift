@@ -47,6 +47,8 @@
         private var indicators: [NodeID: CALayer] = [:]
         /// The offset each scroll was drawn at, to show the indicator when it moves.
         private var drawnOffsets: [NodeID: LayoutPoint] = [:]
+        /// The sticky nodes inside each scroll at the last render: they move when it scrolls.
+        private var stickyNodes: [NodeID: [Node]] = [:]
 
         /// What a layer's contents were drawn from.
         private struct Drawing: Equatable {
@@ -103,6 +105,7 @@
             defer { CATransaction.commit() }
 
             var pass = Pass(animation: animation, container: container)
+            stickyNodes = [:]
             let rootLayer = sync(root, pass: &pass)
             if rootLayer.superlayer !== container {
                 container.addSublayer(rootLayer)
@@ -148,6 +151,12 @@
                 layer.removeAnimation(forKey: "bounds")
                 layer.bounds.origin = CGPoint(x: offset.x, y: offset.y)
                 updateIndicator(of: scroll, in: layer)
+                for node in stickyNodes[scroll.id] ?? [] {
+                    guard let sticky = layers[node.id] else { continue }
+
+                    sticky.removeAnimation(forKey: "position")
+                    sticky.position = LayerRenderer.position(of: node)
+                }
             }
         }
 
@@ -244,10 +253,7 @@
                 width: frame.size.width,
                 height: frame.size.height
             )
-            layer.position = CGPoint(
-                x: frame.origin.x + frame.size.width / 2,
-                y: frame.origin.y + frame.size.height / 2
-            )
+            layer.position = LayerRenderer.position(of: node)
             apply(node.appearance, to: layer)
             applyVisibility(of: node, to: layer, isNew: isNew, animated: pass.animation != nil)
             if let drawing = node as? any LayerDrawing {
@@ -294,12 +300,36 @@
             if let scroll {
                 indicator = updateIndicator(of: scroll, in: layer)
             }
+            if node.sticky != nil, let scroll = LayerRenderer.enclosingScroll(of: node) {
+                stickyNodes[scroll.id, default: []].append(node)
+            }
             return Level(
                 layer: layer,
                 indicator: indicator,
-                subnodes: node.subnodes,
+                subnodes: node.subnodesInDrawingOrder,
                 subnodesAreNew: isNew || cameBack
             )
+        }
+
+        /// The center of the node's layer in its supernode's: its frame's, moved by where it
+        /// sticks.
+        private static func position(of node: Node) -> CGPoint {
+            let frame = node.frame
+            let offset = node.stickyOffset
+            return CGPoint(
+                x: frame.origin.x + offset.x + frame.size.width / 2,
+                y: frame.origin.y + offset.y + frame.size.height / 2
+            )
+        }
+
+        private static func enclosingScroll(of node: Node) -> Scroll? {
+            var current = node.supernode
+            while let next = current {
+                if let scroll = next as? Scroll { return scroll }
+
+                current = next.supernode
+            }
+            return nil
         }
 
         /// Where the coordinate space of `layer` starts, as shown before this render: recorded

@@ -70,6 +70,12 @@ open class Node: LayoutElement {
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public private(set) var frame = LayoutRect(x: 0, y: 0, width: 0, height: 0)
 
+    /// Where the node sticks while its scroll moves (`sticky` in the layout that placed it),
+    /// or `nil`.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public private(set) var sticky: StickyPosition?
+
     /// Hidden by `hidden`, `invisible` or a `Breakpoint` in the layout that placed it.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
@@ -186,6 +192,106 @@ open class Node: LayoutElement {
         isHidden = !isVisible
     }
 
+    /// Ownership: stores the value. Isolation: MainActor. Errors: none. Cancellation: none.
+    public func applyLayoutSticky(_ sticky: StickyPosition?) {
+        self.sticky = sticky
+    }
+
+    /// How far a sticky node is moved from its frame now to keep to its scroll's edges —
+    /// within the frame of its container. Zero for a node that does not stick, or is not in a
+    /// scroll.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var stickyOffset: LayoutPoint {
+        guard let sticky, let scroll = enclosingScroll, let rect = scroll.frame(of: self) else {
+            return .zero
+        }
+
+        // Everything in the scroll's coordinates, as laid out.
+        let shift = LayoutPoint(
+            x: rect.origin.x - frame.origin.x,
+            y: rect.origin.y - frame.origin.y
+        )
+        let bounds = LayoutRect(
+            x: sticky.bounds.origin.x + shift.x,
+            y: sticky.bounds.origin.y + shift.y,
+            width: sticky.bounds.size.width,
+            height: sticky.bounds.size.height
+        )
+        let view = scroll.shownOffset
+        let size = scroll.frame.size
+        return LayoutPoint(
+            x: Node.stick(
+                rect.origin.x,
+                rect.size.width,
+                start: sticky.left.map { view.x + $0 },
+                end: sticky.right.map { view.x + size.width - $0 },
+                within: bounds.origin.x,
+                bounds.origin.x + bounds.size.width
+            ),
+            y: Node.stick(
+                rect.origin.y,
+                rect.size.height,
+                start: sticky.top.map { view.y + $0 },
+                end: sticky.bottom.map { view.y + size.height - $0 },
+                within: bounds.origin.y,
+                bounds.origin.y + bounds.size.height
+            )
+        )
+    }
+
+    /// How far a span at `position` of `length` moves along one axis to start no earlier
+    /// than `start` and end no later than `end`, without leaving `low`…`high` (CSS
+    /// Positioned Layout §3.4).
+    private static func stick(
+        _ position: Double,
+        _ length: Double,
+        start: Double?,
+        end: Double?,
+        within low: Double,
+        _ high: Double
+    ) -> Double {
+        var shift = 0.0
+        if let start, position < start {
+            shift = min(start - position, max(0, high - (position + length)))
+        }
+        if let end, position + length + shift > end {
+            shift = max(end - (position + length), min(0, low - position))
+        }
+        return shift
+    }
+
+    /// The nearest scroll around the node.
+    private var enclosingScroll: Scroll? {
+        var node = supernode
+        while let current = node {
+            if let scroll = current as? Scroll { return scroll }
+
+            node = current.supernode
+        }
+        return nil
+    }
+
+    /// Where the node shows in its supernode's coordinates as laid out: its frame's
+    /// origin, moved by `stickyOffset`.
+    var shownOrigin: LayoutPoint {
+        guard sticky != nil else { return frame.origin }
+
+        let offset = stickyOffset
+        return LayoutPoint(x: frame.origin.x + offset.x, y: frame.origin.y + offset.y)
+    }
+
+    /// The subnodes in the order they are drawn, the last on top: sticky ones over the rest,
+    /// as positioned boxes are over the others in CSS; otherwise in layout order.
+    ///
+    /// Ownership: returns nodes the node keeps. Isolation: MainActor. Errors: none.
+    /// Cancellation: not applicable.
+    public var subnodesInDrawingOrder: [Node] {
+        guard subnodes.contains(where: { $0.sticky != nil }) else { return subnodes }
+
+        return subnodes.filter { $0.sticky == nil } + subnodes.filter { $0.sticky != nil }
+    }
+
     /// The node got or lost the focus — to show it. Runs inside the host's
     /// `focusAnimation`. The default lifts the node, a tenth bigger, where the host's
     /// `focusLook` is `.lift` (a TV); with `.ring` the adapter draws the ring and the default
@@ -218,6 +324,7 @@ open class Node: LayoutElement {
             let node: Node
             let point: LayoutPoint
             let isInside: Bool
+            let subnodes: [Node]
             var next: Int
         }
 
@@ -229,11 +336,13 @@ open class Node: LayoutElement {
                 && point.y < node.frame.size.height
             if node.appearance.clipsContent && !isInside { return nil }
 
+            let subnodes = node.subnodesInDrawingOrder
             return Level(
                 node: node,
                 point: point,
                 isInside: isInside,
-                next: node.subnodes.count - 1
+                subnodes: subnodes,
+                next: subnodes.count - 1
             )
         }
 
@@ -243,11 +352,12 @@ open class Node: LayoutElement {
         while let top = levels.indices.last {
             if levels[top].next >= 0 {
                 let node = levels[top].node
-                let subnode = node.subnodes[levels[top].next]
+                let subnode = levels[top].subnodes[levels[top].next]
                 levels[top].next -= 1
+                let origin = subnode.shownOrigin
                 let local = LayoutPoint(
-                    x: levels[top].point.x - subnode.frame.origin.x + node.contentOrigin.x,
-                    y: levels[top].point.y - subnode.frame.origin.y + node.contentOrigin.y
+                    x: levels[top].point.x - origin.x + node.contentOrigin.x,
+                    y: levels[top].point.y - origin.y + node.contentOrigin.y
                 )
                 if let level = enter(subnode, at: local) {
                     levels.append(level)
@@ -273,9 +383,10 @@ open class Node: LayoutElement {
                 continue
             }
 
+            let shown = node.shownOrigin
             let inner = LayoutPoint(
-                x: origin.x + node.frame.origin.x - node.contentOrigin.x,
-                y: origin.y + node.frame.origin.y - node.contentOrigin.y
+                x: origin.x + shown.x - node.contentOrigin.x,
+                y: origin.y + shown.y - node.contentOrigin.y
             )
             // Pushed last to first, so the first subnode is visited next.
             for subnode in node.subnodes.reversed() {
@@ -290,9 +401,10 @@ open class Node: LayoutElement {
 
     /// The frame in the coordinates `origin` is given in.
     func frame(from origin: LayoutPoint) -> LayoutRect {
-        LayoutRect(
-            x: origin.x + frame.origin.x,
-            y: origin.y + frame.origin.y,
+        let shown = shownOrigin
+        return LayoutRect(
+            x: origin.x + shown.x,
+            y: origin.y + shown.y,
             width: frame.size.width,
             height: frame.size.height
         )

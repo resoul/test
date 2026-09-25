@@ -237,6 +237,10 @@
 | `LayerRenderer.updateIndicator` | полоса — последний подслой; при движении — keyframe-анимация прозрачности, гаснет сама | без таймеров |
 | `Scroll.overscroll`, `shownOffset`, `platformDidScroll(to:)` | отскок системной физики за краем — не часть `contentOffset` | iOS |
 | `NodeHost.scrollItems`, `scrolls(at:)` | видимые прокрутки для адаптера; цепочка прокручиваемых под точкой, внутренняя первой | [05](05-platform-adapters.md#прокрутка) |
+| `LayoutSpec.sticky`, `LayoutTree.Entry.sticky`/`flexParent`, `PreparedLayout.sticky(of:)`; `LayoutElement.applyLayoutSticky`, `StickyPosition` | sticky вне движка: элемент получает отступы и рамку ближайшего flex-контейнера | CSS `position: sticky` |
+| `Node.stickyOffset`, `stick`, `shownOrigin` | сдвиг по CSS Positioned Layout §3.4 из смещения прокрутки, без прохода раскладки | [03](03-layout-api.md) |
+| `Node.subnodesInDrawingOrder`; `hitTest`, `LayerRenderer.enter` | sticky поверх остальных элементов контейнера — как позиционированный блок в CSS | CSS painting order |
+| `LayerRenderer.stickyNodes`, `position(of:)` | быстрый путь прокрутки двигает и слои sticky | — |
 | `ScrollDriver` (UIKit), `NodeView.hitTest`, `gestureRecognizerShouldBegin` | пустой `UIScrollView` — только физика; его пан на `NodeView` | [05](05-platform-adapters.md#прокрутка) |
 | `NodeNSView.scrollWheel`, `scroll(by:at:)`, `latched` | колесо/трекпад: внутренняя прокрутка, остаток — внешней; жест держится за начальные | [05](05-platform-adapters.md#прокрутка) |
 | `NodeView` на iPad: `usesFocus`, `selects` | система фокуса iPadOS с клавиатурой; групп фокуса нет — свойство недоступно на tvOS | дефект #135 |

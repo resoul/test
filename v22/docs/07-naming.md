@@ -51,6 +51,7 @@ AGENTS.md Trellis).
 | `NodeCache` | согласовано (2026-09-25) |
 | `.hidden(_:)` — убирает из раскладки (CSS `display: none`, `isHidden` в `UIStackView`) / `.invisible(_:)` — оставляет место. В SwiftUI `.hidden()` место оставляет — смысл обратный; это сказано в doc-комментарии | согласовано (2026-09-25) |
 | `.collapsesWhenEmpty()` | реализовано |
+| `.sticky(top:leading:bottom:trailing:)` — CSS `position: sticky`; `StickyPosition`, `Node.stickyOffset`, `subnodesInDrawingOrder`, `applyLayoutSticky` | реализовано (2026-09-25); имена — предложено |
 | `.if(_:_:)` — условный модификатор | реализовано |
 | `LayoutView` / `LayoutNSView`, `NodeView` / `NodeNSView` — view-классы адаптеров: UIKit без префикса, AppKit с `NS` | согласовано (2026-09-25) |
 | «Раскладку надо пересчитать»: `Node.setNeedsLayout()`; у view — `setNeedsLayoutSpec()`, потому что системный `setNeedsLayout` не сбрасывает `intrinsicContentSize`, а переопределить его нельзя — UIKit зовёт его сам при смене bounds, и Auto Layout зациклится | согласовано (2026-09-25) |

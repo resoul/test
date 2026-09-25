@@ -120,4 +120,41 @@
         #expect(move.fromValue as? CGRect == CGRect(x: 0, y: 0, width: 200, height: 100))
         #expect(move.toValue as? CGRect == CGRect(x: 0, y: 100, width: 200, height: 100))
     }
+
+    /// A 20-point header sticking to the top, over ten rows.
+    @MainActor
+    private final class Section: Node {
+        let header = Row()
+        let rows = (0..<10).map { _ in Row() }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                header.size(height: 20).sticky(top: 0)
+                for row in rows { row }
+            }
+        }
+    }
+
+    @Test @MainActor
+    func aStickyNodesLayerFollowsTheScrollOverTheOthers() throws {
+        let section = Section()
+        let scroll = Scroll(.vertical, content: section)
+        let host = NodeHost(root: scroll, size: LayoutSize(width: 200, height: 100))
+        let renderer = LayerRenderer()
+        CATransaction.begin()
+        defer {
+            host.detach()
+            CATransaction.commit()
+        }
+        host.layoutIfNeeded()
+        renderer.render(scroll, in: CALayer())
+        host.didRender()
+
+        scroll.contentOffset = LayoutPoint(x: 0, y: 70)
+        renderer.renderScrolls(host.scrolledSinceRender)
+
+        let header = try #require(renderer.layer(for: section.header))
+        #expect(header.frame == CGRect(x: 0, y: 70, width: 200, height: 20))
+        #expect(renderer.layer(for: section)?.sublayers?.last === header)
+    }
 #endif

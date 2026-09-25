@@ -56,6 +56,8 @@ public struct LayoutSpec: LayoutSpecConvertible {
     /// applying it also sets their visibility. Elements of other specs keep theirs.
     var managesVisibility = false
     var isInvisible = false
+    /// Set by `sticky`: the distances from a scroll's edges the element keeps.
+    var stickyInsets: Edges<Double?>?
 
     init(element: any LayoutElement) {
         content = .element(element)

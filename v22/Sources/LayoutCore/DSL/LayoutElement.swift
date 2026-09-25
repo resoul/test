@@ -36,11 +36,59 @@ public protocol LayoutElement: AnyObject, LayoutSpecConvertible {
     /// Ownership: the element stores what it needs. Isolation: MainActor. Errors: none.
     /// Cancellation: none.
     func applyLayoutVisibility(_ isVisible: Bool)
+
+    /// Receives where the element sticks (`sticky`), or `nil` when it does not — after its
+    /// frame, in every pass. The default does nothing: moving with a scroll is up to the
+    /// element.
+    ///
+    /// Ownership: the element stores what it needs. Isolation: MainActor. Errors: none.
+    /// Cancellation: none.
+    func applyLayoutSticky(_ sticky: StickyPosition?)
+}
+
+/// Where a `sticky` element keeps itself while a scroll moves: its distances from the
+/// scroll's edges, and the box it may not leave.
+///
+/// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+public struct StickyPosition: Sendable, Hashable {
+    /// Distance from the scroll's top edge the element keeps; `nil` does not stick there.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var top: Double?
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var left: Double?
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var bottom: Double?
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var right: Double?
+    /// The frame of the container the element is laid out in, in the coordinates of the
+    /// element's own frame: sticking never takes the element out of it.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var bounds: LayoutRect
+
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public init(
+        top: Double? = nil,
+        left: Double? = nil,
+        bottom: Double? = nil,
+        right: Double? = nil,
+        bounds: LayoutRect
+    ) {
+        self.top = top
+        self.left = left
+        self.bottom = bottom
+        self.right = right
+        self.bounds = bounds
+    }
 }
 
 extension LayoutElement {
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
     public func applyLayoutVisibility(_ isVisible: Bool) {}
+
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+    public func applyLayoutSticky(_ sticky: StickyPosition?) {}
 
     /// No embedded layout: the element is a leaf.
     ///
