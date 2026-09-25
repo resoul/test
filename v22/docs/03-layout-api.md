@@ -36,7 +36,7 @@ final class ProfileCard: Node {
         subtitle.text = user.handle
     }
 
-    override func layoutSpec() -> Layout {
+    override func layoutSpec() -> LayoutSpec? {
         FlexContainer(.row) {
             avatar
                 .size(48)
@@ -78,7 +78,7 @@ view.addSubnode(ProfileCard(user: user))
 - Имя `layout()` **нельзя**: у `NSView` уже есть системный `layout()` (аналог
   `layoutSubviews`), и `override` там означал бы совсем другое. `layoutSpec()` свободно
   в UIKit и AppKit и отсылает к Texture. Альтернативы: `arrange()`, `makeLayout()`.
-- Метод **не является** result builder'ом: он возвращает одно значение `Layout`, внутри
+- Метод **не является** result builder'ом: он возвращает одно значение `LayoutSpec?`, внутри
   доступен обычный Swift — `guard`, локальные переменные, ранний `return`. Builder
   действует только внутри фигурных скобок контейнеров.
 - Один и тот же протокол «у меня есть раскладка» реализуют `Node`, `UIView`- и

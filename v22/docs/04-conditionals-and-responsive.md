@@ -42,7 +42,7 @@ FlexContainer(.row) {
 **Статус: согласовано.**
 
 ```swift
-override func layoutSpec() -> Layout {
+override func layoutSpec() -> LayoutSpec? {
     guard let user else { return placeholderLayout }
     let compact = environment.sizeClass == .compact
     return FlexContainer(compact ? .column : .row) { … }
@@ -83,7 +83,7 @@ title.if(isHighlighted) { $0.padding(16).alignSelf(.center) }
 **Статус: согласовано.**
 
 ```swift
-override func layoutSpec() -> Layout {
+override func layoutSpec() -> LayoutSpec? {
     Breakpoint(from: .sm) {
         FlexContainer(.row) { avatar.size(48); texts; follow }       // широко
     } otherwise: {
