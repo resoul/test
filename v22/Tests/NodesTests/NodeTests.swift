@@ -1169,3 +1169,16 @@ func aTreeWithViewsTooDeepForTheMainThreadIsRejected() {
     #expect(!root.deepest.isMounted)
     host.detach()
 }
+
+@Test @MainActor
+func aDeepTreeOfNodesIsPreparedWithoutRunningOutOfStack() {
+    // Preparing a layout calls every node's `layoutSpec()`, so it runs on the main thread;
+    // walked recursively, three thousand levels would overflow even the 8 MiB main thread
+    // of a Mac in an unoptimized build.
+    let root = Nest(depth: 3000) { Box(10, 10) }
+
+    let prepared = root.asLayoutSpec.prepare()
+
+    #expect(prepared.elementCount == 3002)
+    #expect(prepared.ids(of: root.deepest).count == 1)
+}

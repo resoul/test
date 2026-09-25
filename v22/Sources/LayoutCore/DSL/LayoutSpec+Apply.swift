@@ -297,46 +297,93 @@ struct LayoutTree {
         self.spacing = spacing
     }
 
+    /// How the items of one list are placed: what they inherit from the spec around them.
+    private struct Place {
+        var managesVisibility: Bool
+        var isInvisible: Bool
+        /// Breakpoint branches grow to fill their parent (the implicit root).
+        var fill: Bool
+        /// Index of the element whose embedded layout the items belong to.
+        var container: Int?
+    }
+
+    /// A list of items being turned into nodes, and what the finished list becomes.
+    private struct Frame {
+        enum Kind {
+            /// The nodes go straight into the parent's list: the root's list, or both
+            /// branches of a breakpoint.
+            case splice
+            case container(LayoutID, FlexStyle, [StyleVariant])
+            /// An element's embedded layout; `key` stops the element being expanded inside
+            /// itself while its items are built.
+            case embedded(LayoutID, ObjectIdentifier, FlexStyle, [StyleVariant])
+        }
+
+        let kind: Kind
+        let items: [LayoutSpec]
+        let place: Place
+        var next = 0
+        var children: [LayoutNode] = []
+    }
+
     /// A single root node. Alternatives at the root sit in an implicit column that gives
     /// them the whole width and lets them fill the height.
     mutating func root(for spec: LayoutSpec) -> LayoutNode {
+        let place = Place(managesVisibility: false, isInvisible: false, fill: false, container: nil)
         if case .alternatives = spec.content {
             var style = FlexStyle()
             style.direction = .column
             let id = LayoutID(UInt64.max - containers)
             containers += 1
-            let children = nodes(
-                for: spec,
-                managesVisibility: false,
-                isInvisible: false,
-                fill: true,
-                container: nil
-            )
+            var filling = place
+            filling.fill = true
+            let children = nodes(for: spec, place: filling)
             return LayoutNode(id: id, style: style, direction: direction, children: children)
         }
 
-        return nodes(
-            for: spec,
-            managesVisibility: false,
-            isInvisible: false,
-            fill: false,
-            container: nil
-        )[0]
+        return nodes(for: spec, place: place)[0]
     }
 
     /// The nodes a spec stands for: one, or the nodes of both branches of a breakpoint, each
-    /// shown only on its side of the threshold. `fill` makes breakpoint branches grow to fill
-    /// their parent (used for the implicit root).
-    private mutating func nodes(
-        for spec: LayoutSpec,
-        managesVisibility inherited: Bool,
-        isInvisible inheritedInvisible: Bool,
-        fill: Bool,
-        container: Int?
-    ) -> [LayoutNode] {
-        let managesVisibility = inherited || spec.managesVisibility
-        let isInvisible = inheritedInvisible || spec.isInvisible
-        let (style, variants) = spec.resolvedStyle(spacing)
+    /// shown only on its side of the threshold.
+    ///
+    /// A loop over an explicit stack rather than recursion: this runs on the main thread,
+    /// whose stack is small on a phone, and a tree of nested layouts can be deeper than it
+    /// allows. Everything happens in the order a recursive walk would do it — elements are
+    /// numbered and asked for their layouts and content in pre-order.
+    private mutating func nodes(for spec: LayoutSpec, place: Place) -> [LayoutNode] {
+        var frames = [Frame(kind: .splice, items: [spec], place: place)]
+        while let top = frames.indices.last {
+            guard frames[top].next < frames[top].items.count else {
+                let built = finish(frames.removeLast())
+                guard let parent = frames.indices.last else { return built }
+
+                frames[parent].children += built
+                continue
+            }
+
+            let item = frames[top].items[frames[top].next]
+            frames[top].next += 1
+            switch visit(item, place: frames[top].place) {
+            case let .node(node): frames[top].children.append(node)
+            case .none: break
+            case let .open(frame): frames.append(frame)
+            }
+        }
+        return []
+    }
+
+    private enum Step {
+        case node(LayoutNode)
+        case none
+        case open(Frame)
+    }
+
+    /// Turns one spec into its node when it has no items of its own, or opens the list of its
+    /// items.
+    private mutating func visit(_ spec: LayoutSpec, place: Place) -> Step {
+        let managesVisibility = place.managesVisibility || spec.managesVisibility
+        let isInvisible = place.isInvisible || spec.isInvisible
 
         switch spec.content {
         case let .element(element):
@@ -345,7 +392,7 @@ struct LayoutTree {
             elements.append(
                 Entry(
                     element: element,
-                    container: container,
+                    container: place.container,
                     managesVisibility: managesVisibility,
                     isInvisible: isInvisible
                 )
@@ -360,36 +407,29 @@ struct LayoutTree {
                 if case .container = own.content {} else { own = LayoutSpec(.column) { embedded } }
                 own.patches += spec.patches
                 let (ownStyle, ownVariants) = own.resolvedStyle(spacing)
-                guard case let .container(items) = own.content else { return [] }
+                guard case let .container(items) = own.content else { return .none }
 
                 expanding.insert(key)
-                defer { expanding.remove(key) }
-                var children: [LayoutNode] = []
-                for item in items {
-                    children += nodes(
-                        for: item,
-                        managesVisibility: false,
-                        isInvisible: false,
-                        fill: false,
-                        container: index
+                return .open(
+                    Frame(
+                        kind: .embedded(id, key, ownStyle, ownVariants),
+                        items: items,
+                        place: Place(
+                            managesVisibility: false,
+                            isInvisible: false,
+                            fill: false,
+                            container: index
+                        )
                     )
-                }
-                return [
-                    LayoutNode(
-                        id: id,
-                        style: ownStyle,
-                        direction: direction,
-                        children: children,
-                        variants: ownVariants
-                    )
-                ]
+                )
             }
 
+            let (style, variants) = spec.resolvedStyle(spacing)
             let content = element.layoutContent
             if case let .measured(measurer) = content, measurer.requiresMainThread {
                 requiresMainThread = true
             }
-            return [
+            return .node(
                 LayoutNode(
                     id: id,
                     style: style,
@@ -397,38 +437,32 @@ struct LayoutTree {
                     direction: direction,
                     variants: variants
                 )
-            ]
+            )
 
         case let .container(items):
+            let (style, variants) = spec.resolvedStyle(spacing)
             let id = LayoutID(UInt64.max - containers)
             containers += 1
-            if let container {
+            if let container = place.container {
                 owners[id] = container
             }
-            var children: [LayoutNode] = []
-            for item in items {
-                children += nodes(
-                    for: item,
-                    managesVisibility: managesVisibility,
-                    isInvisible: isInvisible,
-                    fill: false,
-                    container: container
+            return .open(
+                Frame(
+                    kind: .container(id, style, variants),
+                    items: items,
+                    place: Place(
+                        managesVisibility: managesVisibility,
+                        isInvisible: isInvisible,
+                        fill: false,
+                        container: place.container
+                    )
                 )
-            }
-            return [
-                LayoutNode(
-                    id: id,
-                    style: style,
-                    direction: direction,
-                    children: children,
-                    variants: variants
-                )
-            ]
+            )
 
         case let .alternatives(threshold, wide, narrow):
             // Each branch item is shown on its side of the threshold only. The display changes
             // come first, so an item's own `hidden` still hides it on its side.
-            var result: [LayoutNode] = []
+            var branches: [LayoutSpec] = []
             for (items, isWide) in [(wide, true), (narrow, false)] {
                 for item in items {
                     var branch = item
@@ -444,7 +478,7 @@ struct LayoutTree {
                         },
                         at: 1
                     )
-                    if fill {
+                    if place.fill {
                         branch.patches.append(
                             LayoutSpec.StylePatch(from: nil) { style, _ in
                                 if style.height == .auto && style.basis == .auto && style.grow == 0
@@ -454,16 +488,50 @@ struct LayoutTree {
                             }
                         )
                     }
-                    result += nodes(
-                        for: branch,
+                    branches.append(branch)
+                }
+            }
+            return .open(
+                Frame(
+                    kind: .splice,
+                    items: branches,
+                    place: Place(
                         managesVisibility: true,
                         isInvisible: isInvisible,
                         fill: false,
-                        container: container
+                        container: place.container
                     )
-                }
-            }
-            return result
+                )
+            )
+        }
+    }
+
+    /// The nodes a finished list becomes.
+    private mutating func finish(_ frame: Frame) -> [LayoutNode] {
+        switch frame.kind {
+        case .splice:
+            return frame.children
+        case let .container(id, style, variants):
+            return [
+                LayoutNode(
+                    id: id,
+                    style: style,
+                    direction: direction,
+                    children: frame.children,
+                    variants: variants
+                )
+            ]
+        case let .embedded(id, key, style, variants):
+            expanding.remove(key)
+            return [
+                LayoutNode(
+                    id: id,
+                    style: style,
+                    direction: direction,
+                    children: frame.children,
+                    variants: variants
+                )
+            ]
         }
     }
 }
