@@ -89,6 +89,48 @@
     }
 
     @Test
+    func cachesSharingADirectoryKeepTheirOwnLimits() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let image = try encodedImage(width: 20, height: 20)
+        let small = ImageCache(
+            configuration: ImageCacheConfiguration(directory: directory, maximumBytes: image.count)
+        )
+        let large = ImageCache(
+            configuration: ImageCacheConfiguration(directory: directory, metadata: .removeLocation)
+        )
+        let sameAsSmall = ImageCache(configuration: ImageCacheConfiguration(directory: directory))
+        let urls = (0..<3).map { URL(string: "https://example.test/\($0).png")! }
+        for url in urls { try await large.store(image, for: url) }
+        let largeStored = try #require(await large.cachedData(for: urls[0]))
+
+        try await small.store(image, for: urls[0])
+        try await small.store(image, for: urls[1])
+        try await small.removeExpired()
+        #expect(try await small.cachedData(for: urls[0]) == nil)
+        #expect(try await small.cachedData(for: urls[1]) == image)
+        #expect(try await sameAsSmall.cachedData(for: urls[1]) == image)
+        for url in urls {
+            #expect(try await large.cachedData(for: url) == largeStored)
+        }
+
+        try await small.removeAll()
+        #expect(try await large.cachedData(for: urls[2]) == nil)
+    }
+
+    @Test
+    func filesOfTheEarlierNamingAreRemovedOnRecount() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let legacy = directory.appendingPathComponent(String(repeating: "ab", count: 32))
+        try Data([1, 2, 3]).write(to: legacy)
+        let cache = ImageCache(configuration: ImageCacheConfiguration(directory: directory))
+        try await cache.removeExpired()
+        #expect(!FileManager.default.fileExists(atPath: legacy.path))
+    }
+
+    @Test
     func removingOneURLKeepsTheOthers() async throws {
         let directory = temporaryCache()
         defer { try? FileManager.default.removeItem(at: directory) }

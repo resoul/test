@@ -93,6 +93,9 @@
             var waiters: Set<UInt64>
         }
 
+        /// Marks the files written under this cache's processing policies. Caches that share a
+        /// directory count limits and ages only over files carrying their own mark.
+        private let policyTag: String
         private var downloads: [URL: Download] = [:]
         private var nextID: UInt64 = 0
         /// Bytes of this cache's entries as last counted plus the writes since, or `nil`
@@ -112,6 +115,9 @@
         ) {
             self.configuration = configuration
             self.session = session
+            let policies =
+                "\(configuration.metadata.rawValue)|\(configuration.compression.rawValue)|\(configuration.minimumCompressionBytes)"
+            policyTag = Self.hex(SHA256.hash(data: Data(policies.utf8))).prefix(8).description
         }
 
         /// Returns cached bytes, or downloads and stores them. File URLs are read directly.
@@ -248,8 +254,8 @@
             }
         }
 
-        /// Deletes every entry in the directory, whatever policies wrote it; other files there
-        /// are left alone. A download already running still returns its image but does not
+        /// Deletes every entry in the directory, whatever policies wrote it, as signing out
+        /// needs; other files there are left alone. A download already running still returns its image but does not
         /// store it. Decoded images held by pipelines and nodes are not affected.
         ///
         /// Ownership: deletes files in the cache directory. Isolation: actor. Errors: file
@@ -278,9 +284,11 @@
             storedBytes = storedBytes.map { max(0, $0 - size) }
         }
 
-        /// Deletes expired entries, then the least recently used ones while the total is over
-        /// `maximumBytes`. Writes do this as needed; call it at launch to reclaim space from
-        /// entries that are no longer read.
+        /// Deletes this cache's expired entries, then its least recently used ones while their
+        /// total is over `maximumBytes`. Entries of other policies in a shared directory are
+        /// left to their caches; files of the earlier naming, which no cache counts, are
+        /// deleted. Writes do this as needed; call it at launch to reclaim space from entries
+        /// that are no longer read.
         ///
         /// Ownership: deletes files in the cache directory. Isolation: actor. Errors: file
         /// errors. Cancellation: none.
@@ -289,10 +297,19 @@
             let now = Date()
             var kept: [Entry] = []
             for entry in try entries() {
-                if now.timeIntervalSince(entry.created) > max(configuration.maximumAge, 0) {
+                switch entry.naming {
+                case .tagged(policyTag):
+                    if now.timeIntervalSince(entry.created) > max(configuration.maximumAge, 0) {
+                        try manager.removeItem(at: entry.url)
+                    } else {
+                        kept.append(entry)
+                    }
+                case .legacy:
+                    // Counted by no cache, so it would otherwise stay forever.
                     try manager.removeItem(at: entry.url)
-                } else {
-                    kept.append(entry)
+                case .tagged:
+                    // Other policies' entries belong to the caches that use them.
+                    break
                 }
             }
 
@@ -367,11 +384,12 @@
         }
 
         private func fileURL(for url: URL) -> URL {
-            let identity =
-                "v1|\(configuration.metadata.rawValue)|\(configuration.compression.rawValue)|\(configuration.minimumCompressionBytes)|\(url.absoluteString)"
-            let digest = SHA256.hash(data: Data(identity.utf8))
-            let name = digest.map { String(format: "%02x", $0) }.joined()
-            return configuration.directory.appendingPathComponent(name)
+            let digest = Self.hex(SHA256.hash(data: Data(url.absoluteString.utf8)))
+            return configuration.directory.appendingPathComponent("\(policyTag)-\(digest)")
+        }
+
+        private static func hex(_ digest: some Sequence<UInt8>) -> String {
+            digest.map { String(format: "%02x", $0) }.joined()
         }
 
         private func prepare(_ data: Data) throws -> Data {
@@ -426,6 +444,7 @@
 
         private struct Entry {
             let url: URL
+            let naming: Naming
             let size: Int
             let created: Date
             let used: Date
@@ -445,13 +464,16 @@
             for file in try manager.contentsOfDirectory(
                 at: configuration.directory,
                 includingPropertiesForKeys: keys
-            ) where Self.isEntryName(file.lastPathComponent) {
+            ) {
+                guard let naming = Self.naming(of: file.lastPathComponent) else { continue }
+
                 let values = try file.resourceValues(forKeys: Set(keys))
                 guard values.isRegularFile == true else { continue }
 
                 result.append(
                     Entry(
                         url: file,
+                        naming: naming,
                         size: values.fileSize ?? 0,
                         created: values.creationDate ?? .distantPast,
                         used: values.contentModificationDate ?? .distantPast
@@ -461,9 +483,27 @@
             return result
         }
 
-        private static func isEntryName(_ name: String) -> Bool {
-            name.utf8.count == 64
-                && name.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
+        /// How an entry's file is named: an 8-digit policy mark, a dash, and a 64-digit URL
+        /// digest, all lowercase hexadecimal; or, from before the mark, the bare digest.
+        private enum Naming: Equatable {
+            case tagged(String)
+            case legacy
+        }
+
+        /// `nil` for a file that is not an entry.
+        private static func naming(of name: String) -> Naming? {
+            func isHex(_ part: Substring) -> Bool {
+                part.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
+            }
+
+            if name.utf8.count == 64, isHex(name[...]) { return .legacy }
+
+            let parts = name.split(separator: "-", omittingEmptySubsequences: false)
+            guard parts.count == 2, parts[0].utf8.count == 8, parts[1].utf8.count == 64,
+                isHex(parts[0]), isHex(parts[1])
+            else { return nil }
+
+            return .tagged(String(parts[0]))
         }
     }
 
