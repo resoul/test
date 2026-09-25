@@ -546,6 +546,37 @@
     }
 
     @Test
+    func unchangedFileIsNotReadAgainForADecodedSize() async throws {
+        let file = temporaryCache().appendingPathExtension("png")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try encodedImage(width: 20, height: 10).write(to: file)
+        let pipeline = ImagePipeline()
+        let first = try await pipeline.load(.url(file), targetPixelDimension: 40)
+        let second = try await pipeline.load(.url(file), targetPixelDimension: 40)
+        #expect(first.image === second.image)
+        #expect(await pipeline.decodedCacheState().sourceReads == 1)
+
+        try encodedImage(width: 30, height: 10).write(to: file)
+        let changed = try await pipeline.load(.url(file), targetPixelDimension: 40)
+        #expect(changed.image.width == 30)
+        #expect(await pipeline.decodedCacheState().sourceReads == 2)
+    }
+
+    @Test
+    func cachedRemoteImageIsNotReadAgainForADecodedSize() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pipeline = ImagePipeline(cache: stubCache(directory))
+        let url = URL(string: "https://image-cache.test/stamp.webp")!
+        for _ in 0..<4 {
+            #expect(try await pipeline.load(.url(url), targetPixelDimension: 8).image.width == 1)
+        }
+        // The download, then a read of the fresh disk entry that remembers its stamp.
+        #expect(await pipeline.decodedCacheState().sourceReads == 2)
+        #expect(stubRequests.withLock { $0[url.path] } == 1)
+    }
+
+    @Test
     func replacingFileBytesDoesNotReuseAnOldBitmap() async throws {
         let file = temporaryCache().appendingPathExtension("png")
         defer { try? FileManager.default.removeItem(at: file) }

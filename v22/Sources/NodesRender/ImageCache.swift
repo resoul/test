@@ -144,6 +144,41 @@
             }
         }
 
+        /// What identifies the current bytes behind `url` without reading them: a file's size
+        /// and dates, or those of the disk entry for a remote URL. `nil` when there is nothing
+        /// to read or the entry has expired. Checking an entry counts as a use of it.
+        func stamp(for url: URL) -> ImageFileStamp? {
+            // File attributes are read fresh each time: `URL.resourceValues` caches them in
+            // the URL, and a stale size or date would pass a replaced file for the old one.
+            if url.isFileURL {
+                guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+                    let size = (attributes[.size] as? NSNumber)?.intValue
+                else { return nil }
+
+                return ImageFileStamp(
+                    size: size,
+                    created: attributes[.creationDate] as? Date,
+                    modified: attributes[.modificationDate] as? Date
+                )
+            }
+
+            let file = fileURL(for: url)
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: file.path),
+                let size = (attributes[.size] as? NSNumber)?.intValue,
+                let created = attributes[.creationDate] as? Date,
+                Date().timeIntervalSince(created) <= max(configuration.maximumAge, 0)
+            else { return nil }
+
+            // Reading an entry marks it as recently used for eviction; so does finding it here.
+            // Its modification date is that mark, so only the creation date, renewed when the
+            // entry is rewritten, identifies the bytes.
+            try? FileManager.default.setAttributes(
+                [.modificationDate: Date()],
+                ofItemAtPath: file.path
+            )
+            return ImageFileStamp(size: size, created: created, modified: nil)
+        }
+
         /// Reads a disk entry without fetching its URL.
         ///
         /// Ownership: returns data. Isolation: actor. Errors: file errors. Cancellation: none.
@@ -350,6 +385,13 @@
             }
             state.withLock { $0.observation = observation }
         }
+    }
+
+    /// A file's size and dates: changes whenever its bytes may have changed.
+    struct ImageFileStamp: Hashable, Sendable {
+        let size: Int
+        let created: Date?
+        let modified: Date?
     }
 
     /// Failure to read or store a usable image.

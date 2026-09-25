@@ -116,6 +116,8 @@
         private var decodeCount = 0
         private var runningDecodes = 0
         private var peakRunningDecodes = 0
+        private var digests: [URL: (stamp: ImageFileStamp, digest: Data)] = [:]
+        private var sourceReads = 0
 
         /// Ownership: the caller owns the pipeline. Isolation: actor. Errors: none.
         /// Cancellation: not applicable.
@@ -132,26 +134,41 @@
         }
 
         func load(_ source: ImageSource, targetPixelDimension: Int) async throws -> LoadedImage {
-            let data: Data
-            switch source {
-            case let .data(value): data = value
-            case let .url(url): data = try await cache.load(url)
-            }
-            try Task.checkCancellation()
-
             let limit =
                 maximumDecodedPixelDimension.map {
                     min(max(1, targetPixelDimension), $0)
                 } ?? max(1, targetPixelDimension)
+            // A file whose size and dates are unchanged still holds the bytes last hashed, so
+            // a decoded size is found without reading or hashing the file again.
+            if case let .url(url) = source, let known = digests[url],
+                await cache.stamp(for: url) == known.stamp,
+                let image = reuse(DecodedKey(digest: known.digest, pixelDimension: limit))
+            {
+                return image
+            }
+
+            let data: Data
+            var stamp: ImageFileStamp?
+            switch source {
+            case let .data(value):
+                data = value
+            case let .url(url):
+                stamp = await cache.stamp(for: url)
+                data = try await cache.load(url)
+                sourceReads += 1
+            }
+            try Task.checkCancellation()
+
             // A URL can be overwritten without changing its spelling. Hash the bytes that
             // will actually be decoded so an old bitmap cannot stand in for new contents.
-            let key = DecodedKey(digest: Data(SHA256.hash(data: data)), pixelDimension: limit)
-            if var entry = decoded[key] {
-                clock &+= 1
-                entry.lastUse = clock
-                decoded[key] = entry
-                return entry.image
+            let digest = Data(SHA256.hash(data: data))
+            // The stamp is remembered only when the file did not change around the read, so
+            // it always belongs to the bytes that were hashed.
+            if case let .url(url) = source, let stamp, await cache.stamp(for: url) == stamp {
+                digests[url] = (stamp, digest)
             }
+            let key = DecodedKey(digest: digest, pixelDimension: limit)
+            if let image = reuse(key) { return image }
 
             nextWaiterID &+= 1
             let waiterID = nextWaiterID
@@ -208,6 +225,15 @@
             }
         }
 
+        private func reuse(_ key: DecodedKey) -> LoadedImage? {
+            guard var entry = decoded[key] else { return nil }
+
+            clock &+= 1
+            entry.lastUse = clock
+            decoded[key] = entry
+            return entry.image
+        }
+
         /// Drops the pipeline's retained decoded images. Mounted nodes keep what they show.
         ///
         /// Ownership: releases the pipeline's references. Isolation: actor. Errors: none.
@@ -215,12 +241,15 @@
         /// the cache after this call.
         public func clearDecodedCache() {
             decoded.removeAll()
+            digests.removeAll()
             decodedBytes = 0
             cacheGeneration &+= 1
         }
 
-        func decodedCacheState() -> (entries: Int, bytes: Int, decodes: Int, peakRunning: Int) {
-            (decoded.count, decodedBytes, decodeCount, peakRunningDecodes)
+        func decodedCacheState() -> (
+            entries: Int, bytes: Int, decodes: Int, peakRunning: Int, sourceReads: Int
+        ) {
+            (decoded.count, decodedBytes, decodeCount, peakRunningDecodes, sourceReads)
         }
 
         private func decodeStarted() {
@@ -259,6 +288,13 @@
             clock &+= 1
             decoded[key] = DecodedEntry(image: image, bytes: bytes, lastUse: clock)
             decodedBytes += bytes
+
+            // Remembered digests are only useful for images still held; drop the rest once
+            // they outnumber the held images, so a long feed does not grow the table forever.
+            if digests.count > 2 * max(decoded.count, 64) {
+                let held = Set(decoded.keys.map(\.digest))
+                digests = digests.filter { held.contains($0.value.digest) }
+            }
         }
 
         private nonisolated static func decode(
