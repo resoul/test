@@ -88,3 +88,19 @@ public enum FocusMove: Sendable, Hashable {
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     case right
 }
+
+/// A scroll of the tree, as the host's tree shows it now.
+///
+/// Ownership: value referring to a node of the tree. Isolation: MainActor. Errors: none.
+/// Cancellation: not applicable.
+@MainActor
+public struct ScrollItem {
+    /// Ownership: the tree keeps the node. Isolation: MainActor. Errors: none. Cancellation:
+    /// not applicable.
+    public let scroll: Scroll
+
+    /// The scroll's frame in the root's coordinates.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public let frame: LayoutRect
+}

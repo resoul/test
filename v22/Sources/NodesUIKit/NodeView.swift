@@ -24,11 +24,21 @@
         /// Holds the tree's layers, scaled by `zoom` from its top left corner.
         private let contentLayer = CALayer()
         private var isLayingOut = false
-        private var accessibilityCache: [UIAccessibilityElement]?
+        /// The accessibility element of each node, kept while the node is one: VoiceOver
+        /// keeps its place by the element's identity, and a scroll redraws many times a
+        /// second.
+        private var accessibilityByNode: [NodeID: NodeAccessibilityElement] = [:]
+        /// The elements in reading order; `nil` after a drawing, until asked for.
+        private var accessibilityOrder: [NodeAccessibilityElement]?
         /// The focus items of the tree, one per focusable node, kept while the node is: the
         /// focus system recognizes the focused item by identity.
         private var focusItemsByNode: [NodeID: NodeFocusItem] = [:]
         private var focusOrder: [NodeFocusItem] = []
+        /// A focus container for each scroll, kept while the scroll is: the focus system
+        /// searches its whole content and scrolls it to what it focuses.
+        private var scrollContainers: [NodeID: ScrollFocusContainer] = [:]
+        /// The items and scroll containers right under the view, not inside a scroll.
+        private var topFocusItems: [any UIFocusItem] = []
         /// A select press that began on a focused node and has not ended yet.
         private var isSelecting = false
         /// A focus guide over each focus section, kept while the section is.
@@ -38,6 +48,8 @@
         /// A node the app asked to focus (`NodeHost.requestFocus`), until the focus system
         /// moves the focus.
         private var requestedFocus: NodeID?
+        /// The platform's scrolling of each scroll of the tree, off a TV.
+        private var scrollDrivers: [NodeID: ScrollDriver] = [:]
 
         /// A view showing `root`.
         ///
@@ -146,23 +158,96 @@
                     animation: host.renderAnimation
                 )
                 host.didRender()
-                accessibilityCache = nil
-                updateFocusItems()
-                if usesFocus, !isTV {
-                    focusRing.show(
-                        around: host.focusedItem,
-                        color: tintColor.cgColor,
-                        in: contentLayer
-                    )
-                }
+                updateScrollDrivers()
+                updateAfterMove()
                 if UIAccessibility.isVoiceOverRunning {
                     UIAccessibility.post(notification: .layoutChanged, argument: nil)
                 }
+            } else if !host.scrolledSinceRender.isEmpty {
+                // Only scrolls moved: their content moves, and what depends on where nodes
+                // show — the ring, focus and accessibility frames — follows.
+                let scrolled = host.scrolledSinceRender
+                renderer.renderScrolls(scrolled)
+                host.didRender()
+                for scroll in scrolled {
+                    scrollDrivers[scroll.id]?.follow(factor: factor)
+                }
+                updateAfterMove()
             }
             if widthChanged {
                 // The height the tree wants depends on the width it has.
                 invalidateIntrinsicContentSize()
             }
+        }
+
+        /// Brings what depends on where the nodes show in line after a drawing.
+        private func updateAfterMove() {
+            accessibilityOrder = nil
+            if UIAccessibility.isVoiceOverRunning {
+                // VoiceOver reads the frame of the element it is on without asking the view
+                // again: bring it up to date now.
+                _ = updateAccessibilityElements()
+            }
+            updateFocusItems()
+            if usesFocus, !isTV {
+                focusRing.show(
+                    around: host.focusedItem,
+                    color: tintColor.cgColor,
+                    in: contentLayer
+                )
+            }
+        }
+
+        // MARK: - Scrolling
+
+        /// Brings the scroll drivers in line with the tree's scrolls after a drawing: one per
+        /// visible scroll, over its frame. On a TV the focus scrolls, not the touch surface.
+        private func updateScrollDrivers() {
+            var kept: [NodeID: ScrollDriver] = [:]
+            if !isTV {
+                for item in host.scrollItems() {
+                    let driver =
+                        scrollDrivers[item.scroll.id] ?? ScrollDriver(in: self, scroll: item.scroll)
+                    driver.place(zoomed(item.frame), factor: factor)
+                    kept[item.scroll.id] = driver
+                }
+            }
+            for (id, driver) in scrollDrivers where kept[id] == nil {
+                driver.remove()
+            }
+            scrollDrivers = kept
+        }
+
+        /// Touches over the scrolls' physics come to this view, like any other: the scroll
+        /// views only lend their pans, which are on this view.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+            let hit = super.hitTest(point, with: event)
+            if let hit, scrollDrivers.values.contains(where: { $0.owns(hit) }) {
+                return self
+            }
+            return hit
+        }
+
+        /// A drag starts a scroll's pan only where that scroll is the innermost one under the
+        /// finger able to move along its axis, so a row of cards scrolls sideways inside a
+        /// list that scrolls up and down.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func gestureRecognizerShouldBegin(
+            _ gestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            guard
+                let driver = scrollDrivers.values.first(where: {
+                    $0.pan === gestureRecognizer
+                })
+            else { return super.gestureRecognizerShouldBegin(gestureRecognizer) }
+
+            let location = gestureRecognizer.location(in: self)
+            let point = LayoutPoint(x: Double(location.x) / factor, y: Double(location.y) / factor)
+            return host.scrolls(at: point).first { $0.axis == driver.scroll?.axis }
+                === driver.scroll
         }
 
         /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
@@ -178,6 +263,15 @@
         ///
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+            // A touch on content still gliding stops it, and does nothing else — as in any
+            // scroll view.
+            let gliding = scrollDrivers.values.filter(\.isGliding)
+            guard gliding.isEmpty else {
+                for driver in gliding {
+                    driver.stop()
+                }
+                return
+            }
             guard let touch = touches.first, host.pointerDown(at: point(of: touch)) else {
                 super.touchesBegan(touches, with: event)
                 return
@@ -220,7 +314,14 @@
         /// Ownership: the view keeps the items. Isolation: MainActor. Errors: none.
         /// Cancellation: none.
         public override func focusItems(in rect: CGRect) -> [any UIFocusItem] {
-            super.focusItems(in: rect) + focusOrder.filter { $0.frame.intersects(rect) }
+            // The scroll views giving the scrolls' physics are subviews, but hold nothing to
+            // focus: the scrolls' own focus containers stand for them.
+            let own = super.focusItems(in: rect).filter { item in
+                !scrollDrivers.values.contains { driver in
+                    (item as? UIView).map(driver.owns) ?? false
+                }
+            }
+            return own + topFocusItems.filter { $0.frame.intersects(rect) }
         }
 
         /// The focused node's item, so a focus update keeps the focus where it is.
@@ -341,11 +442,20 @@
             guard usesFocus else { return }
 
             let hadItems = !focusOrder.isEmpty
+            let containers = updateScrollContainers()
             var kept: [NodeID: NodeFocusItem] = [:]
             focusOrder = host.focusItems().map { item in
                 let focusItem =
                     focusItemsByNode[item.node] ?? NodeFocusItem(view: self, node: item.node)
                 focusItem.frame = zoomed(item.frame)
+                focusItem.parent = self
+                if let node = host.node(item.node), let scroll = node.enclosingScroll,
+                    let container = containers[scroll.id], let frame = scroll.frame(of: node)
+                {
+                    // Inside a scroll the item is the scroll's, framed in its content.
+                    focusItem.frame = zoomed(frame)
+                    focusItem.parent = container
+                }
                 kept[item.node] = focusItem
                 return focusItem
             }
@@ -353,11 +463,50 @@
                 $0.isFocused && kept[$0.node] == nil
             }
             focusItemsByNode = kept
+            for container in containers.values {
+                container.items =
+                    focusOrder.filter { $0.parent === container }
+                    + containers.values.filter { $0.parent === container }
+            }
+            topFocusItems =
+                focusOrder.filter { $0.parent === self }
+                + containers.values.filter { $0.parent === self }
             updateSections()
             if lostFocus || (!hadItems && !focusOrder.isEmpty) {
                 setNeedsFocusUpdate()
             }
             applyFocusRequest()
+        }
+
+        /// Brings the scrolls' focus containers in line with the tree's scrolls: each framed in
+        /// the content of the scroll around it, or in the view.
+        private func updateScrollContainers() -> [NodeID: ScrollFocusContainer] {
+            var kept: [NodeID: ScrollFocusContainer] = [:]
+            for item in host.scrollItems() {
+                kept[item.scroll.id] =
+                    scrollContainers[item.scroll.id]
+                    ?? ScrollFocusContainer(view: self, scroll: item.scroll)
+            }
+            for (id, container) in kept {
+                guard let scroll = container.scroll else { continue }
+
+                container.factor = factor
+                container.frame = zoomed(item(frameOf: scroll))
+                container.parent = self
+                if let outer = scroll.enclosingScroll, let outerContainer = kept[outer.id],
+                    let frame = outer.frame(of: scroll)
+                {
+                    container.frame = zoomed(frame)
+                    container.parent = outerContainer
+                }
+            }
+            scrollContainers = kept
+            return kept
+        }
+
+        /// The frame of `scroll` in the root's coordinates, where it shows.
+        private func item(frameOf scroll: Scroll) -> LayoutRect {
+            host.scrollItems().first { $0.scroll === scroll }?.frame ?? scroll.frame
         }
 
         /// Brings the section guides in line with the tree's focus sections.
@@ -395,22 +544,73 @@
             }
         }
 
-        /// The tree's accessibility elements (`NodeHost.accessibilityItems()`), rebuilt after
-        /// every drawing.
+        /// The tree's accessibility elements (`NodeHost.accessibilityItems()`), brought up to
+        /// date after every drawing; a node keeps its element.
         ///
         /// Ownership: the view keeps the elements. Isolation: MainActor. Errors: none.
         /// Cancellation: none.
         public override var accessibilityElements: [Any]? {
-            get {
-                if let accessibilityCache { return accessibilityCache }
-
-                let elements = host.accessibilityItems().map {
-                    NodeAccessibilityElement(container: self, item: $0)
-                }
-                accessibilityCache = elements
-                return elements
-            }
+            get { accessibilityOrder ?? updateAccessibilityElements() }
             set {}
+        }
+
+        private func updateAccessibilityElements() -> [NodeAccessibilityElement] {
+            var kept: [NodeID: NodeAccessibilityElement] = [:]
+            let order = host.accessibilityItems().map { item in
+                let element =
+                    accessibilityByNode[item.node] ?? NodeAccessibilityElement(container: self)
+                element.update(item, frame: zoomed(item.frame))
+                kept[item.node] = element
+                return element
+            }
+            accessibilityByNode = kept
+            accessibilityOrder = order
+            return order
+        }
+
+        /// What VoiceOver says after a three-finger swipe turned a scroll's page. English by
+        /// default; an app sets its own words.
+        ///
+        /// Ownership: the view keeps the closure. Isolation: MainActor. Errors: none.
+        /// Cancellation: not applicable.
+        public var accessibilityPageStatus: @MainActor (ScrollPage) -> String = { page in
+            "Page \(page.number) of \(page.count)"
+        }
+
+        /// A three-finger swipe on `node`'s element: turns a page of the scroll around it and
+        /// tells VoiceOver where it is.
+        fileprivate func accessibilityScroll(
+            _ direction: UIAccessibilityScrollDirection,
+            from node: NodeID
+        ) -> Bool {
+            let axis: ScrollAxis?
+            let forward: Bool
+            switch direction {
+            // Three fingers up bring the content up: the next page below.
+            case .up: (axis, forward) = (.vertical, true)
+            case .down: (axis, forward) = (.vertical, false)
+            case .left: (axis, forward) = (.horizontal, true)
+            case .right: (axis, forward) = (.horizontal, false)
+            case .next: (axis, forward) = (nil, true)
+            case .previous: (axis, forward) = (nil, false)
+            @unknown default: return false
+            }
+            guard let page = host.scrollPage(around: node, axis: axis, forward: forward) else {
+                return false
+            }
+
+            layoutIfNeeded()
+            UIAccessibility.post(
+                notification: .pageScrolled,
+                argument: accessibilityPageStatus(page)
+            )
+            return true
+        }
+
+        /// VoiceOver moved to `node`'s element: the scrolls around it show it.
+        fileprivate func accessibilityFocused(_ node: NodeID) {
+            host.reveal(node)
+            layoutIfNeeded()
         }
 
         /// No width of its own — the surroundings give it one (constraints, SwiftUI, a
@@ -463,6 +663,104 @@
         }
     }
 
+    /// The platform's scrolling for one scroll of the tree. An empty `UIScrollView` over the
+    /// scroll's frame gives the physics — the drag, the glide, the bounce at the ends — and
+    /// its offset moves the scroll; the tree's layers do all the drawing. Its pan is added to
+    /// the node view, which takes the touches over it (`hitTest`) so taps still reach the
+    /// nodes. The scroll view stays shown and interactive: hidden, or with interaction off,
+    /// its pan never begins.
+    @MainActor
+    final class ScrollDriver: NSObject, UIScrollViewDelegate {
+        private(set) weak var scroll: Scroll?
+        private let physics = UIScrollView()
+        /// Set while the driver moves the scroll view itself, so it does not hear itself.
+        private var isFollowing = false
+        private var factor = 1.0
+
+        var pan: UIPanGestureRecognizer { physics.panGestureRecognizer }
+
+        /// Moving with the finger, or on its own after it: a touch then stops it.
+        var isGliding: Bool { physics.isDecelerating && !isPastTheEnds }
+
+        init(in view: UIView, scroll: Scroll) {
+            self.scroll = scroll
+            super.init()
+            physics.delegate = self
+            physics.backgroundColor = nil
+            physics.contentInsetAdjustmentBehavior = .never
+            physics.showsVerticalScrollIndicator = false
+            physics.showsHorizontalScrollIndicator = false
+            physics.alwaysBounceVertical = scroll.axis == .vertical
+            physics.alwaysBounceHorizontal = scroll.axis == .horizontal
+            view.addSubview(physics)
+            view.addGestureRecognizer(physics.panGestureRecognizer)
+        }
+
+        /// Puts the scroll view over the scroll's frame, `frame` in the node view's points,
+        /// with the content's extent, and at the scroll's offset unless a finger moves it.
+        func place(_ frame: CGRect, factor: Double) {
+            guard let scroll else { return }
+
+            isFollowing = true
+            defer { isFollowing = false }
+
+            self.factor = factor
+            physics.frame = frame
+            let content = scroll.contentBounds
+            // The content may start before the scroll's origin (a row laid out from the
+            // right); the insets let the offset go there.
+            physics.contentInset = UIEdgeInsets(
+                top: CGFloat(-content.origin.y * factor),
+                left: CGFloat(-content.origin.x * factor),
+                bottom: 0,
+                right: 0
+            )
+            physics.contentSize = CGSize(
+                width: (content.origin.x + content.size.width) * factor,
+                height: (content.origin.y + content.size.height) * factor
+            )
+            follow(factor: factor)
+        }
+
+        /// Moves the scroll view to the scroll's offset, when code moved the scroll rather
+        /// than a finger.
+        func follow(factor: Double) {
+            guard let scroll, !physics.isTracking, !physics.isDecelerating else { return }
+
+            isFollowing = true
+            defer { isFollowing = false }
+
+            let offset = scroll.shownOffset
+            physics.contentOffset = CGPoint(x: offset.x * factor, y: offset.y * factor)
+        }
+
+        func owns(_ view: UIView) -> Bool {
+            view === physics
+        }
+
+        func stop() {
+            physics.setContentOffset(physics.contentOffset, animated: false)
+        }
+
+        func remove() {
+            physics.panGestureRecognizer.view?.removeGestureRecognizer(physics.panGestureRecognizer)
+            physics.removeFromSuperview()
+        }
+
+        private var isPastTheEnds: Bool {
+            scroll.map { $0.overscroll != .zero } ?? false
+        }
+
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            guard !isFollowing else { return }
+
+            let offset = scrollView.contentOffset
+            scroll?.platformDidScroll(
+                to: LayoutPoint(x: Double(offset.x) / factor, y: Double(offset.y) / factor)
+            )
+        }
+    }
+
     /// The focus guide over one focus section, framed by constraints to the view's edges.
     @MainActor
     private final class SectionGuide {
@@ -495,13 +793,128 @@
         }
     }
 
+    /// A scroll of a tree for the platform's focus system: an item that does not take focus
+    /// itself but holds the focusable nodes inside the scroll, framed in its content. The
+    /// focus system then looks for the next node in the whole content, not only in what
+    /// shows, and moves `contentOffset` to show it — as it does for a `UIScrollView`. Its
+    /// coordinates are the content's, shifted by the offset, as a scroll view's bounds are.
+    @MainActor
+    final class ScrollFocusContainer: NSObject, UIFocusItem, UIFocusItemScrollableContainer,
+        UICoordinateSpace
+    {
+        private(set) weak var view: NodeView?
+        private(set) weak var scroll: Scroll?
+        /// The view, or the container of the scroll around this one.
+        weak var parent: (any UIFocusEnvironment & UICoordinateSpace)?
+        /// In the parent's coordinates.
+        var frame: CGRect = .zero
+        var factor = 1.0
+        /// The focusable nodes and the scrolls right inside.
+        var items: [any UIFocusItem] = []
+
+        init(view: NodeView, scroll: Scroll) {
+            self.view = view
+            self.scroll = scroll
+        }
+
+        // The item: never focused itself.
+
+        var canBecomeFocused: Bool { false }
+        var preferredFocusEnvironments: [any UIFocusEnvironment] { [] }
+        var parentFocusEnvironment: (any UIFocusEnvironment)? { parent }
+        var focusItemContainer: (any UIFocusItemContainer)? { self }
+
+        func setNeedsFocusUpdate() {
+            view?.setNeedsFocusUpdate()
+        }
+
+        func updateFocusIfNeeded() {
+            view?.updateFocusIfNeeded()
+        }
+
+        func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool { true }
+
+        func didUpdateFocus(
+            in context: UIFocusUpdateContext,
+            with coordinator: UIFocusAnimationCoordinator
+        ) {}
+
+        // The container.
+
+        var coordinateSpace: any UICoordinateSpace { self }
+
+        func focusItems(in rect: CGRect) -> [any UIFocusItem] {
+            items.filter { $0.frame.intersects(rect) }
+        }
+
+        var contentOffset: CGPoint {
+            get {
+                let offset = scroll?.shownOffset ?? .zero
+                return CGPoint(x: offset.x * factor, y: offset.y * factor)
+            }
+            set {
+                // The focus system moves it to show the node it focuses; it moves as focus
+                // moves, with its animation.
+                withAnimation(scroll?.host?.focusAnimation) {
+                    scroll?.contentOffset = LayoutPoint(
+                        x: Double(newValue.x) / factor,
+                        y: Double(newValue.y) / factor
+                    )
+                }
+            }
+        }
+
+        var contentSize: CGSize {
+            guard let content = scroll?.contentBounds else { return .zero }
+
+            return CGSize(
+                width: (content.origin.x + content.size.width) * factor,
+                height: (content.origin.y + content.size.height) * factor
+            )
+        }
+
+        var visibleSize: CGSize { bounds.size }
+
+        // The coordinate space: the content, starting at the offset.
+
+        var bounds: CGRect {
+            CGRect(origin: contentOffset, size: frame.size)
+        }
+
+        func convert(_ point: CGPoint, to coordinateSpace: any UICoordinateSpace) -> CGPoint {
+            let inParent = CGPoint(
+                x: point.x - bounds.minX + frame.minX,
+                y: point.y - bounds.minY + frame.minY
+            )
+            return parent?.convert(inParent, to: coordinateSpace) ?? inParent
+        }
+
+        func convert(_ point: CGPoint, from coordinateSpace: any UICoordinateSpace) -> CGPoint {
+            let inParent = parent?.convert(point, from: coordinateSpace) ?? point
+            return CGPoint(
+                x: inParent.x - frame.minX + bounds.minX,
+                y: inParent.y - frame.minY + bounds.minY
+            )
+        }
+
+        func convert(_ rect: CGRect, to coordinateSpace: any UICoordinateSpace) -> CGRect {
+            CGRect(origin: convert(rect.origin, to: coordinateSpace), size: rect.size)
+        }
+
+        func convert(_ rect: CGRect, from coordinateSpace: any UICoordinateSpace) -> CGRect {
+            CGRect(origin: convert(rect.origin, from: coordinateSpace), size: rect.size)
+        }
+    }
+
     /// One focusable node of a tree for the platform's focus system. It keeps the node's
     /// identity and its frame from the last drawing; it never holds the node itself.
     @MainActor
     final class NodeFocusItem: NSObject, UIFocusItem {
         let node: NodeID
         private(set) weak var view: NodeView?
-        /// In the view's coordinates.
+        /// The view, or the focus container of the scroll the node is in.
+        weak var parent: (any UIFocusEnvironment)?
+        /// In the parent's coordinates: the view's, or the scroll's content.
         var frame: CGRect = .zero
 
         init(view: NodeView, node: NodeID) {
@@ -516,7 +929,7 @@
         var canBecomeFocused: Bool { true }
 
         var preferredFocusEnvironments: [any UIFocusEnvironment] { [] }
-        var parentFocusEnvironment: (any UIFocusEnvironment)? { view }
+        var parentFocusEnvironment: (any UIFocusEnvironment)? { parent ?? view }
         /// The container of the item's own children, not of the item: a node is focused as a
         /// whole, so there are none. The view here made the focus engine find the item's
         /// siblings as its children, and the remote could not move the focus.
@@ -542,22 +955,40 @@
     /// host to act on it; it never holds the node itself.
     @MainActor
     final class NodeAccessibilityElement: UIAccessibilityElement {
-        private let node: NodeID
-        private weak var host: NodeHost?
+        private var node: NodeID?
+        private weak var view: NodeView?
 
-        init(container: NodeView, item: AccessibilityItem) {
-            node = item.node
-            host = container.host
+        init(container: NodeView) {
+            view = container
             super.init(accessibilityContainer: container)
+        }
+
+        /// Shows what `item` says, at `frame` in the view's coordinates.
+        func update(_ item: AccessibilityItem, frame: CGRect) {
+            node = item.node
             accessibilityLabel = item.label
             accessibilityValue = item.value
             accessibilityHint = item.hint
             accessibilityTraits = NodeAccessibilityElement.traits(item.traits)
-            accessibilityFrameInContainerSpace = container.zoomed(item.frame)
+            accessibilityFrameInContainerSpace = frame
         }
 
         override func accessibilityActivate() -> Bool {
-            host?.activate(node) ?? false
+            guard let node else { return false }
+
+            return view?.host.activate(node) ?? false
+        }
+
+        override func accessibilityScroll(_ direction: UIAccessibilityScrollDirection) -> Bool {
+            guard let node, let view else { return false }
+
+            return view.accessibilityScroll(direction, from: node)
+        }
+
+        override func accessibilityElementDidBecomeFocused() {
+            guard let node else { return }
+
+            view?.accessibilityFocused(node)
         }
 
         private static func traits(_ traits: AccessibilityTraits) -> UIAccessibilityTraits {

@@ -43,6 +43,12 @@
         /// Layers of nodes that left in an animated render, fading out in place. They are
         /// dropped at the first render after their fade is over.
         private var leaving: [NodeID: CALayer] = [:]
+        /// The scroll indicator of each scroll, the last sublayer of its layer.
+        private var indicators: [NodeID: CALayer] = [:]
+        /// The offset each scroll was drawn at, to show the indicator when it moves.
+        private var drawnOffsets: [NodeID: LayoutPoint] = [:]
+        /// The sticky nodes inside each scroll at the last render: they move when it scrolls.
+        private var stickyNodes: [NodeID: [Node]] = [:]
 
         /// What a layer's contents were drawn from.
         private struct Drawing: Equatable {
@@ -99,6 +105,7 @@
             defer { CATransaction.commit() }
 
             var pass = Pass(animation: animation, container: container)
+            stickyNodes = [:]
             let rootLayer = sync(root, pass: &pass)
             if rootLayer.superlayer !== container {
                 container.addSublayer(rootLayer)
@@ -120,13 +127,44 @@
                     gone[ObjectIdentifier(layer)] = id
                 }
                 drawn[id] = nil
+                indicators[id] = nil
+                drawnOffsets[id] = nil
             }
             settle(pass.detached, gone: gone, animation: animation)
+        }
+
+        /// Moves the content of `scrolls` to their offsets, and shows their indicators, without
+        /// drawing anything else — for `NodeHost.scrolledSinceRender`, many times a second
+        /// while a finger drags. The scrolls must have been drawn by a render before.
+        ///
+        /// Ownership: updates layers the renderer owns. Isolation: MainActor. Errors: none.
+        /// Cancellation: not applicable.
+        public func renderScrolls(_ scrolls: [Scroll]) {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            defer { CATransaction.commit() }
+
+            for scroll in scrolls {
+                guard let layer = layers[scroll.id] else { continue }
+
+                let offset = scroll.shownOffset
+                layer.removeAnimation(forKey: "bounds")
+                layer.bounds.origin = CGPoint(x: offset.x, y: offset.y)
+                updateIndicator(of: scroll, in: layer)
+                for node in stickyNodes[scroll.id] ?? [] {
+                    guard let sticky = layers[node.id] else { continue }
+
+                    sticky.removeAnimation(forKey: "position")
+                    sticky.position = LayerRenderer.position(of: node)
+                }
+            }
         }
 
         /// A node whose layer is in line, while the layers of its subnodes are brought in line.
         private struct Level {
             let layer: CALayer
+            /// Drawn over the subnodes' layers, last.
+            let indicator: CALayer?
             let subnodes: [Node]
             /// The subnodes' layers appear with this one: they do not fade in by themselves.
             let subnodesAreNew: Bool
@@ -158,7 +196,11 @@
                 }
 
                 let done = levels.removeLast()
-                attach(done.sublayers, to: done.layer, pass: &pass)
+                attach(
+                    done.sublayers + (done.indicator.map { [$0] } ?? []),
+                    to: done.layer,
+                    pass: &pass
+                )
                 guard let parent = levels.indices.last else { return done.layer }
 
                 levels[parent].sublayers.append(done.layer)
@@ -200,13 +242,18 @@
                     in: oldParentOrigin
                 )
             }
-            // Position and bounds rather than `frame`, which a scale transform would distort.
+            // Position and bounds rather than `frame`, which a scale transform would distort. A
+            // scroll's bounds start at its offset, which moves its sublayers back by it.
             let frame = node.frame
-            layer.bounds = CGRect(x: 0, y: 0, width: frame.size.width, height: frame.size.height)
-            layer.position = CGPoint(
-                x: frame.origin.x + frame.size.width / 2,
-                y: frame.origin.y + frame.size.height / 2
+            let scroll = node as? Scroll
+            let offset = scroll?.shownOffset ?? .zero
+            layer.bounds = CGRect(
+                x: offset.x,
+                y: offset.y,
+                width: frame.size.width,
+                height: frame.size.height
             )
+            layer.position = LayerRenderer.position(of: node)
             apply(node.appearance, to: layer)
             applyVisibility(of: node, to: layer, isNew: isNew, animated: pass.animation != nil)
             if let drawing = node as? any LayerDrawing {
@@ -249,7 +296,30 @@
                 layer.add(fadeIn, forKey: "opacity")
             }
 
-            return Level(layer: layer, subnodes: node.subnodes, subnodesAreNew: isNew || cameBack)
+            var indicator: CALayer?
+            if let scroll {
+                indicator = updateIndicator(of: scroll, in: layer)
+            }
+            if node.sticky != nil, let scroll = node.enclosingScroll {
+                stickyNodes[scroll.id, default: []].append(node)
+            }
+            return Level(
+                layer: layer,
+                indicator: indicator,
+                subnodes: node.subnodesInDrawingOrder,
+                subnodesAreNew: isNew || cameBack
+            )
+        }
+
+        /// The center of the node's layer in its supernode's: its frame's, moved by where it
+        /// sticks.
+        private static func position(of node: Node) -> CGPoint {
+            let frame = node.frame
+            let offset = node.stickyOffset
+            return CGPoint(
+                x: frame.origin.x + offset.x + frame.size.width / 2,
+                y: frame.origin.y + offset.y + frame.size.height / 2
+            )
         }
 
         /// Where the coordinate space of `layer` starts, as shown before this render: recorded
@@ -532,6 +602,69 @@
                     forKey: "contents"
                 )
             }
+        }
+
+        /// Places the indicator of `scroll` along its trailing (or bottom) edge where its offset
+        /// is between the ends, and shows it for a moment when the offset moved since it was
+        /// last drawn. It lives in the scroll's layer, whose coordinates start at the offset.
+        @discardableResult
+        private func updateIndicator(of scroll: Scroll, in layer: CALayer) -> CALayer {
+            let indicator = indicators[scroll.id] ?? makeIndicator(for: scroll)
+            let offset = scroll.contentOffset
+            // The layer's coordinates start where it shows, past the ends while it bounces.
+            let base = scroll.shownOffset
+            let range = scroll.offsetRange
+            let content = scroll.contentBounds
+            let size = scroll.frame.size
+            let thickness = 3.0
+            let inset = 3.0
+            let vertical = scroll.axis == .vertical
+            let window = vertical ? size.height : size.width
+            let length = vertical ? content.size.height : content.size.width
+            let track = max(0, window - 2 * inset)
+            let bar = min(track, max(36, track * window / max(length, 1)))
+            let travel =
+                vertical ? range.highest.y - range.lowest.y : range.highest.x - range.lowest.x
+            let done = vertical ? offset.y - range.lowest.y : offset.x - range.lowest.x
+            let along = inset + (travel > 0 ? (track - bar) * done / travel : 0)
+            indicator.frame =
+                vertical
+                ? CGRect(
+                    // Along the trailing edge: the left one right to left.
+                    x: scroll.host?.direction == .rightToLeft
+                        ? base.x + inset : base.x + size.width - inset - thickness,
+                    y: base.y + along,
+                    width: thickness,
+                    height: bar
+                )
+                : CGRect(
+                    x: base.x + along,
+                    y: base.y + size.height - inset - thickness,
+                    width: bar,
+                    height: thickness
+                )
+
+            let moved = drawnOffsets[scroll.id].map { $0 != offset } ?? false
+            drawnOffsets[scroll.id] = offset
+            if moved, scroll.canScroll {
+                // Shown while the offset keeps moving, then faded out: each move starts the
+                // animation over, so no timer has to hide it.
+                let flash = CAKeyframeAnimation(keyPath: "opacity")
+                flash.values = [Float(1), Float(1), Float(0)]
+                flash.keyTimes = [0, 0.6, 1]
+                flash.duration = 1.2
+                indicator.add(flash, forKey: "opacity")
+            }
+            return indicator
+        }
+
+        private func makeIndicator(for scroll: Scroll) -> CALayer {
+            let indicator = CALayer()
+            indicator.backgroundColor = CGColor(red: 0, green: 0, blue: 0, alpha: 0.4)
+            indicator.cornerRadius = 1.5
+            indicator.opacity = 0
+            indicators[scroll.id] = indicator
+            return indicator
         }
 
         private func makeLayer(for node: Node) -> CALayer {

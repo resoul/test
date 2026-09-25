@@ -159,7 +159,96 @@
         }
     }
 
-    /// The whole screen: a title, a column of cards and a row of actions.
+    /// A colored tile with its number, for the row that scrolls sideways.
+    @MainActor
+    final class Tile: Node {
+        let label: Text
+
+        init(number: Int, color: Color) {
+            label = Text("\(number)", style: TextStyle(size: 22, weight: .bold, color: .white))
+            super.init()
+            appearance.background = color
+            appearance.cornerRadius = 12
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { label }
+                .size(width: 96, height: 72)
+                .justifyContent(.center)
+                .alignItems(.center)
+        }
+    }
+
+    /// Twelve tiles in a row, wider than any screen.
+    @MainActor
+    final class Tiles: Node {
+        let tiles = (1...12).map { number in
+            Tile(
+                number: number,
+                color: Color(
+                    red: 0.2 + 0.06 * Double(number % 6),
+                    green: 0.4,
+                    blue: 0.9 - 0.05 * Double(number % 8)
+                )
+            )
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.row) {
+                for tile in tiles { tile }
+            }
+            .gap(12)
+            .padding(top: 0, leading: 24, bottom: 0, trailing: 24)
+        }
+    }
+
+    /// A section title on the screen's gray, so what scrolls under it does not show through.
+    @MainActor
+    final class SectionTitle: Node {
+        let label: Text
+
+        init(_ title: String) {
+            label = Text(title, style: TextStyle(size: 17, weight: .semibold, color: ink))
+            super.init()
+            appearance.background = Color(red: 0.96, green: 0.96, blue: 0.97)
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer { label }
+                .padding(top: 8, leading: 24, bottom: 8, trailing: 24)
+        }
+    }
+
+    /// What scrolls: the row of tiles, a title that sticks to the top, the cards and the
+    /// actions.
+    @MainActor
+    final class Feed: Node {
+        let tiles = Scroll(.horizontal, content: Tiles())
+        let people = SectionTitle("People")
+        let cards: [ProfileCard]
+        let actions: Actions
+
+        init(cards: [ProfileCard], actions: Actions) {
+            self.cards = cards
+            self.actions = actions
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                tiles.margin(top: 0, leading: -24, bottom: 0, trailing: -24)
+                people
+                    .margin(top: 0, leading: -24, bottom: -8, trailing: -24)
+                    .sticky(top: 0)
+                for card in cards { card }
+                actions
+            }
+            .gap(16)
+            .padding(top: 0, leading: 24, bottom: 24, trailing: 24)
+        }
+    }
+
+    /// The whole screen: a title over a list that scrolls — a row of tiles that scrolls
+    /// sideways, the cards and a row of actions.
     @MainActor
     final class Screen: Node {
         let title = Text(
@@ -168,28 +257,31 @@
         )
         let hint = Text(
             "Resize the window: under 460 points a card turns into a column. "
-                + "Tap a Follow badge, or rename Ada: the changes animate.",
+                + "Tap a Follow badge, or rename Ada: the changes animate. "
+                + "The list scrolls, and so does the row of tiles.",
             style: TextStyle(size: 14, color: muted)
         )
         let cards: [ProfileCard]
-        let actions: Actions
+        let feed: Scroll
 
         init(profiles: [Profile], rename: @escaping @MainActor () -> Void) {
             cards = profiles.map { ProfileCard(profile: $0) }
-            actions = Actions(rename: Button("Rename Ada", action: rename))
+            let actions = Actions(rename: Button("Rename Ada", action: rename))
+            feed = Scroll(.vertical, content: Feed(cards: cards, actions: actions))
             super.init()
             appearance.background = Color(red: 0.96, green: 0.96, blue: 0.97)
         }
 
         override func layoutSpec() -> LayoutSpec? {
             FlexContainer(.column) {
-                title
-                hint
-                for card in cards { card }
-                actions
+                FlexContainer(.column) {
+                    title
+                    hint
+                }
+                .gap(16)
+                .padding(24)
+                feed
             }
-            .gap(16)
-            .padding(24)
         }
     }
 
@@ -210,6 +302,36 @@
                 name: "Grace Hopper",
                 bio: "Built the first compiler, and found the first actual bug.",
                 color: Color(red: 0.36, green: 0.66, blue: 0.47)
+            ),
+            Profile(
+                name: "Alan Turing",
+                bio: "Asked what a machine can compute, and answered it.",
+                color: Color(red: 0.55, green: 0.42, blue: 0.85)
+            ),
+            Profile(
+                name: "Katherine Johnson",
+                bio: "Computed the paths that took astronauts to orbit and back.",
+                color: Color(red: 0.95, green: 0.68, blue: 0.25)
+            ),
+            Profile(
+                name: "Edsger Dijkstra",
+                bio: "Found the shortest path, and argued against the goto.",
+                color: Color(red: 0.27, green: 0.6, blue: 0.75)
+            ),
+            Profile(
+                name: "Barbara Liskov",
+                bio: "Said what it means for one type to stand in for another.",
+                color: Color(red: 0.85, green: 0.35, blue: 0.55)
+            ),
+            Profile(
+                name: "Donald Knuth",
+                bio: "Wrote the book on algorithms, and the program to typeset it.",
+                color: Color(red: 0.45, green: 0.62, blue: 0.3)
+            ),
+            Profile(
+                name: "Margaret Hamilton",
+                bio: "Led the software that landed Apollo 11 on the Moon.",
+                color: Color(red: 0.62, green: 0.5, blue: 0.4)
             ),
         ]
         private let names = ["Ada Lovelace", "Augusta Ada King", "Countess of Lovelace"]

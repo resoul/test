@@ -10,11 +10,24 @@
 		D10000000000000000000001 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30000000000000000000001 /* App.swift */; };
 		D10000000000000000000002 /* DemoScreens in Frameworks */ = {isa = PBXBuildFile; productRef = D20000000000000000000001 /* DemoScreens */; };
 		D10000000000000000000003 /* NodesUIKit in Frameworks */ = {isa = PBXBuildFile; productRef = D20000000000000000000002 /* NodesUIKit */; };
+		D10000000000000000000004 /* FocusScrollTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30000000000000000000003 /* FocusScrollTests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		DC0000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D90000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D60000000000000000000001;
+			remoteInfo = LayoutDemoTV;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		D30000000000000000000001 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
 		D30000000000000000000002 /* LayoutDemoTV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LayoutDemoTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D30000000000000000000003 /* FocusScrollTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITests/FocusScrollTests.swift; sourceTree = "<group>"; };
+		D30000000000000000000004 /* LayoutDemoTVUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LayoutDemoTVUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -34,6 +47,7 @@
 			isa = PBXGroup;
 			children = (
 				D30000000000000000000001 /* App.swift */,
+				D30000000000000000000003 /* FocusScrollTests.swift */,
 				D50000000000000000000002 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -42,6 +56,7 @@
 			isa = PBXGroup;
 			children = (
 				D30000000000000000000002 /* LayoutDemoTV.app */,
+				D30000000000000000000004 /* LayoutDemoTVUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -69,6 +84,22 @@
 			productReference = D30000000000000000000002 /* LayoutDemoTV.app */;
 			productType = "com.apple.product-type.application";
 		};
+		D60000000000000000000002 /* LayoutDemoTVUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D70000000000000000000003 /* Build configuration list for PBXNativeTarget "LayoutDemoTVUITests" */;
+			buildPhases = (
+				D80000000000000000000002 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DD0000000000000000000001 /* PBXTargetDependency */,
+			);
+			name = LayoutDemoTVUITests;
+			productName = LayoutDemoTVUITests;
+			productReference = D30000000000000000000004 /* LayoutDemoTVUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -81,6 +112,10 @@
 				TargetAttributes = {
 					D60000000000000000000001 = {
 						CreatedOnToolsVersion = 27.0;
+					};
+					D60000000000000000000002 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = D60000000000000000000001;
 					};
 				};
 			};
@@ -103,6 +138,7 @@
 			projectRoot = "";
 			targets = (
 				D60000000000000000000001 /* LayoutDemoTV */,
+				D60000000000000000000002 /* LayoutDemoTVUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -116,7 +152,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D80000000000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D10000000000000000000004 /* FocusScrollTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		DD0000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D60000000000000000000001 /* LayoutDemoTV */;
+			targetProxy = DC0000000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		DB0000000000000000000001 /* Debug */ = {
@@ -180,6 +232,38 @@
 			};
 			name = Release;
 		};
+		DB0000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.layout.demo.tv.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TEST_TARGET_NAME = LayoutDemoTV;
+				TVOS_DEPLOYMENT_TARGET = 16.0;
+			};
+			name = Debug;
+		};
+		DB0000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.layout.demo.tv.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TEST_TARGET_NAME = LayoutDemoTV;
+				TVOS_DEPLOYMENT_TARGET = 16.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -197,6 +281,15 @@
 			buildConfigurations = (
 				DB0000000000000000000001 /* Debug */,
 				DB0000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D70000000000000000000003 /* Build configuration list for PBXNativeTarget "LayoutDemoTVUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DB0000000000000000000005 /* Debug */,
+				DB0000000000000000000006 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -228,6 +228,27 @@
 | `NodeHost.moveFocus`, `FocusMove`, `nearest` | Tab — порядок чтения, `false` на краю (дальше — следующий view); стрелки — вперёд ×1 + вбок ×2 | Trellis D38: стрелки по геометрии, tie по порядку |
 | `NodeHost.requestFocus`, `onFocusRequest`; `NodeView.requestedFocus`, `applyFocusRequest` | приложение просит, система переводит, хост узнаёт через `didUpdateFocus` — одна дорога для всех переходов | правило Trellis: система фокуса — единственный владелец |
 | `NodeNSView` `keyDown/keyUp`, `becomeFirstResponder` | AppKit без фокус-элементов: клавиатуру ведёт view; фокус при входе только от Tab | — |
+| `Scroll`, `ScrollAxis`, `ScrollRange`; `contentOffset` в `State` | окно на содержимое; чтение смещения — зависимость | [03](03-layout-api.md) (девятый срез) |
+| `Scroll.layoutSpec` — `shrink 10⁶`, `grow 1` у вертикального, `min 0` вдоль оси | сжимается раньше соседей, явный размер при размещении работает; не `flex-basis: 0` — он сильнее `height` | [03](03-layout-api.md) |
+| `Scroll.offsetRange`, `contentBounds` | диапазон от начала содержимого, в RTL — отрицательные x | дефект #90 Trellis |
+| `Node.contentOrigin`; `hitTest`, `walkVisible` | подузлы прокрутки сдвинуты на её смещение — для касаний, фокуса, доступности | — |
+| `NodeHost.reveal` в `focus` | фокус к ноде внутри прокрутки прокручивает к ней, внутреннюю первой | как `UIScrollView` с клавиатурой |
+| `NodeHost.scrolledSinceRender`, `setNeedsScrollRender`; `LayerRenderer.renderScrolls` | прокрутка без анимации двигает только слои прокруток | 60 кадров в секунду при перетаскивании |
+| `LayerRenderer.updateIndicator` | полоса — последний подслой; при движении — keyframe-анимация прозрачности, гаснет сама | без таймеров |
+| `Scroll.overscroll`, `shownOffset`, `platformDidScroll(to:)` | отскок системной физики за краем — не часть `contentOffset` | iOS |
+| `NodeHost.scrollItems`, `scrolls(at:)` | видимые прокрутки для адаптера; цепочка прокручиваемых под точкой, внутренняя первой | [05](05-platform-adapters.md#прокрутка) |
+| `LayoutSpec.sticky`, `LayoutTree.Entry.sticky`/`flexParent`, `PreparedLayout.sticky(of:)`; `LayoutElement.applyLayoutSticky`, `StickyPosition` | sticky вне движка: элемент получает отступы и рамку ближайшего flex-контейнера | CSS `position: sticky` |
+| `Node.stickyOffset`, `stick`, `shownOrigin` | сдвиг по CSS Positioned Layout §3.4 из смещения прокрутки, без прохода раскладки | [03](03-layout-api.md) |
+| `Node.subnodesInDrawingOrder`; `hitTest`, `LayerRenderer.enter` | sticky поверх остальных элементов контейнера — как позиционированный блок в CSS | CSS painting order |
+| `LayerRenderer.stickyNodes`, `position(of:)` | быстрый путь прокрутки двигает и слои sticky | — |
+| `ScrollFocusContainer` (UIKit), `NodeFocusItem.parent`, `NodeView.topFocusItems` | прокрутка — `UIFocusItemScrollableContainer`: движок фокуса ищет по всему содержимому и двигает `contentOffset` | [05](05-platform-adapters.md#прокрутка); UI-тест `DemotvOS/UITests` |
+| `NodeHost.scrollPage`, `Scroll.scrollPage`, `ScrollPage`; `NodeHost.reveal` | прокрутка для технологий доступности: страница, «Page N of M», показ элемента | UIKit `accessibilityScroll` |
+| `NodeView.accessibilityByNode`, `NodeAccessibilityElement.update` | элемент живёт, пока нода — элемент; VoiceOver держит место по объекту | прокрутка перерисовывает много раз в секунду |
+| `NodeNSView.WheelPhase`, `pulled`, `stretch`, `springBack`, `glideIsSpent` | отскок трекпада: сопротивление `(1 − 1/(x·0.55/d + 1))·d`, возврат пружиной, инерция отскакивает раз | как `NSScrollView` |
+| `NodeNSView.accessibilityByNode`, `NodeAccessibilityElement.update` (AppKit) | элемент живёт, пока нода | как в UIKit |
+| `Scroll.contentOffset` — запись того же значения ничего не делает | не сбрасывает `overscroll` при вытягивании | — |
+| `ScrollDriver` (UIKit), `NodeView.hitTest`, `gestureRecognizerShouldBegin` | пустой `UIScrollView` — только физика; его пан на `NodeView` | [05](05-platform-adapters.md#прокрутка) |
+| `NodeNSView.scrollWheel`, `scroll(by:at:)`, `latched` | колесо/трекпад: внутренняя прокрутка, остаток — внешней; жест держится за начальные | [05](05-platform-adapters.md#прокрутка) |
 | `NodeView` на iPad: `usesFocus`, `selects` | система фокуса iPadOS с клавиатурой; групп фокуса нет — свойство недоступно на tvOS | дефект #135 |
 | `NodeView.zoom`, `contentLayer`, `zoomed` | дерево раскладывается в `bounds / zoom`, слой содержимого увеличен от левого верхнего угла; `host.scale` = экран × zoom, чтобы текст был чётким; `nil` — 2 на TV, 1 иначе | интерфейс для TV: размеры под телефон с 2–3 м читаются примерно вдвое крупнее |
 | `NodeNSView.zoom`, `contentLayer` | то же на Mac; по умолчанию 1 | [03](03-layout-api.md) |
