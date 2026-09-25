@@ -2,6 +2,7 @@
     import ImageIO
     import LayoutCore
     import Nodes
+    import os
     @testable import NodesRender
     import QuartzCore
     import Testing
@@ -96,8 +97,12 @@
         base64Encoded: "UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA=="
     )!
 
+    /// Requests the stub server has answered, by URL path.
+    private let stubRequests = OSAllocatedUnfairLock(initialState: [String: Int]())
+
     /// Answers requests to `image-cache.test` with the WebP above, so the download path of
-    /// the disk cache runs without a network. Other hosts are left to the system.
+    /// the disk cache runs without a network. Paths containing `slow` answer after 0.3 s, so
+    /// that loads overlap. Other hosts are left to the system.
     private final class WebPProtocol: URLProtocol {
         override class func canInit(with request: URLRequest) -> Bool {
             request.url?.host == "image-cache.test"
@@ -114,6 +119,8 @@
                     headerFields: ["Content-Type": "image/webp"]
                 )
             else { return }
+            stubRequests.withLock { $0[url.path, default: 0] += 1 }
+            if url.path.contains("slow") { Thread.sleep(forTimeInterval: 0.3) }
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: webP)
             client?.urlProtocolDidFinishLoading(self)
@@ -145,6 +152,42 @@
         let pipeline = ImagePipeline(cache: cache)
         let image = try await pipeline.load(.url(url), targetPixelDimension: 8)
         #expect(image.size == LayoutSize(width: 1, height: 1))
+    }
+
+    @Test
+    func simultaneousLoadsOfOneURLShareOneDownload() async throws {
+        #expect(webPProtocolRegistered)
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = ImageCache(configuration: ImageCacheConfiguration(directory: directory))
+        let url = URL(string: "https://image-cache.test/shared-slow.webp")!
+        async let first = cache.load(url)
+        async let second = cache.load(url)
+        async let third = cache.load(url)
+        let loads = try await [first, second, third]
+        #expect(loads.allSatisfy { $0 == webP })
+        #expect(stubRequests.withLock { $0[url.path] } == 1)
+
+        #expect(try await cache.load(url) == webP)
+        #expect(stubRequests.withLock { $0[url.path] } == 1)
+    }
+
+    @Test
+    func aCancelledLoadLeavesTheSharedDownloadToTheOthers() async throws {
+        #expect(webPProtocolRegistered)
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = ImageCache(configuration: ImageCacheConfiguration(directory: directory))
+        let url = URL(string: "https://image-cache.test/leave-slow.webp")!
+        let leaving = Task { try await cache.load(url) }
+        let staying = Task { try await cache.load(url) }
+        while await cache.downloadWaiters(for: url) < 2 { await Task.yield() }
+
+        leaving.cancel()
+        await #expect(throws: CancellationError.self) { try await leaving.value }
+        #expect(try await staying.value == webP)
+        #expect(try await cache.cachedData(for: url) == webP)
+        #expect(stubRequests.withLock { $0[url.path] } == 1)
     }
 
     @Test

@@ -65,11 +65,20 @@
     /// expire after insertion, and are evicted by last use when the byte limit is reached.
     ///
     /// Ownership: the caller owns the cache and its directory. Isolation: actor. Errors:
-    /// invalid images, file errors, and network errors are thrown. Cancellation: a cancelled
-    /// load does not write an entry.
+    /// invalid images, file errors, and network errors are thrown. Cancellation: a download
+    /// that every caller left does not write an entry.
     public actor ImageCache {
         /// Ownership: value. Isolation: actor. Errors: none. Cancellation: not applicable.
         public let configuration: ImageCacheConfiguration
+
+        private struct Download {
+            let id: UInt64
+            let task: Task<Data, Error>
+            var waiters: Set<UInt64>
+        }
+
+        private var downloads: [URL: Download] = [:]
+        private var nextID: UInt64 = 0
 
         /// Ownership: the caller owns the cache. Isolation: actor. Errors: none.
         /// Cancellation: not applicable.
@@ -78,29 +87,41 @@
         }
 
         /// Returns cached bytes, or downloads and stores them. File URLs are read directly.
-        /// An image whose format cannot take the metadata policy is returned uncached.
+        /// Simultaneous loads of one URL share one download. An image whose format cannot take
+        /// the metadata policy is returned uncached.
         ///
         /// Ownership: returns data. Isolation: actor. Errors: network, image, and file errors.
-        /// Cancellation: cancellation of the caller cancels the download before a disk write.
+        /// Cancellation: a caller leaves a shared download; the last departing caller cancels
+        /// it before a disk write.
         public func load(_ url: URL) async throws -> Data {
             if url.isFileURL { return try Data(contentsOf: url) }
             if let cached = try cachedData(for: url) { return cached }
 
-            let (data, response) = try await URLSession.shared.data(from: url)
-            try Task.checkCancellation()
-            guard let response = response as? HTTPURLResponse,
-                (200...299).contains(response.statusCode)
-            else { throw ImageCacheError.invalidResponse }
-
-            do {
-                try store(data, for: url)
-            } catch ImageCacheError.processingFailed {
-                // The metadata policy cannot be applied to this format: Image I/O reads WebP,
-                // for one, but cannot write it. Storing the original would keep on disk what
-                // the policy removes, so the image is shown but not cached.
-                return data
+            nextID &+= 1
+            let waiter = nextID
+            let download: Download
+            if var existing = downloads[url] {
+                existing.waiters.insert(waiter)
+                downloads[url] = existing
+                download = existing
+            } else {
+                let id = waiter
+                download = Download(
+                    id: id,
+                    task: Task { try await self.download(url, id: id) },
+                    waiters: [waiter]
+                )
+                downloads[url] = download
             }
-            return try cachedData(for: url) ?? data
+
+            let id = download.id
+            return try await withTaskCancellationHandler {
+                let data = try await download.task.value
+                try Task.checkCancellation()
+                return data
+            } onCancel: {
+                Task { await self.leave(waiter, from: url, id: id) }
+            }
         }
 
         /// Reads a disk entry without fetching its URL.
@@ -143,6 +164,42 @@
             )
             try prepared.write(to: fileURL(for: url), options: .atomic)
             try evictIfNeeded()
+        }
+
+        func downloadWaiters(for url: URL) -> Int {
+            downloads[url]?.waiters.count ?? 0
+        }
+
+        private func download(_ url: URL, id: UInt64) async throws -> Data {
+            // Later loads find the file on disk, or start over after a failure.
+            defer { if downloads[url]?.id == id { downloads[url] = nil } }
+
+            let (data, response) = try await URLSession.shared.data(from: url)
+            try Task.checkCancellation()
+            guard let response = response as? HTTPURLResponse,
+                (200...299).contains(response.statusCode)
+            else { throw ImageCacheError.invalidResponse }
+
+            do {
+                try store(data, for: url)
+            } catch ImageCacheError.processingFailed {
+                // The metadata policy cannot be applied to this format: Image I/O reads WebP,
+                // for one, but cannot write it. Storing the original would keep on disk what
+                // the policy removes, so the image is shown but not cached.
+                return data
+            }
+            return try cachedData(for: url) ?? data
+        }
+
+        private func leave(_ waiter: UInt64, from url: URL, id: UInt64) {
+            guard var download = downloads[url], download.id == id else { return }
+            download.waiters.remove(waiter)
+            if download.waiters.isEmpty {
+                download.task.cancel()
+                downloads[url] = nil
+            } else {
+                downloads[url] = download
+            }
         }
 
         private func fileURL(for url: URL) -> URL {

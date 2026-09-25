@@ -204,6 +204,7 @@
 | `Image.layoutContent`, `Image.scale`, `NaturalSizeMeasurer` | размер в точках (`пиксели / scale`), высота по ширине — как `<img>` в Chromium 152; ширина по высоте открыта; дефект #157 | [11](11-image.md), [defects](defects.md) |
 | `LayerDrawing.prepareDrawing`, `LayerRenderer.draw` | рендерер сообщает размер и масштаб до рисования, чтобы нода могла обновить детализацию | [11](11-image.md) |
 | `ImageCache`, `ImageCacheConfiguration` | дисковый кэш URL, предел/возраст, отдельные настройки метаданных и PNG-оптимизации | [11](11-image.md) |
+| `ImageCache.load`, `ImageCache.download`, `leave` | одна загрузка на URL для одновременных запросов; последний ушедший отменяет её до записи; дефект #158 | [11](11-image.md), [defects](defects.md) |
 | `ImageCache.load` (`processingFailed`) | формат, к которому политика метаданных неприменима, показывается без записи на диск; дефект #156 | [11](11-image.md), [defects](defects.md) |
 | `TextLayout(rightToLeft:)`, `Text.drawingRevision` с направлением хоста | `leading` у правого края в RTL; смена направления перерисовывает | [03](03-layout-api.md) |
 | `Node.hitTest` (явный стек), `Node.walkVisible`, `frame(from:)`; `NodeHost.collect`/`collectFocus`/`collectSections`/`spokenText` через `walkVisible` | обходы без рекурсии | дефект #142 |
