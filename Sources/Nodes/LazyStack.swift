@@ -113,9 +113,9 @@ public final class LazyStack<Item: Identifiable>: Node {
     /// An item that shows as a layout begins, and where it is then in `scroll`: the layout
     /// is followed by a scroll that puts it back there.
     private var anchor: Anchor?
-    /// The item `scroll(to:)` moved to at once, and the layouts left to put it at the
-    /// window's start: the first layout there finds lengths it only guessed.
-    private var scrolledTo: (id: Item.ID, layouts: Int)?
+    /// The item `scroll(to:at:)` moved to at once, where in the window, and the layouts
+    /// left to put it there: the first layout there finds lengths it only guessed.
+    private var scrolledTo: (id: Item.ID, alignment: ScrollAlignment, layouts: Int)?
 
     private struct Anchor {
         let id: Item.ID
@@ -358,8 +358,8 @@ public final class LazyStack<Item: Identifiable>: Node {
     // MARK: - Scrolling to an item
 
     /// Scrolls the nearest scroll around the stack along its axis so that the item with
-    /// `id` starts where the window starts — after the nodes sticking there, such as a
-    /// section's title — as far as the scroll goes. Inside
+    /// `id` is where `alignment` puts it in the window — at its start by default, after the
+    /// nodes sticking there, such as a section's title — as far as the scroll goes. Inside
     /// `withAnimation` it moves there with the animation — frame by frame when it is far —
     /// and ends on the item however long the items on the way turn out. Returns `false`,
     /// not moving, when no item has that `id` or the stack is not laid out in a scroll.
@@ -367,9 +367,9 @@ public final class LazyStack<Item: Identifiable>: Node {
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: another move of
     /// the scroll, or the platform moving it, stops the move.
     @discardableResult
-    public func scroll(to id: Item.ID) -> Bool {
+    public func scroll(to id: Item.ID, at alignment: ScrollAlignment = .start) -> Bool {
         guard let scroll, let index = items.firstIndex(where: { $0.id == id }),
-            let target = offset(showing: index, in: scroll)
+            let target = offset(showing: index, at: alignment, in: scroll)
         else { return false }
 
         scroll.scroll(to: target) { [weak self, weak scroll] in
@@ -377,19 +377,19 @@ public final class LazyStack<Item: Identifiable>: Node {
                 let index = self.items.firstIndex(where: { $0.id == id })
             else { return nil }
 
-            return self.offset(showing: index, in: scroll)
+            return self.offset(showing: index, at: alignment, in: scroll)
         }
-        scrolledTo = scroll.isMoving ? nil : (id, NodeHost.settlingPasses)
+        scrolledTo = scroll.isMoving ? nil : (id, alignment, NodeHost.settlingPasses)
         return true
     }
 
-    /// After a layout, puts the item `scroll(to:)` moved to back at the window's start, if
-    /// the items laid out around it moved it; returns whether it is still in charge of
-    /// where the scroll is.
+    /// After a layout, puts the item `scroll(to:at:)` moved to back where it went in the
+    /// window, if the items laid out around it moved it; returns whether it is still in
+    /// charge of where the scroll is.
     private func keepScrolledTo() -> Bool {
         guard let target = scrolledTo, let scroll, !scroll.isMoving,
             let index = items.firstIndex(where: { $0.id == target.id }),
-            let offset = offset(showing: index, in: scroll)
+            let offset = offset(showing: index, at: target.alignment, in: scroll)
         else {
             scrolledTo = nil
             return false
@@ -398,38 +398,52 @@ public final class LazyStack<Item: Identifiable>: Node {
         let layouts = target.layouts - 1
         scrolledTo =
             layouts > 0 && scroll.offsetRange.clamp(offset) != scroll.contentOffset
-            ? (target.id, layouts) : nil
+            ? (target.id, target.alignment, layouts) : nil
         scroll.contentOffset = offset
         return true
     }
 
-    /// The offset of `scroll` at which the item at `index` starts where the window does,
-    /// by where the item's line starts now; `nil` when the stack is not laid out in it.
-    private func offset(showing index: Int, in scroll: Scroll) -> LayoutPoint? {
+    /// The offset of `scroll` at which the item at `index` is where `alignment` puts it in
+    /// the window, by where the item's line is now; `nil` when the stack is not laid out in
+    /// it.
+    private func offset(
+        showing index: Int,
+        at alignment: ScrollAlignment,
+        in scroll: Scroll
+    ) -> LayoutPoint? {
         guard isMounted, let box = scroll.frame(of: self) else { return nil }
 
         updateStarts()
-        let start = starts[index / perLine]
+        let line = index / perLine
+        let start = starts[line]
+        let length = end(of: line) - start
+        let window = axis == .vertical ? scroll.frame.size.height : scroll.frame.size.width
+        // How far into the window the line starts.
+        func lead(covered: Double) -> Double {
+            let fraction: Double
+            switch alignment {
+            case .start: fraction = 0
+            case .center: fraction = 0.5
+            case .end: fraction = 1
+            }
+            // Nodes sticking to the window's start cover that much of it: the line goes to
+            // where it shows after them.
+            return covered + (window - covered - length) * fraction
+        }
         var offset = scroll.targetOffset
-        switch axis {
-        case .vertical:
-            offset.y = box.origin.y + start
-        case .horizontal where isReversed:
-            // The line's start is its right edge, and it goes to the window's right edge.
-            offset.x = box.origin.x + box.size.width - start - scroll.frame.size.width
-        case .horizontal:
-            offset.x = box.origin.x + start
+        func place(lead: Double) {
+            switch axis {
+            case .vertical:
+                offset.y = box.origin.y + start - lead
+            case .horizontal where isReversed:
+                // The line's start is its right edge, and the window's start its right edge.
+                offset.x = box.origin.x + box.size.width - start - window + lead
+            case .horizontal:
+                offset.x = box.origin.x + start - lead
+            }
         }
-        // A header sticking to the window's start there would cover the item: it goes after.
-        let covered = scroll.stuckLength(at: offset)
-        switch axis {
-        case .vertical:
-            offset.y -= covered
-        case .horizontal where isReversed:
-            offset.x += covered
-        case .horizontal:
-            offset.x -= covered
-        }
+        place(lead: lead(covered: 0))
+        place(lead: lead(covered: scroll.stuckLength(at: offset)))
         return offset
     }
 
