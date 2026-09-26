@@ -891,10 +891,17 @@
         for _ in 0..<1000 where !stubStopped.withLock({ $0.contains(url.path) }) {
             try await Task.sleep(for: .milliseconds(5))
         }
-        #expect(stubStopped.withLock { $0.contains(url.path) })
-        #expect(image.phase == .loading)
-        #expect(image.pixelSize == nil)
-        #expect(try await cache.cachedData(for: url) == nil)
+        // Should this fail, the state says why: whether the request reached the server, was
+        // cancelled there, and what the image and the cache hold.
+        let state = """
+            requests \(stubRequests.withLock { $0[url.path, default: 0] }), \
+            stopped \(stubStopped.withLock { $0.contains(url.path) }), \
+            waiters \(await cache.downloadWaiters(for: url)), phase \(image.phase)
+            """
+        #expect(stubStopped.withLock { $0.contains(url.path) }, "\(state)")
+        #expect(image.phase == .loading, "\(state)")
+        #expect(image.pixelSize == nil, "\(state)")
+        #expect(try await cache.cachedData(for: url) == nil, "\(state)")
 
         stubHeld.withLock { _ = $0.remove(url.path) }
         shelf.shows = true
@@ -903,7 +910,10 @@
         for _ in 0..<1000 where image.phase != .ready {
             try await Task.sleep(for: .milliseconds(5))
         }
-        #expect(image.phase == .ready)
+        #expect(
+            image.phase == .ready,
+            "phase \(image.phase), requests \(stubRequests.withLock { $0[url.path, default: 0] })"
+        )
         #expect(image.pixelSize == LayoutSize(width: 1, height: 1))
     }
 
