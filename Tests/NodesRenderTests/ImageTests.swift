@@ -342,6 +342,27 @@
     /// Requests the stub server has answered, by URL path.
     private let stubRequests = OSAllocatedUnfairLock(initialState: [String: Int]())
 
+    /// Conditional requests the stub server has answered with 304, by URL path.
+    private let stubRevalidations = OSAllocatedUnfairLock(initialState: [String: Int]())
+
+    /// The response headers of paths containing `http-`: `etag` and `lastmod` give validators,
+    /// `fresh` `max-age=3600`, `stale` `no-cache`, `nostore` `no-store`, `aged` `max-age=3600`
+    /// with `Age: 3600`, and `expires-past` an `Expires` in the past.
+    private func httpHeaders(for path: String) -> [String: String] {
+        var headers: [String: String] = [:]
+        if path.contains("etag") { headers["ETag"] = "\"v1\"" }
+        if path.contains("lastmod") { headers["Last-Modified"] = "Sun, 06 Nov 1994 08:49:37 GMT" }
+        if path.contains("fresh") { headers["Cache-Control"] = "public, Max-Age=\"3600\"" }
+        if path.contains("stale") { headers["Cache-Control"] = "no-cache" }
+        if path.contains("nostore") { headers["Cache-Control"] = "no-store" }
+        if path.contains("aged") {
+            headers["Cache-Control"] = "max-age=3600"
+            headers["Age"] = "3600"
+        }
+        if path.contains("expires-past") { headers["Expires"] = "Sun, 06 Nov 1994 08:49:37 GMT" }
+        return headers
+    }
+
     /// The priority of each request's task as the stub server began to answer and as it
     /// finished, by URL path.
     private let stubPriorities = OSAllocatedUnfairLock(initialState: [String: [Float]]())
@@ -359,6 +380,10 @@
 
         override func startLoading() {
             guard let url = request.url else { return }
+            if url.path.contains("http-") {
+                answerWithCacheHeaders(url)
+                return
+            }
             let body = url.path.contains("large") ? Data(count: 100_000) : webP
             guard
                 let response = HTTPURLResponse(
@@ -386,6 +411,37 @@
         }
 
         override func stopLoading() {}
+
+        /// The WebP with `httpHeaders(for:)`, or 304 to a request whose validator matches.
+        private func answerWithCacheHeaders(_ url: URL) {
+            var headers = httpHeaders(for: url.path)
+            stubRequests.withLock { $0[url.path, default: 0] += 1 }
+            let matches =
+                (headers["ETag"] != nil
+                    && request.value(forHTTPHeaderField: "If-None-Match") == headers["ETag"])
+                || (headers["Last-Modified"] != nil
+                    && request.value(forHTTPHeaderField: "If-Modified-Since")
+                        == headers["Last-Modified"])
+            if matches {
+                stubRevalidations.withLock { $0[url.path, default: 0] += 1 }
+            } else {
+                headers["Content-Type"] = "image/webp"
+                headers["Content-Length"] = String(webP.count)
+            }
+            guard
+                let response = HTTPURLResponse(
+                    url: url,
+                    statusCode: matches ? 304 : 200,
+                    httpVersion: "HTTP/1.1",
+                    headerFields: headers
+                )
+            else { return }
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            if !matches {
+                client?.urlProtocol(self, didLoad: webP)
+            }
+            client?.urlProtocolDidFinishLoading(self)
+        }
     }
 
     /// A session that reaches only the stub server's host through it.
@@ -408,6 +464,97 @@
             ),
             session: stubSession
         )
+    }
+
+    /// Loads `path` from the stub server `times` times through one cache.
+    private func load(_ path: String, times: Int, through cache: ImageCache) async throws -> URL {
+        let url = URL(string: "https://image-cache.test/\(path)")!
+        for _ in 0..<times {
+            #expect(try await cache.load(url) == webP)
+        }
+        return url
+    }
+
+    @Test
+    func anEntryTheServerCallsFreshIsReadFromDisk() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = try await load("http-etag-fresh.webp", times: 3, through: stubCache(directory))
+
+        #expect(stubRequests.withLock { $0[url.path] } == 1)
+    }
+
+    @Test
+    func aStaleEntryIsCheckedWithItsETagAndNotDownloadedAgain() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = stubCache(directory)
+        let url = try await load("http-etag-stale.webp", times: 1, through: cache)
+        let stamp = await cache.stamp(for: url)
+        #expect(stamp == nil)
+
+        _ = try await load("http-etag-stale.webp", times: 2, through: cache)
+
+        // `no-cache`: every use asks; each answer is 304, and the entry is the same file.
+        #expect(stubRequests.withLock { $0[url.path] } == 3)
+        #expect(stubRevalidations.withLock { $0[url.path] } == 2)
+        #expect(try await cache.cachedData(for: url) == webP)
+    }
+
+    @Test
+    func aStaleEntryIsCheckedWithItsLastModifiedDate() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = try await load("http-lastmod-stale.webp", times: 2, through: stubCache(directory))
+
+        #expect(stubRequests.withLock { $0[url.path] } == 2)
+        #expect(stubRevalidations.withLock { $0[url.path] } == 1)
+    }
+
+    @Test
+    func anEntryWhoseAgeUsedItsFreshnessUpIsChecked() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = try await load("http-etag-aged.webp", times: 2, through: stubCache(directory))
+
+        #expect(stubRevalidations.withLock { $0[url.path] } == 1)
+    }
+
+    @Test
+    func aStaleEntryWithoutValidatorsIsDownloadedAgain() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = try await load("http-expires-past.webp", times: 2, through: stubCache(directory))
+
+        #expect(stubRequests.withLock { $0[url.path] } == 2)
+        #expect(stubRevalidations.withLock { $0[url.path] } == nil)
+    }
+
+    @Test
+    func aResponseTheServerForbidsStoringIsNotWritten() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = stubCache(directory)
+        let url = try await load("http-nostore.webp", times: 2, through: cache)
+
+        #expect(stubRequests.withLock { $0[url.path] } == 2)
+        #expect(try await cache.cachedData(for: url) == nil)
+    }
+
+    @Test
+    func thePipelineAsksTheServerAgainForAStaleImageItDecodedBefore() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pipeline = ImagePipeline(cache: stubCache(directory))
+        let url = URL(string: "https://image-cache.test/http-etag-stale-pipeline.webp")!
+
+        // The second load finds the entry before and after it, and remembers its stamp; the
+        // third would take the decoded image by that stamp without asking the server.
+        for _ in 0..<3 {
+            _ = try await pipeline.load(.url(url), targetPixelDimension: 8)
+        }
+
+        #expect(stubRevalidations.withLock { $0[url.path] } == 2)
     }
 
     @Test
