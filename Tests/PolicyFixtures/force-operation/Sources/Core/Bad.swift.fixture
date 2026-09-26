@@ -1,2 +1,0 @@
-let value: Int? = nil
-let forced = value!

@@ -1,46 +1,57 @@
 // swift-tools-version: 6.0
+
 import PackageDescription
 
+// LayoutCore depends only on Foundation, so the package builds and tests on Linux as well as
+// on Apple platforms. LayoutUIKit and LayoutAppKit adapt it to views; on a platform without
+// that framework they build as empty modules. StateCore is synchronous main-actor state with
+// dependency tracking; StateAsyncRay connects it to AsyncRay streams, the package's dependency.
+// Nodes is the tree of nodes laid out by LayoutCore and driven by StateCore; NodesRender draws
+// it into CALayers (Apple platforms), NodesUIKit and NodesAppKit put it into views.
 let package = Package(
-    name: "Trellis",
-    platforms: [
-        .macOS(.v14),
-        .iOS(.v16),
-        .tvOS(.v16),
-    ],
+    name: "Espalier",
+    platforms: [.macOS(.v14), .iOS(.v16), .tvOS(.v16)],
     products: [
-        .library(name: "TrellisCore", targets: ["TrellisCore"]),
-        .library(name: "TrellisRender", targets: ["TrellisRender"]),
-        .library(name: "TrellisUIKit", targets: ["TrellisUIKit"]),
-        .library(name: "TrellisAppKit", targets: ["TrellisAppKit"]),
-        .library(name: "TrellisFlux", targets: ["TrellisFlux"]),
+        .library(name: "LayoutCore", targets: ["LayoutCore"]),
+        .library(name: "LayoutUIKit", targets: ["LayoutUIKit"]),
+        .library(name: "LayoutAppKit", targets: ["LayoutAppKit"]),
+        .library(name: "StateCore", targets: ["StateCore"]),
+        .library(name: "StateAsyncRay", targets: ["StateAsyncRay"]),
+        .library(name: "Nodes", targets: ["Nodes"]),
+        .library(name: "NodesRender", targets: ["NodesRender"]),
+        .library(name: "NodesUIKit", targets: ["NodesUIKit"]),
+        .library(name: "NodesAppKit", targets: ["NodesAppKit"]),
     ],
     dependencies: [
-        // Pinned exact release: only Flux 1.2.1 (defects #56-#59 fixed) is an allowed
-        // dependency (Scripts/verify_bootstrap.py's manifest_issues). For local
-        // development against an unreleased checkout, use `swift package edit Flux
-        // --path ../old/flux` (documented in README.md); the published manifest here
-        // must keep the remote exact pin.
-        .package(url: "https://github.com/resoul/flux.git", exact: "1.2.1")
+        .package(url: "https://github.com/resoul/AsyncRay.git", exact: "1.0.0")
     ],
     targets: [
-        .target(name: "TrellisCore"),
-        .target(name: "TrellisRender", dependencies: ["TrellisCore"]),
-        .target(name: "TrellisUIKit", dependencies: ["TrellisCore", "TrellisRender"]),
-        .target(name: "TrellisAppKit", dependencies: ["TrellisCore", "TrellisRender"]),
+        .target(name: "LayoutCore"),
+        .target(name: "LayoutUIKit", dependencies: ["LayoutCore"]),
+        .target(name: "LayoutAppKit", dependencies: ["LayoutCore"]),
+        .target(name: "StateCore"),
+        .target(name: "Nodes", dependencies: ["LayoutCore", "StateCore"]),
+        .target(name: "NodesRender", dependencies: ["Nodes", "LayoutCore", "StateCore"]),
+        .target(name: "NodesUIKit", dependencies: ["Nodes", "NodesRender", "LayoutCore"]),
+        .target(name: "NodesAppKit", dependencies: ["Nodes", "NodesRender", "LayoutCore"]),
         .target(
-            name: "TrellisFlux",
-            dependencies: [
-                "TrellisCore", "TrellisRender",
-                .product(name: "Flux", package: "flux"),
-            ]
+            name: "StateAsyncRay",
+            dependencies: ["StateCore", .product(name: "AsyncRay", package: "asyncray")]
         ),
-        .testTarget(name: "TrellisCoreTests", dependencies: ["TrellisCore"]),
+        .testTarget(name: "LayoutCoreTests", dependencies: ["LayoutCore"]),
+        .testTarget(name: "StateCoreTests", dependencies: ["StateCore"]),
+        .testTarget(name: "NodesTests", dependencies: ["Nodes", "LayoutCore", "StateCore"]),
         .testTarget(
-            name: "TrellisRenderTests",
-            dependencies: ["TrellisRender", "TrellisAppKit", "TrellisUIKit"]
+            name: "NodesRenderTests",
+            dependencies: ["Nodes", "NodesRender", "NodesUIKit", "NodesAppKit", "LayoutCore"]
         ),
-        .testTarget(name: "TrellisFluxTests", dependencies: ["TrellisFlux"]),
-    ],
-    swiftLanguageModes: [.v6]
+        .testTarget(
+            name: "StateAsyncRayTests",
+            dependencies: ["AsyncRay", "StateAsyncRay", "StateCore"]
+        ),
+        .testTarget(
+            name: "LayoutAdapterTests",
+            dependencies: ["LayoutCore", "LayoutUIKit", "LayoutAppKit"]
+        ),
+    ]
 )

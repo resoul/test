@@ -1,17 +1,19 @@
 // CSS Flexbox conformance fixtures: every case is rendered by real Chromium (Playwright), and
 // the resulting frame of every node becomes the expected value the layout engine is compared
-// against (Tests/TrellisCoreTests/Layout/CSSConformanceTests.swift).
+// against (Tests/LayoutCoreTests/CSSConformanceTests.swift).
 //
-// Run from the repository root:
+// Run from the package root:
 //   NODE_PATH="$(npm root -g)" node Conformance/CSSFlexbox/generate.cjs
 //
 // Rules shared by the HTML side and the engine side (README.md explains why):
-// - every node is `display: flex` (every Trellis node is a flex container);
+// - every node is `display: flex` (every layout node is a flex container);
 // - `box-sizing: border-box` (width/height include padding, as in the engine);
 // - every node is `position: relative`, so an absolute child is placed against its parent;
 // - no fonts: a leaf with `content: [w, h]` gets a rigid inner block of that size; a leaf
 //   with `text: [lineHeight, word, word, …]` is a plain block holding inline-block "words"
 //   of those widths, which wrap like text but do not depend on any font;
+// - a leaf with `image: [w, h]` is an `<img>` whose picture has that natural size, and so that
+//   aspect ratio: a replaced element, as a photo is;
 // - all lengths are CSS px = points; percentages are strings like "50%".
 
 'use strict';
@@ -287,14 +289,14 @@ function edges(v) {
 const cssName = (k) => k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 
 function css(style) {
-  const out = [style.text ? 'display:block' : 'display:flex', 'box-sizing:border-box', 'position:relative'];
+  const out = [style.text || style.image ? 'display:block' : 'display:flex', 'box-sizing:border-box', 'position:relative'];
   if (style.text) out.push('font-size:0', 'line-height:0');
   // A leaf is content, not a container: properties of a flex container mean nothing to it,
   // and in the browser they would move its content inside it (and with it the baseline).
   const containerOnly = ['flexDirection', 'flexWrap', 'justifyContent', 'alignItems', 'alignContent', 'rowGap', 'columnGap'];
   for (const [k, v] of Object.entries(style)) {
-    if (k === 'content' || k === 'text') continue;
-    if ((style.text || style.content) && containerOnly.includes(k)) continue;
+    if (k === 'content' || k === 'text' || k === 'image') continue;
+    if ((style.text || style.content || style.image) && containerOnly.includes(k)) continue;
     if (k === 'padding' || k === 'margin') out.push(`${k}:${edges(v)}`);
     else if (['flexGrow', 'flexShrink', 'order', 'aspectRatio'].includes(k)) out.push(`${cssName(k)}:${v}`);
     else out.push(`${cssName(k)}:${px(v)}`);
@@ -309,6 +311,11 @@ function assignIDs(node, counter = { i: 0 }) {
 }
 
 function html(node) {
+  if (node.style.image) {
+    const [w, h] = node.style.image;
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}'/>`;
+    return `<img id="${node.id}" style="${css(node.style)}" src="data:image/svg+xml,${encodeURIComponent(svg)}">`;
+  }
   let content = node.style.content
     ? `<div data-content style="flex-shrink:0;width:${node.style.content[0]}px;height:${node.style.content[1]}px"></div>`
     : '';
@@ -381,6 +388,53 @@ const textCases = [];
       n({ margin: [10, 0, 0, 0], text: t(10, 40) }), n({ text: t(20, 40) })));
   });
   textCases.push(...cases.splice(saved));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Images: replaced content with a natural size and aspect ratio. Kept in its own fixture file.
+
+const imageCases = [];
+{
+  const saved = cases.length;
+  const img = (w, h, extra = {}) => n({ image: [w, h], ...extra });
+  group('image', () => {
+    add('row-natural', n({ width: 600, height: 300, alignItems: 'flex-start' }, img(400, 200)));
+    add('column-stretched-width', n({ width: 100, height: 300, flexDirection: 'column' }, img(400, 200)));
+    add('column-centered', n({ width: 100, height: 300, flexDirection: 'column', alignItems: 'center' }, img(400, 200)));
+    add('row-stretched-height', n({ width: 600, height: 40 }, img(400, 200)));
+    add('row-height', n({ width: 600, height: 300, alignItems: 'flex-start' }, img(400, 200, { height: 40 })));
+    add('column-width', n({ width: 600, height: 300, flexDirection: 'column', alignItems: 'flex-start' }, img(400, 200, { width: 100 })));
+    add('column-height', n({ width: 600, height: 300, flexDirection: 'column', alignItems: 'flex-start' }, img(400, 200, { height: 40 })));
+    add('row-narrow', n({ width: 100, height: 300, alignItems: 'flex-start' }, img(400, 200)));
+    add('row-narrow-min-width-0', n({ width: 100, height: 300, alignItems: 'flex-start' }, img(400, 200, { minWidth: 0 })));
+    add('width-and-height', n({ width: 600, height: 300, alignItems: 'flex-start' }, img(400, 200, { width: 100, height: 100 })));
+    add('max-width', n({ width: 600, height: 300, alignItems: 'flex-start' }, img(400, 200, { maxWidth: 100 })));
+    add('max-height', n({ width: 600, height: 300, alignItems: 'flex-start' }, img(400, 200, { maxHeight: 50 })));
+    add('min-width', n({ width: 600, height: 300, alignItems: 'flex-start' }, img(40, 20, { minWidth: 100 })));
+    add('grow', n({ width: 600, height: 300, alignItems: 'flex-start' }, img(40, 20, { flexGrow: 1 })));
+    add('two-in-stretched-row', n({ width: 600, height: 40 }, img(400, 200), img(20, 20)));
+    add('padding', n({ width: 120, height: 300, flexDirection: 'column' }, img(400, 200, { padding: 10 })));
+    add('wrap', n({ width: 250, height: 300, flexWrap: 'wrap', alignItems: 'flex-start' }, img(100, 50), img(100, 50), img(100, 50)));
+    add('absolute-height', n({ width: 600, height: 300 }, img(400, 200, { position: 'absolute', top: 0, left: 0, height: 40 })));
+    add('aspect-ratio-overrides', n({ width: 600, height: 300, alignItems: 'flex-start' }, img(400, 200, { width: 100, aspectRatio: 1 })));
+    add('column-of-images', n({ width: 200, flexDirection: 'column' }, img(400, 200), img(100, 100)));
+    add('row-with-box', n({ width: 300, height: 60 }, img(400, 200), box(50, 20)));
+    add('baseline-with-text', n({ width: 300, height: 100, alignItems: 'baseline' },
+      img(40, 20), n({ text: [10, 40, 30] }), img(30, 30, { height: 60 })));
+    add('shrinks-with-boxes', n({ width: 200, height: 100, alignItems: 'flex-start' },
+      img(200, 100, { minWidth: 0 }), box(100, 20), box(100, 20, { flexShrink: 0 })));
+    add('nested-column-in-row', n({ width: 300, height: 200 },
+      n({ flexDirection: 'column', width: 120 }, img(400, 200), box(50, 20)), box(60, 30)));
+    add('margin', n({ width: 300, height: 300, flexDirection: 'column', alignItems: 'flex-start' },
+      img(200, 100, { width: 100, margin: [5, 10, 15, 20] })));
+    add('column-wrap', n({ width: 300, height: 120, flexDirection: 'column', flexWrap: 'wrap', alignItems: 'flex-start' },
+      img(100, 50), img(100, 50), img(100, 50)));
+    add('row-center-height', n({ width: 300, height: 100, alignItems: 'center' }, img(400, 200, { height: 30 }), box(40, 60)));
+    add('column-grow', n({ width: 300, height: 300, flexDirection: 'column', alignItems: 'flex-start' },
+      img(40, 20, { flexGrow: 1 }), box(30, 100)));
+    add('stretched-with-max-width', n({ width: 300, height: 300, flexDirection: 'column' }, img(400, 200, { maxWidth: 150 })));
+  });
+  imageCases.push(...cases.splice(saved));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -499,7 +553,7 @@ const randomCases = [];
   }
 }
 
-// Trees reduced from failing random cases while working through defect #118: each is the
+// Trees reduced from failing random cases while the engine was matched to Chromium: each is the
 // smallest tree that still failed, kept as a regression case. They live in cases/reduced.json.
 const reducedCases = JSON.parse(fs.readFileSync(path.join(__dirname, 'cases', 'reduced.json'), 'utf8'))
   .cases.map(({ name, root }) => ({ name, group: 'reduced', root }));
@@ -515,6 +569,8 @@ async function render(browser, list, file, extra) {
     await page.setContent(
       `<!doctype html><html><body style="margin:0"><div style="position:absolute;left:0;top:0">${html(c.root)}</div></body></html>`,
     );
+    // Images take their natural size once decoded.
+    await page.evaluate(() => Promise.all([...document.images].map((image) => image.decode())));
     const frames = await page.evaluate(() => {
       const root = document.getElementById('n0').getBoundingClientRect();
       return [...document.querySelectorAll('[id^=n]')].map((e) => {
@@ -538,14 +594,24 @@ async function render(browser, list, file, extra) {
   console.log(`wrote ${out.length} cases to ${path.relative(process.cwd(), target)}`);
 }
 
+// `node generate.cjs image text` renders only those fixture files; no arguments renders all.
+const only = process.argv.slice(2);
+const wanted = (file) => only.length === 0 || only.includes(file.replace(/\.json$/, ''));
+
 (async () => {
   const browser = await chromium.launch();
-  await render(browser, cases, 'flexbox.json', {});
-  await render(browser, randomCases, 'random.json', { seed: randomSeed });
-  await render(browser, textCases, 'text.json', {});
-  await render(browser, randomTextCases, 'random-text.json', { seed: randomTextSeed });
-  await render(browser, randomBaselineCases, 'random-baseline.json', { seed: randomBaselineSeed });
-  await render(browser, reducedCases, 'reduced.json', {});
+  const all = [
+    [cases, 'flexbox.json', {}],
+    [randomCases, 'random.json', { seed: randomSeed }],
+    [textCases, 'text.json', {}],
+    [randomTextCases, 'random-text.json', { seed: randomTextSeed }],
+    [randomBaselineCases, 'random-baseline.json', { seed: randomBaselineSeed }],
+    [reducedCases, 'reduced.json', {}],
+    [imageCases, 'image.json', {}],
+  ];
+  for (const [list, file, extra] of all) {
+    if (wanted(file)) await render(browser, list, file, extra);
+  }
   await browser.close();
 })().catch((error) => {
   console.error(error);
