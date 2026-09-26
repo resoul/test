@@ -437,27 +437,81 @@
             let priority = task?.priority ?? -1
             stubPriorities.withLock { $0[url.path] = [priority] }
             stubRequests.withLock { $0[url.path, default: 0] += 1 }
-            if url.path.contains("slow") { Thread.sleep(forTimeInterval: 0.3) }
-            // `stopLoading()` comes on this thread, so the wait watches the task instead.
-            while stubHeld.withLock({ $0.contains(url.path) }), task?.state == .running {
-                Thread.sleep(forTimeInterval: 0.005)
+            answer = (response, body, 0)
+            if url.path.contains("slow") {
+                schedule(after: 0.3, #selector(answerWhenReleased))
+            } else {
+                answerWhenReleased()
+            }
+        }
+
+        /// The answer still to give: the response, its body, and how much of it is sent.
+        private var answer: (response: HTTPURLResponse, body: Data, sent: Int)?
+        private var timer: Timer?
+
+        // Every request of the session starts on one thread: waiting on it — for a slow
+        // answer, a held one, the next chunk — would hold up every other test's requests,
+        // cancelled ones too. The waits are timers on its run loop instead.
+        private func schedule(after interval: TimeInterval, _ selector: Selector) {
+            let timer = Timer(
+                timeInterval: interval,
+                target: self,
+                selector: selector,
+                userInfo: nil,
+                repeats: false
+            )
+            RunLoop.current.add(timer, forMode: .common)
+            self.timer = timer
+        }
+
+        @objc private func answerWhenReleased() {
+            guard let url = request.url, let answer else { return }
+
+            if stubHeld.withLock({ $0.contains(url.path) }), task?.state == .running {
+                schedule(after: 0.005, #selector(answerWhenReleased))
+                return
             }
             guard task?.state ?? .running == .running else {
-                stubStopped.withLock { _ = $0.insert(url.path) }
+                stop()
                 return
             }
             let finalPriority = task?.priority ?? -1
             stubPriorities.withLock { $0[url.path, default: []].append(finalPriority) }
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            // In 10 000-byte chunks, as a network delivers a large body.
-            for start in stride(from: 0, to: body.count, by: 10_000) {
-                client?.urlProtocol(self, didLoad: body[start..<min(start + 10_000, body.count)])
-                if body.count > 10_000 { Thread.sleep(forTimeInterval: 0.01) }
-            }
-            client?.urlProtocolDidFinishLoading(self)
+            client?.urlProtocol(self, didReceive: answer.response, cacheStoragePolicy: .notAllowed)
+            sendChunk()
         }
 
-        override func stopLoading() {}
+        // In 10 000-byte chunks, as a network delivers a large body.
+        @objc private func sendChunk() {
+            guard var answer else { return }
+
+            let end = min(answer.sent + 10_000, answer.body.count)
+            client?.urlProtocol(self, didLoad: answer.body[answer.sent..<end])
+            answer.sent = end
+            self.answer = answer
+            guard end < answer.body.count else {
+                self.answer = nil
+                client?.urlProtocolDidFinishLoading(self)
+                return
+            }
+            schedule(after: 0.01, #selector(sendChunk))
+        }
+
+        /// The request was cancelled: a held one that got no answer yet is counted.
+        private func stop() {
+            timer?.invalidate()
+            timer = nil
+            if let url = request.url, answer?.sent == 0,
+                stubHeld.withLock({ $0.contains(url.path) })
+            {
+                stubStopped.withLock { _ = $0.insert(url.path) }
+            }
+            answer = nil
+        }
+
+        override func stopLoading() {
+            stop()
+        }
 
         /// The WebP with `httpHeaders(for:)`, or 304 to a request whose validator matches.
         private func answerWithCacheHeaders(_ url: URL) {
