@@ -145,19 +145,27 @@
     }
 
     /// A row of actions across the screen. On Apple TV, moving toward any part of it focuses
-    /// its button, even though the button is not under the badges above.
+    /// its first button, even though the button is not under the badges above.
     @MainActor
     final class Actions: Node {
         let rename: Button
+        /// Jumps to the last of the ten thousand lines with an animation: the lines on the
+        /// way are laid out as it passes them.
+        let toEnd: Button
 
-        init(rename: Button) {
+        init(rename: Button, toEnd: Button) {
             self.rename = rename
+            self.toEnd = toEnd
             super.init()
             isFocusSection = true
         }
 
         override func layoutSpec() -> LayoutSpec? {
-            FlexContainer(.row) { rename }
+            FlexContainer(.row) {
+                rename
+                toEnd
+            }
+            .gap(12)
         }
     }
 
@@ -404,7 +412,7 @@
 
     /// What scrolls: the row of tiles, a title that sticks to the top, the cards, the
     /// actions, the images, a grid and ten thousand lines — those two laid out as they come
-    /// near.
+    /// near — and a button that jumps back to the top.
     @MainActor
     final class Feed: Node {
         let tiles = Scroll(.horizontal, content: Tiles())
@@ -433,9 +441,13 @@
             lineNodes[item.id].showing(item)
         }
 
-        init(cards: [ProfileCard], actions: Actions) {
+        /// Jumps back from the last line with an animation.
+        let toTop: Button
+
+        init(cards: [ProfileCard], actions: Actions, toTop: Button) {
             self.cards = cards
             self.actions = actions
+            self.toTop = toTop
         }
 
         override func layoutSpec() -> LayoutSpec? {
@@ -458,6 +470,7 @@
                     .margin(top: 0, leading: -24, bottom: -8, trailing: -24)
                     .sticky(top: 0)
                 lines
+                FlexContainer(.row) { toTop }
             }
             .gap(16)
             .padding(top: 0, leading: 24, bottom: 24, trailing: 24)
@@ -484,8 +497,22 @@
 
         init(profiles: [Profile], rename: @escaping @MainActor () -> Void) {
             cards = profiles.map { ProfileCard(profile: $0) }
-            let actions = Actions(rename: Button("Rename Ada", action: rename))
-            feed = Scroll(.vertical, content: Feed(cards: cards, actions: actions))
+            let feed = Scroll(.vertical)
+            let toEnd = Button("To the last line") { [weak feed] in
+                guard let feed else { return }
+
+                withAnimation(.easeInOut(duration: 0.8)) {
+                    feed.contentOffset = feed.offsetRange.highest
+                }
+            }
+            let toTop = Button("Back to the top") { [weak feed] in
+                withAnimation(.easeInOut(duration: 0.8)) {
+                    feed?.contentOffset = .zero
+                }
+            }
+            let actions = Actions(rename: Button("Rename Ada", action: rename), toEnd: toEnd)
+            feed.content = Feed(cards: cards, actions: actions, toTop: toTop)
+            self.feed = feed
             super.init()
             appearance.background = Color(red: 0.96, green: 0.96, blue: 0.97)
         }

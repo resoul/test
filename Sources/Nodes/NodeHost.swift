@@ -89,7 +89,8 @@ public final class NodeHost {
     /// frames; only the engine's work moves. The tree keeps its old frames until the new ones
     /// arrive, and a solve that a newer layout overtakes is cancelled and its result dropped.
     /// A layout whose content only measures on the main thread (views inside it) is solved
-    /// there anyway.
+    /// there anyway, and so is the layout of each frame of a scroll moving frame by frame
+    /// (`needsFrames`).
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public var solvesInBackground = false
@@ -160,6 +161,10 @@ public final class NodeHost {
     private var viewportDependents: [any ViewportDependent] = []
     /// Mounted nodes that track whether they are on screen, in layout order.
     private var screenTrackers: [Node] = []
+    /// Scrolls moving frame by frame.
+    private var movingScrolls: [Scroll] = []
+    /// Scrolls moved to where a frame shows them, and the layout for that frame is to come.
+    private var laysOutForFrame = false
     /// Nodes of the layout being solved in the background that are not mounted yet.
     private var pending: [Node] = []
     private var pressed: Node?
@@ -250,6 +255,55 @@ public final class NodeHost {
         }
     }
 
+    /// Whether a scroll moves frame by frame: the adapter calls `advanceFrames(to:)` on every
+    /// frame of the display while it is true. An animated scroll over content laid out by
+    /// where it shows moves so (`Scroll.contentOffset`).
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var needsFrames: Bool { !movingScrolls.isEmpty }
+
+    /// Set by the adapter: called once when `needsFrames` becomes true. Without it scrolls do
+    /// not move frame by frame, and every animated scroll is drawn with its animation.
+    ///
+    /// Ownership: the host keeps the closure; it must not keep the host. Isolation:
+    /// MainActor. Errors: none. Cancellation: not applicable.
+    public var onNeedsFrames: (@MainActor () -> Void)?
+
+    /// Moves the scrolls moving frame by frame to where they are at `time`, in seconds of a
+    /// clock that runs steadily (the display's); the first frame of a move is its start. The
+    /// moves ask for drawing, and for layouts where content comes near.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func advanceFrames(to time: Double) {
+        laysOutForFrame = laysOutForFrame || !movingScrolls.isEmpty
+        for scroll in movingScrolls {
+            if scroll.host === self {
+                _ = scroll.advanceMove(to: time)
+            } else {
+                scroll.stopMove()
+            }
+        }
+        // A scroll's `onScroll` may have started a move of another one.
+        movingScrolls.removeAll { !$0.isMoving || $0.host !== self }
+    }
+
+    /// Whether an animated move of `scroll` by `delta` goes frame by frame: content inside
+    /// it laid out by where it shows would have parts of the way missing.
+    func movesFrameByFrame(_ scroll: Scroll, by delta: LayoutPoint) -> Bool {
+        guard onNeedsFrames != nil else { return false }
+
+        return viewportDependents.contains { $0.needsFrames(toMove: scroll, by: delta) }
+    }
+
+    func startFrames(for scroll: Scroll) {
+        guard !movingScrolls.contains(where: { $0 === scroll }) else { return }
+
+        movingScrolls.append(scroll)
+        if movingScrolls.count == 1 {
+            onNeedsFrames?()
+        }
+    }
+
     /// Tells the host the adapter has drawn the tree as it is now.
     ///
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
@@ -287,6 +341,7 @@ public final class NodeHost {
     /// Ownership: sets frames and subnodes of the tree. Isolation: MainActor; synchronous.
     /// Errors: none. Cancellation: not applicable.
     public func layoutIfNeeded() {
+        defer { laysOutForFrame = false }
         for _ in 0..<NodeHost.settlingPasses {
             StateUpdates.flush()
             guard needsLayout, layOut() else { return }
@@ -309,7 +364,11 @@ public final class NodeHost {
         NodeHost.preparing = outer
         let rect = LayoutRect(origin: .zero, size: size)
         let trace = traceRequest(for: prepared)
-        guard solvesInBackground, passes > 0, !prepared.requiresMainThread else {
+        // A scroll moving frame by frame needs each frame's layout in that frame, the last
+        // one's too: solved in the background, every frame's pass would overtake the one
+        // before.
+        guard solvesInBackground, passes > 0, !laysOutForFrame, !prepared.requiresMainThread
+        else {
             let context = LayoutContext(trace: trace, stackBudget: mainThreadStackBudget)
             let clock = ContinuousClock()
             let start = clock.now
@@ -1010,10 +1069,15 @@ public final class NodeHost {
         mounted = [:]
         viewportDependents = []
         screenTrackers = []
+        for scroll in movingScrolls {
+            scroll.stopMove()
+        }
+        movingScrolls = []
         root.unmount()
         root.hostOfRoot = nil
         onNeedsLayout = nil
         onNeedsRender = nil
+        onNeedsFrames = nil
         onFocusRequest = nil
     }
 

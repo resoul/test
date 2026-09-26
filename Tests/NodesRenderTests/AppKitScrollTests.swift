@@ -203,4 +203,78 @@
         #expect(scroll.overscroll == .zero)
         view.host.detach()
     }
+
+    private struct Numbered: Identifiable {
+        let id: Int
+    }
+
+    /// A scroll of a lazy stack of a thousand 30-point rows.
+    @MainActor
+    private final class Feed: Node {
+        var rows: [Int: Row] = [:]
+        lazy var stack = LazyStack<Numbered>(estimatedLength: 30) { [unowned self] item in
+            if let row = rows[item.id] { return row }
+
+            let row = Row()
+            rows[item.id] = row
+            return row
+        }
+        lazy var scroll = Scroll(.vertical, content: stack)
+
+        override init() {
+            super.init()
+            stack.items = (0..<1000).map { Numbered(id: $0) }
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { scroll }
+        }
+    }
+
+    @Test @MainActor
+    func anAnimatedFarScrollOfALazyStackMovesWithTheDisplaysFrames() async throws {
+        let feed = Feed()
+        let view = NodeNSView(root: feed)
+        // The display's frames come to a view on a screen.
+        let window = NSWindow(
+            contentRect: CGRect(x: 0, y: 0, width: 200, height: 150),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = view
+        // On screen, and not seen.
+        window.alphaValue = 0
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil) }
+        // A Mac with no display gives no frames to test.
+        guard window.screen != nil else { return }
+
+        view.layoutSubtreeIfNeeded()
+
+        withAnimation(.linear(duration: 0.3)) {
+            feed.scroll.contentOffset = LayoutPoint(x: 0, y: 15_000)
+        }
+        #expect(view.host.needsFrames)
+
+        var between = 0
+        let clock = ContinuousClock()
+        let deadline = clock.now + .seconds(5)
+        while view.host.needsFrames, clock.now < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+            view.layoutSubtreeIfNeeded()
+            let top = feed.scroll.contentOffset.y
+            if top > 0, top < 15_000 {
+                between += 1
+                let row = try #require(feed.rows[Int(top / 30)])
+                #expect(view.renderedLayer(for: row) != nil)
+            }
+        }
+
+        #expect(!view.host.needsFrames)
+        #expect(between > 1)
+        #expect(feed.scroll.contentOffset.y == 15_000)
+        view.host.detach()
+        window.contentView = nil
+    }
 #endif

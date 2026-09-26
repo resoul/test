@@ -77,35 +77,124 @@ public final class Scroll: Node {
         appearance.clipsContent = true
     }
 
+    /// An animated move of the offset made frame by frame, while it goes on.
+    private var move: OffsetMove?
+
     /// The point of the content at the scroll's top left corner, in the scroll's
     /// coordinates, where the content's frame is. Reading it in `layoutSpec()` or `update()`
     /// is a dependency, like a state's value. Setting it scrolls there at once, or with the
     /// animation of `withAnimation`; a value past the content's ends shows its end.
     ///
+    /// Content laid out by where it shows (a `LazyStack`) has only the part near the window
+    /// laid out. An animated move longer than that part goes frame by frame instead, so
+    /// that the content is laid out all along the way: the offset reads where the move is,
+    /// and gets where it was set when the animation ends. A move of the scroll by the
+    /// platform, or a set without animation, stops it.
+    ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public var contentOffset: LayoutPoint {
         get { offsetRange.clamp(requestedOffset.value) }
         set {
-            let shown = contentOffset
-            // Before its first layout the scroll has no content to keep the offset within:
-            // the offset asked for waits for it.
-            let requested = isMounted ? offsetRange.clamp(newValue) : newValue
-            guard requested != requestedOffset.value else { return }
-
-            overscroll = .zero
-            requestedOffset.value = requested
-            let now = contentOffset
-            guard now != shown else { return }
-
-            host?.setNeedsScrollRender(self)
-            host?.viewportMoved()
-            onScroll?(now)
+            if let animation = Animation.current, let host, isMounted,
+                host.movesFrameByFrame(self, by: offsetRange.clamp(newValue) - contentOffset)
+            {
+                let to = offsetRange.clamp(newValue)
+                move = OffsetMove(
+                    from: contentOffset,
+                    to: to,
+                    followsEnd: to == offsetRange.highest,
+                    animation: animation
+                )
+                host.startFrames(for: self)
+                return
+            }
+            move = nil
+            place(at: newValue)
         }
     }
 
+    /// Where the offset goes: the end of the move under way, or where it is.
+    var targetOffset: LayoutPoint { move?.to ?? contentOffset }
+
+    /// Whether an animated move goes on frame by frame.
+    var isMoving: Bool { move != nil }
+
+    /// Moves the offset to where the move under way is at `time`, in seconds of the
+    /// display's clock; returns whether it goes on after.
+    func advanceMove(to time: Double) -> Bool {
+        guard var move else { return false }
+
+        let start = move.start ?? time
+        move.start = start
+        if move.followsEnd {
+            // The content's length changes as its parts get laid out on the way.
+            move.to = offsetRange.highest
+        }
+        guard time - start < move.animation.duration else {
+            // The layout of the frame that got to the end lays out the content there, which
+            // may be longer than was thought: the move ends once a frame finds it still at
+            // the end.
+            let settled = !move.followsEnd || contentOffset == move.to
+            self.move = settled ? nil : move
+            place(at: move.to)
+            return !settled
+        }
+
+        let progress = move.animation.progress(at: time - start)
+        move.progress = progress
+        self.move = move
+        place(
+            at: LayoutPoint(
+                x: move.from.x + (move.to.x - move.from.x) * progress,
+                y: move.from.y + (move.to.y - move.from.y) * progress
+            )
+        )
+        return true
+    }
+
+    /// Stops the move under way where it is.
+    func stopMove() {
+        move = nil
+    }
+
+    private func place(at newValue: LayoutPoint) {
+        let shown = contentOffset
+        // Before its first layout the scroll has no content to keep the offset within: the
+        // offset asked for waits for it.
+        let requested = isMounted ? offsetRange.clamp(newValue) : newValue
+        guard requested != requestedOffset.value else { return }
+
+        overscroll = .zero
+        requestedOffset.value = requested
+        let now = contentOffset
+        guard now != shown else { return }
+
+        host?.setNeedsScrollRender(self)
+        host?.viewportMoved()
+        onScroll?(now)
+    }
+
     /// Moves the offset by `delta`, keeping any overscroll: the content before what shows
-    /// got longer or shorter, and what shows stays where it is on screen.
-    func shiftOffset(by delta: LayoutPoint) {
+    /// got longer or shorter, and what shows stays where it is on screen. A move under way
+    /// goes on from there: where it ends shifts too when `movesTarget` — the content changed
+    /// lies between the start and it — and otherwise stays.
+    func shiftOffset(by delta: LayoutPoint, movesTarget: Bool = true) {
+        if var move {
+            if movesTarget {
+                move.from = move.from + delta
+                move.to = move.to + delta
+            } else {
+                // The start moves so that the way from it to the end passes where the offset
+                // is now, at the progress the move is at.
+                let rest = 1 - move.progress
+                let scale = abs(rest) > 0.01 ? 1 / rest : 1
+                move.from = LayoutPoint(
+                    x: move.from.x + delta.x * scale,
+                    y: move.from.y + delta.y * scale
+                )
+            }
+            self.move = move
+        }
         let shown = contentOffset
         requestedOffset.value = offsetRange.clamp(
             LayoutPoint(x: shown.x + delta.x, y: shown.y + delta.y)
@@ -135,7 +224,8 @@ public final class Scroll: Node {
         let within = offsetRange.clamp(offset)
         let past = LayoutPoint(x: offset.x - within.x, y: offset.y - within.y)
         let movedPast = past != overscroll
-        contentOffset = within
+        move = nil
+        place(at: within)
         overscroll = past
         if movedPast {
             host?.setNeedsScrollRender(self)
@@ -270,10 +360,12 @@ public final class Scroll: Node {
             offset.x += step
         }
         contentOffset = offset
-        guard contentOffset != before else { return nil }
+        // An animated move may still be on its way there.
+        let after = targetOffset
+        guard after != before else { return nil }
 
         let range = offsetRange
-        let done = vertical ? contentOffset.y - range.lowest.y : contentOffset.x - range.lowest.x
+        let done = vertical ? after.y - range.lowest.y : after.x - range.lowest.x
         let travel = vertical ? range.highest.y - range.lowest.y : range.highest.x - range.lowest.x
         let count = Int((travel / window).rounded(.up)) + 1
         // The last page is the one at the end, however little of a window it adds.
@@ -370,5 +462,28 @@ public struct ScrollPage: Sendable, Hashable {
     public init(number: Int, count: Int) {
         self.number = number
         self.count = count
+    }
+}
+
+/// An animated move of a scroll's offset, made frame by frame.
+private struct OffsetMove {
+    var from: LayoutPoint
+    var to: LayoutPoint
+    /// Set to the end of the content: the move ends there however long the content gets.
+    let followsEnd: Bool
+    let animation: Animation
+    /// When the first frame of the move was drawn.
+    var start: Double?
+    /// How far along the way the last frame was, from 0 to 1.
+    var progress = 0.0
+}
+
+extension LayoutPoint {
+    fileprivate static func + (lhs: LayoutPoint, rhs: LayoutPoint) -> LayoutPoint {
+        LayoutPoint(x: lhs.x + rhs.x, y: lhs.y + rhs.y)
+    }
+
+    fileprivate static func - (lhs: LayoutPoint, rhs: LayoutPoint) -> LayoutPoint {
+        LayoutPoint(x: lhs.x - rhs.x, y: lhs.y - rhs.y)
     }
 }

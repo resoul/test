@@ -278,6 +278,13 @@
 | `LazyStack.lanes`, `line(_:)`, `lines(from:to:)`, `updateStarts` по рядам | сетка: ряды по `lanes`, равные доли и пустые доли в неполном ряду, длина ряда — наибольшая | [03](03-layout-api.md) (десятый срез, сетка) |
 | `LazyStack.visibleSpan`, `reach`, `viewportMoved`, `covered` | окно — пересечение обрезающих предков и хоста; запас — экран, новый проход при выходе за пол-экрана | [03](03-layout-api.md) (десятый срез) |
 | `LazyStack.rememberAnchor`, `layoutApplied`; `Scroll.shiftOffset` | якорь: видимое не прыгает при изменении длин до окна; у начала — не держит | как якорь прокрутки в браузерах |
+| `LazyStack.anchorMoved`, `Anchor` (`start`, `index`) | окно берётся там, куда сдвинулся якорный элемент | дефект #172 |
+| `Scroll.move`, `OffsetMove`, `advanceMove(to:)`, `stopMove`, `targetOffset`; `NodeHost.needsFrames`, `onNeedsFrames`, `advanceFrames(to:)`, `movingScrolls` | анимированный переход дальше запаса ленивого стека — покадрово | [03](03-layout-api.md) (десятый срез, переход) |
+| `ViewportDependent.needsFrames(toMove:by:)`, `NodeHost.movesFrameByFrame` | покадрово — только переход длиннее экрана хоста; короче — анимация слоя | [03](03-layout-api.md) (десятый срез, переход) |
+| `NodeHost.laysOutForFrame` в `layOut()` | проход кадра — на главном потоке и при `solvesInBackground` | [03](03-layout-api.md) (десятый срез, переход) |
+| `OffsetMove.followsEnd`, `settled` в `advanceMove`; `shiftOffset(by:movesTarget:)`, `OffsetMove.progress` | к концу — до конца, как бы ни вырос список; якорь сдвигает цель за окном, перед окном — пересчитывает начало пути | [03](03-layout-api.md) (десятый срез, переход) |
+| `Animation.progress(at:)`, `bezier`, `spring` | кривые покадрового движения — как у Core Animation | [03](03-layout-api.md) (десятый срез, переход); CSS Easing (cubic-bezier) |
+| `FrameTarget`, `startFrames`, `displayFrame` (UIKit, AppKit) | кадры дисплея для покадрового движения | [05](05-platform-adapters.md#прокрутка) |
 | `untracked` в `LazyStack.layoutSpec` | смещение прокрутки не зависимость раскладки стека | иначе проход на каждом кадре; тест `scrollingWithinWhatIsLaidOutDoesNotLayOutAgain` |
 | `ViewportDependent`, `NodeHost.viewportDependents`, `viewportMoved`, `settlingPasses`, `preparing`; `layOut()` | хост сообщает о проходах и движении; до 4 проходов подряд в `layoutIfNeeded` | [03](03-layout-api.md) (десятый срез) |
 | `ScrollDriver.synced`, `catchUp` (UIKit) | сдвиг прокрутки кодом под пальцем и в инерции переносится на `UIScrollView` | [05](05-platform-adapters.md#прокрутка); тест `aMoveByCodeIsNotLostToTheFingersNextMove` |

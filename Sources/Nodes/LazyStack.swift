@@ -436,9 +436,14 @@ public final class LazyStack<Item: Identifiable>: Node {
         {
             let moved = along(rect.origin) - anchor.position
             if moved != 0 {
+                // The items that changed are before the window: an animated move going the
+                // other way, toward the stack's end, ends on content after them.
+                let target = along(anchor.scroll.targetOffset)
+                let now = along(anchor.scroll.contentOffset)
                 anchor.scroll.shiftOffset(
                     by: axis == .vertical
-                        ? LayoutPoint(x: 0, y: moved) : LayoutPoint(x: moved, y: 0)
+                        ? LayoutPoint(x: 0, y: moved) : LayoutPoint(x: moved, y: 0),
+                    movesTarget: isReversed ? target < now : target > now
                 )
             }
         }
@@ -461,6 +466,13 @@ public final class LazyStack<Item: Identifiable>: Node {
         }
     }
 
+    /// The layout for where the move ends reaches a screen before and after it: the window
+    /// where the move starts is laid out then only if it is within that screen.
+    func needsFrames(toMove scroll: Scroll, by delta: LayoutPoint) -> Bool {
+        guard scroll === self.scroll, let host else { return false }
+
+        return abs(along(delta)) > along(host.size)
+    }
 }
 
 /// A node whose layout depends on where it shows, told by the host after each layout it is
@@ -469,6 +481,9 @@ public final class LazyStack<Item: Identifiable>: Node {
 protocol ViewportDependent: AnyObject {
     func layoutApplied()
     func viewportMoved()
+    /// Whether an animated move of `scroll` by `delta`, drawn by the platform from where it
+    /// is to where it ends, would pass over parts of the node not laid out.
+    func needsFrames(toMove scroll: Scroll, by delta: LayoutPoint) -> Bool
 }
 
 extension LazyStack: ViewportDependent {}

@@ -51,6 +51,8 @@
         private var requestedFocus: NodeID?
         /// The platform's scrolling of each scroll of the tree, off a TV.
         private var scrollDrivers: [NodeID: ScrollDriver] = [:]
+        /// The display's frames, while a scroll moves frame by frame.
+        private var frameLink: CADisplayLink?
 
         /// A view showing `root`.
         ///
@@ -75,6 +77,9 @@
             }
             host.onFocusRequest = { [weak self] node in
                 self?.requestFocus(on: node)
+            }
+            host.onNeedsFrames = { [weak self] in
+                self?.startFrames()
             }
             #if DEBUG
                 // Problems in the layouts, and a trace the app asked for, go to the unified log
@@ -200,6 +205,27 @@
         }
 
         // MARK: - Scrolling
+
+        private func startFrames() {
+            guard frameLink == nil else { return }
+
+            let link = CADisplayLink(
+                target: FrameTarget(self),
+                selector: #selector(FrameTarget.tick(_:))
+            )
+            link.add(to: .main, forMode: .common)
+            frameLink = link
+        }
+
+        /// A frame of the display is coming: the scrolls moving frame by frame move to where
+        /// they are when it shows, and the tree is drawn for it.
+        fileprivate func displayFrame(_ link: CADisplayLink) {
+            host.advanceFrames(to: link.targetTimestamp)
+            guard !host.needsFrames else { return }
+
+            link.invalidate()
+            frameLink = nil
+        }
 
         /// Brings the scroll drivers in line with the tree's scrolls after a drawing: one per
         /// visible scroll, over its frame. On a TV the focus scrolls, not the touch surface.
@@ -704,6 +730,26 @@
             let view = NodeView(root: node)
             addSubview(view)
             return view
+        }
+    }
+
+    /// Takes the display's frames for a node view without keeping it: a display link keeps
+    /// its target until it is invalidated.
+    @MainActor
+    private final class FrameTarget: NSObject {
+        private weak var view: NodeView?
+
+        init(_ view: NodeView) {
+            self.view = view
+        }
+
+        @objc func tick(_ link: CADisplayLink) {
+            guard let view else {
+                link.invalidate()
+                return
+            }
+
+            view.displayFrame(link)
         }
     }
 

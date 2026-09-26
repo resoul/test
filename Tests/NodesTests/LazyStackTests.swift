@@ -483,3 +483,286 @@ func moreThanAScreenOfLinesAddedBeforeTheWindowOfAGridDoNotMoveWhatShows() {
     #expect(feed.scroll.contentOffset.y == 3300)
     host.detach()
 }
+
+// MARK: - Animated moves
+
+/// A host whose adapter draws frames, counting how many times it was asked to start.
+@MainActor
+private func framedHost(_ root: Node) -> (NodeHost, asked: () -> Int) {
+    let host = host(root)
+    var asked = 0
+    host.onNeedsFrames = { asked += 1 }
+    return (host, { asked })
+}
+
+/// Whether the items at both ends of the window of the feed's scroll are mounted where they
+/// show, their ids being their indices.
+@MainActor
+private func windowIsLaidOut(_ feed: Feed, itemLength: Double = 30) -> Bool {
+    let top = feed.scroll.contentOffset.y
+    let first = Int(top / itemLength)
+    let last = min(feed.stack.items.count - 1, Int((top + 150 - 1) / itemLength))
+    return [first, last].allSatisfy { index in
+        let cell = feed.cells[index]
+        return cell.isMounted && feed.scroll.frame(of: cell)?.origin.y == Double(index) * itemLength
+    }
+}
+
+@Test @MainActor
+func anAnimatedFarMoveLaysOutTheContentAllAlongTheWay() {
+    let feed = Feed(count: 1000)
+    let (host, asked) = framedHost(feed)
+
+    withAnimation(.linear(duration: 1)) {
+        feed.scroll.contentOffset = LayoutPoint(x: 0, y: 15000)
+    }
+    // Nothing moves until the frames come; the adapter was asked for them once.
+    #expect(host.needsFrames)
+    #expect(asked() == 1)
+    #expect(feed.scroll.contentOffset.y == 0)
+    #expect(!host.needsLayout)
+
+    var offsets: [Double] = []
+    for frame in 0...20 {
+        host.advanceFrames(to: 100 + Double(frame) * 0.05)
+        host.layoutIfNeeded()
+        offsets.append(feed.scroll.contentOffset.y)
+        #expect(windowIsLaidOut(feed), "frame \(frame) at \(feed.scroll.contentOffset.y)")
+    }
+
+    #expect(offsets[0] == 0)
+    #expect(offsets[10] == 7500)
+    #expect(offsets[20] == 15000)
+    #expect(!host.needsFrames)
+    #expect(asked() == 1)
+    #expect(shown(feed.cells[500], in: feed.scroll) == 0)
+    host.detach()
+}
+
+@Test @MainActor
+func aHostSolvingInTheBackgroundLaysOutEachFrameOfAMoveInThatFrame() {
+    let feed = Feed(count: 1000)
+    let (host, _) = framedHost(feed)
+    host.solvesInBackground = true
+
+    withAnimation(.linear(duration: 1)) {
+        feed.scroll.contentOffset = LayoutPoint(x: 0, y: 15000)
+    }
+    for frame in 0...20 {
+        host.advanceFrames(to: Double(frame) * 0.05)
+        host.layoutIfNeeded()
+        #expect(windowIsLaidOut(feed), "frame \(frame) at \(feed.scroll.contentOffset.y)")
+    }
+
+    #expect(!host.needsFrames)
+    host.detach()
+}
+
+@Test @MainActor
+func anAnimatedMoveWithinReachIsDrawnWithItsAnimation() {
+    let feed = Feed(count: 1000)
+    let (host, _) = framedHost(feed)
+
+    // A screen away: the layout where it ends still has the items where it starts.
+    withAnimation(.linear(duration: 1)) {
+        feed.scroll.contentOffset = LayoutPoint(x: 0, y: 150)
+    }
+
+    #expect(!host.needsFrames)
+    #expect(feed.scroll.contentOffset.y == 150)
+    #expect(host.renderAnimation == .linear(duration: 1))
+    host.detach()
+}
+
+@Test @MainActor
+func withoutFramesAnAnimatedFarMoveIsDrawnWithItsAnimation() {
+    let feed = Feed(count: 1000)
+    let host = host(feed)
+
+    withAnimation(.linear(duration: 1)) {
+        feed.scroll.contentOffset = LayoutPoint(x: 0, y: 15000)
+    }
+
+    #expect(!host.needsFrames)
+    #expect(feed.scroll.contentOffset.y == 15000)
+    host.detach()
+}
+
+@Test @MainActor
+func thePlatformMovingTheScrollStopsAnAnimatedMove() {
+    let feed = Feed(count: 1000)
+    let (host, _) = framedHost(feed)
+    withAnimation(.linear(duration: 1)) {
+        feed.scroll.contentOffset = LayoutPoint(x: 0, y: 15000)
+    }
+    host.advanceFrames(to: 0)
+    host.advanceFrames(to: 0.1)
+    host.layoutIfNeeded()
+    #expect(feed.scroll.contentOffset.y == 1500)
+
+    // A finger takes the content where the move had it.
+    feed.scroll.platformDidScroll(to: LayoutPoint(x: 0, y: 1490))
+    host.advanceFrames(to: 0.2)
+
+    #expect(!host.needsFrames)
+    #expect(feed.scroll.contentOffset.y == 1490)
+    host.detach()
+}
+
+@Test @MainActor
+func settingTheOffsetWithoutAnimationStopsAnAnimatedMove() {
+    let feed = Feed(count: 1000)
+    let (host, _) = framedHost(feed)
+    withAnimation(.linear(duration: 1)) {
+        feed.scroll.contentOffset = LayoutPoint(x: 0, y: 15000)
+    }
+    host.advanceFrames(to: 0)
+    host.advanceFrames(to: 0.1)
+
+    feed.scroll.contentOffset = LayoutPoint(x: 0, y: 300)
+    host.advanceFrames(to: 0.2)
+
+    #expect(!host.needsFrames)
+    #expect(feed.scroll.contentOffset.y == 300)
+    host.detach()
+}
+
+@Test @MainActor
+func itemsAddedBeforeTheWindowOnTheWayDoNotChangeWhereTheMoveEnds() {
+    let feed = Feed(count: 1000)
+    let (host, _) = framedHost(feed)
+    withAnimation(.linear(duration: 1)) {
+        feed.scroll.contentOffset = LayoutPoint(x: 0, y: 15000)
+    }
+    host.advanceFrames(to: 0)
+    host.advanceFrames(to: 0.5)
+    host.layoutIfNeeded()
+
+    // Ten items before the window: what shows stays, and so does where the move goes.
+    feed.stack.items.insert(contentsOf: (0..<10).map { Entry(id: 2000 + $0) }, at: 0)
+    host.layoutIfNeeded()
+    host.advanceFrames(to: 1)
+    host.layoutIfNeeded()
+
+    #expect(feed.scroll.contentOffset.y == 15300)
+    #expect(shown(feed.cells[500], in: feed.scroll) == 0)
+    host.detach()
+}
+
+@Test @MainActor
+func aMoveGoesOnFromWhereAShiftPutTheOffset() {
+    let feed = Feed(count: 1000)
+    let (host, _) = framedHost(feed)
+    withAnimation(.linear(duration: 1)) {
+        feed.scroll.contentOffset = LayoutPoint(x: 0, y: 15000)
+    }
+    host.advanceFrames(to: 0)
+    host.advanceFrames(to: 0.5)
+    #expect(feed.scroll.contentOffset.y == 7500)
+
+    // Content changed between the start and the window: the end stays.
+    feed.scroll.shiftOffset(by: LayoutPoint(x: 0, y: 100), movesTarget: false)
+    host.advanceFrames(to: 0.5)
+    #expect(feed.scroll.contentOffset.y == 7600)
+    host.advanceFrames(to: 1)
+
+    #expect(feed.scroll.contentOffset.y == 15000)
+    host.detach()
+}
+
+@Test @MainActor
+func anAnimatedMoveBackToTheStartEndsThereThoughTheItemsOnTheWayGrew() {
+    // Every item is 45 long, half again its estimate: each one laid out on the way up grows
+    // before what shows, and the offset follows to keep what shows in place.
+    let feed = Feed(count: 1000, length: 45)
+    let (host, _) = framedHost(feed)
+    feed.scroll.contentOffset = LayoutPoint(x: 0, y: 20000)
+    host.layoutIfNeeded()
+
+    withAnimation(.easeInOut(duration: 1)) {
+        feed.scroll.contentOffset = .zero
+    }
+    var offsets: [Double] = []
+    var frame = 0
+    while host.needsFrames, frame < 40 {
+        host.advanceFrames(to: Double(frame) * 0.05)
+        host.layoutIfNeeded()
+        offsets.append(feed.scroll.contentOffset.y)
+        frame += 1
+    }
+
+    #expect(!host.needsFrames)
+    #expect(feed.scroll.contentOffset.y == 0)
+    #expect(shown(feed.cells[0], in: feed.scroll) == 0)
+    // What shows only ever moves toward the start: the way bends to take the growth in.
+    let shownTops = zip(offsets, offsets.dropFirst())
+    #expect(shownTops.allSatisfy { $1 <= $0 })
+    host.detach()
+}
+
+@Test @MainActor
+func anAnimatedMoveToTheEndEndsThereThoughTheContentGrewOnTheWay() {
+    // Every item is 45 long, half again its estimate: the list grows as the move passes.
+    let feed = Feed(count: 1000, length: 45)
+    let (host, _) = framedHost(feed)
+    withAnimation(.easeInOut(duration: 1)) {
+        feed.scroll.contentOffset = feed.scroll.offsetRange.highest
+    }
+    var frame = 0
+    while host.needsFrames, frame < 40 {
+        host.advanceFrames(to: Double(frame) * 0.05)
+        host.layoutIfNeeded()
+        frame += 1
+    }
+
+    #expect(!host.needsFrames)
+    #expect(feed.scroll.contentOffset == feed.scroll.offsetRange.highest)
+    #expect(feed.cells[999].isMounted)
+    host.detach()
+}
+
+@Test @MainActor
+func anAnimatedMoveToTheEndEndsThereThoughItemsCameAfterOnTheWay() {
+    let feed = Feed(count: 1000)
+    let (host, _) = framedHost(feed)
+    withAnimation(.linear(duration: 1)) {
+        feed.scroll.contentOffset = feed.scroll.offsetRange.highest
+    }
+    host.advanceFrames(to: 0)
+    host.advanceFrames(to: 0.5)
+    host.layoutIfNeeded()
+
+    // Messages arrive at the end of a chat while it scrolls down to them.
+    feed.stack.items.append(contentsOf: (0..<10).map { Entry(id: 2000 + $0) })
+    host.layoutIfNeeded()
+    host.advanceFrames(to: 1)
+    host.layoutIfNeeded()
+
+    #expect(feed.scroll.contentOffset.y == 1010 * 30 - 150)
+    #expect(feed.cells[2009].isMounted)
+    host.detach()
+}
+
+@Test @MainActor
+func anAnimatedMoveToTheEndStaysOnForTheLengthItsLastFrameFound() {
+    // Every third item is three times its estimate.
+    let feed = Feed(count: 0)
+    feed.stack.items = (0..<10_000).map { Entry(id: $0, length: $0 % 3 == 0 ? 90 : 30) }
+    let (host, _) = framedHost(feed)
+    withAnimation(.easeInOut(duration: 0.8)) {
+        feed.scroll.contentOffset = feed.scroll.offsetRange.highest
+    }
+    var frames = 0
+    while host.needsFrames, frames < 100 {
+        host.advanceFrames(to: Double(frames) / 60)
+        host.layoutIfNeeded()
+        frames += 1
+    }
+
+    // The frame that got to the end laid out items there longer than thought; the move went
+    // on to the end they made.
+    #expect(frames > 49)
+    #expect(feed.scroll.contentOffset == feed.scroll.offsetRange.highest)
+    #expect(feed.cells[9999].isMounted)
+    host.detach()
+}

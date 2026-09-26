@@ -39,6 +39,8 @@
         private let focusRing = FocusRing()
         /// Return or Space went down on a focused node and has not come up yet.
         private var isSelecting = false
+        /// The display's frames, while a scroll moves frame by frame.
+        private var frameLink: CADisplayLink?
 
         /// A view showing `root`.
         ///
@@ -84,6 +86,30 @@
                 }
                 self.host.focus(node)
             }
+            host.onNeedsFrames = { [weak self] in
+                self?.startFrames()
+            }
+        }
+
+        private func startFrames() {
+            guard frameLink == nil else { return }
+
+            let link = displayLink(
+                target: FrameTarget(self),
+                selector: #selector(FrameTarget.tick(_:))
+            )
+            link.add(to: .main, forMode: .common)
+            frameLink = link
+        }
+
+        /// A frame of the display is coming: the scrolls moving frame by frame move to where
+        /// they are when it shows, and the tree is drawn for it.
+        fileprivate func displayFrame(_ link: CADisplayLink) {
+            host.advanceFrames(to: link.targetTimestamp)
+            guard !host.needsFrames else { return }
+
+            link.invalidate()
+            frameLink = nil
         }
 
         /// Not supported: a node tree is built in code.
@@ -542,6 +568,26 @@
 
     /// One accessibility element of a node tree. It keeps the node's identity and asks the
     /// host to act on it; it never holds the node itself.
+    /// Takes the display's frames for a node view without keeping it: a display link keeps
+    /// its target until it is invalidated.
+    @MainActor
+    private final class FrameTarget: NSObject {
+        private weak var view: NodeNSView?
+
+        init(_ view: NodeNSView) {
+            self.view = view
+        }
+
+        @objc func tick(_ link: CADisplayLink) {
+            guard let view else {
+                link.invalidate()
+                return
+            }
+
+            view.displayFrame(link)
+        }
+    }
+
     @MainActor
     final class NodeAccessibilityElement: NSAccessibilityElement {
         /// Presses the node: it holds the node's identity and the host weakly. A `Sendable`
