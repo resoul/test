@@ -43,6 +43,7 @@
         private var isSelecting = false
         /// A focus guide over each focus section, kept while the section is.
         private var sectionGuides: [NodeID: SectionGuide] = [:]
+        private var sectionEntries: [NodeID: SectionEntry] = [:]
         /// The keyboard focus ring, off a TV.
         private let focusRing = FocusRing()
         /// A node the app asked to focus (`NodeHost.requestFocus`), until the focus system
@@ -348,6 +349,22 @@
         ) {
             super.didUpdateFocus(in: context, with: coordinator)
             requestedFocus = nil
+            if let entry = context.nextFocusedItem as? SectionEntry, entry.view === self {
+                // The focus system has scrolled the section into sight to focus its entry;
+                // the node the entry leads to shows now, and the focus goes on to it. The update
+                // is asked of this view, which holds the entry that has the focus, and the view
+                // prefers the node: asked of the node's own item, which does not hold the
+                // focus, the focus system ignores it. The node that had the focus keeps it
+                // until then.
+                guard let target = entry.target else { return }
+
+                requestedFocus = target
+                DispatchQueue.main.async { [weak self] in
+                    self?.setNeedsFocusUpdate()
+                    self?.updateFocusIfNeeded()
+                }
+                return
+            }
             if let next = context.nextFocusedItem as? NodeFocusItem, next.view === self {
                 host.focus(next.node)
                 // Return and Space come to the first responder, as the remote's buttons do.
@@ -509,19 +526,38 @@
             host.scrollItems().first { $0.scroll === scroll }?.frame ?? scroll.frame
         }
 
-        /// Brings the section guides in line with the tree's focus sections.
+        /// Brings the sections' guides and entries in line with the tree's focus sections: a
+        /// guide in the view for a section outside any scroll, an entry in the scroll's focus
+        /// container for one inside. A guide lives where the section shows on the screen, and
+        /// the focus system does not reach one whose section is scrolled out of sight; an
+        /// entry is one of the scroll's items, found in its whole content like the nodes.
         private func updateSections() {
-            var kept: [NodeID: SectionGuide] = [:]
+            var guides: [NodeID: SectionGuide] = [:]
+            var entries: [NodeID: SectionEntry] = [:]
             for section in host.focusSections() {
+                if let node = host.node(section.node), let scroll = node.enclosingScroll,
+                    let container = scrollContainers[scroll.id], let frame = scroll.frame(of: node)
+                {
+                    let entry =
+                        sectionEntries[section.node] ?? SectionEntry(view: self, node: section.node)
+                    entry.frame = zoomed(frame)
+                    entry.parent = container
+                    entry.items = section.items
+                    container.items.append(entry)
+                    entries[section.node] = entry
+                    continue
+                }
+
                 let guide = sectionGuides[section.node] ?? SectionGuide(in: self)
                 guide.place(zoomed(section.frame))
                 guide.items = section.items
-                kept[section.node] = guide
+                guides[section.node] = guide
             }
-            for (id, guide) in sectionGuides where kept[id] == nil {
+            for (id, guide) in sectionGuides where guides[id] == nil {
                 guide.remove()
             }
-            sectionGuides = kept
+            sectionGuides = guides
+            sectionEntries = entries
             updateSectionGuides()
         }
 
@@ -541,6 +577,14 @@
                     ?? guide.items.first
                 guide.guide.preferredFocusEnvironments =
                     target.flatMap { focusItemsByNode[$0] }.map { [$0] } ?? []
+            }
+            for entry in sectionEntries.values {
+                if let focused, entry.items.contains(focused) {
+                    entry.lastFocused = focused
+                    entry.isEnabled = false
+                } else {
+                    entry.isEnabled = true
+                }
             }
         }
 
@@ -812,6 +856,56 @@
         func remove() {
             guide.owningView?.removeLayoutGuide(guide)
         }
+    }
+
+    /// The way into a focus section inside a scroll, for the platform's focus system: an item
+    /// over the whole section, in the scroll's content, that takes the focus when the remote
+    /// moves toward any part of the section — its nodes need not lie in the direction pressed.
+    /// The view passes the focus on at once to the node focused there last, else the first.
+    /// It does not take the focus while the focus is inside the section.
+    @MainActor
+    final class SectionEntry: NSObject, UIFocusItem {
+        let node: NodeID
+        private(set) weak var view: NodeView?
+        weak var parent: (any UIFocusEnvironment)?
+        /// In the scroll's content.
+        var frame: CGRect = .zero
+        var items: [NodeID] = []
+        var lastFocused: NodeID?
+        var isEnabled = true
+
+        init(view: NodeView, node: NodeID) {
+            self.view = view
+            self.node = node
+        }
+
+        /// Where the focus goes on to.
+        var target: NodeID? {
+            lastFocused.flatMap { items.contains($0) ? $0 : nil } ?? items.first
+        }
+
+        var canBecomeFocused: Bool { isEnabled && target != nil }
+        /// While it does not take the focus it lies over the section's nodes, and it must not
+        /// hide them from the focus system.
+        var isTransparentFocusItem: Bool { !canBecomeFocused }
+        var preferredFocusEnvironments: [any UIFocusEnvironment] { [] }
+        var parentFocusEnvironment: (any UIFocusEnvironment)? { parent ?? view }
+        var focusItemContainer: (any UIFocusItemContainer)? { nil }
+
+        func setNeedsFocusUpdate() {
+            view?.setNeedsFocusUpdate()
+        }
+
+        func updateFocusIfNeeded() {
+            view?.updateFocusIfNeeded()
+        }
+
+        func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool { true }
+
+        func didUpdateFocus(
+            in context: UIFocusUpdateContext,
+            with coordinator: UIFocusAnimationCoordinator
+        ) {}
     }
 
     /// A scroll of a tree for the platform's focus system: an item that does not take focus
