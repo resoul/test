@@ -244,16 +244,38 @@ func aStackBelowAHeaderInTheScrollLaysOutWhatShowsOfIt() {
 func aScrollingHostLaysTheStackOutOnItsOwnThread() async {
     let feed = Feed(count: 1000)
     let host = host(feed)
-    host.solvesInBackground = true
-
-    feed.scroll.contentOffset = LayoutPoint(x: 0, y: 15000)
+    host.setNeedsLayout()
     host.layoutIfNeeded()
+    host.solvesInBackground = true
+    let passes = host.passes
+
+    // The window still shows items laid out, and nears their end: the next items are laid
+    // out on the host's thread.
+    feed.scroll.contentOffset = LayoutPoint(x: 0, y: 80)
+    host.layoutIfNeeded()
+    #expect(host.passes == passes)
     // Moves while that layout is solved need no other one: it covers them.
-    feed.scroll.contentOffset = LayoutPoint(x: 0, y: 15010)
+    feed.scroll.contentOffset = LayoutPoint(x: 0, y: 90)
     #expect(!host.needsLayout)
     await host.layoutFinished()
 
+    #expect(host.passes == passes + 1)
+    #expect(feed.stack.laidOutItems == 0..<13)
+    host.detach()
+}
+
+@Test @MainActor
+func aWindowMovedPastWhatIsLaidOutIsLaidOutAtOnceThoughTheHostSolvesInTheBackground() {
+    let feed = Feed(count: 1000)
+    let host = host(feed)
+    host.solvesInBackground = true
+
+    // Nothing laid out shows there: waiting for the host's thread would show nothing.
+    feed.scroll.contentOffset = LayoutPoint(x: 0, y: 15000)
+    host.layoutIfNeeded()
+
     #expect(feed.stack.laidOutItems == 495..<510)
+    #expect(shown(feed.cells[500], in: feed.scroll) == 0)
     host.detach()
 }
 

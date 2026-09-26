@@ -395,10 +395,17 @@
     /// finished, by URL path.
     private let stubPriorities = OSAllocatedUnfairLock(initialState: [String: [Float]]())
 
+    /// Paths the stub server holds the answer to until a test takes them out.
+    private let stubHeld = OSAllocatedUnfairLock(initialState: Set<String>())
+
+    /// Held paths whose requests were cancelled before the stub server answered them.
+    private let stubStopped = OSAllocatedUnfairLock(initialState: Set<String>())
+
     /// Answers requests to `image-cache.test`, so the download path of the disk cache runs
     /// without a network: the WebP above by default, 100 000 bytes in chunks for paths
     /// containing `large` (without `Content-Length` when the path also has `chunked`), and 404 for paths containing `missing`. Paths containing `slow` answer after
-    /// 0.3 s, so that loads overlap.
+    /// 0.3 s, so that loads overlap; paths in `stubHeld` answer once a test takes them out,
+    /// or not at all when the request is cancelled first.
     private final class StubServer: URLProtocol {
         override class func canInit(with request: URLRequest) -> Bool {
             request.url?.host == "image-cache.test"
@@ -431,6 +438,14 @@
             stubPriorities.withLock { $0[url.path] = [priority] }
             stubRequests.withLock { $0[url.path, default: 0] += 1 }
             if url.path.contains("slow") { Thread.sleep(forTimeInterval: 0.3) }
+            // `stopLoading()` comes on this thread, so the wait watches the task instead.
+            while stubHeld.withLock({ $0.contains(url.path) }), task?.state == .running {
+                Thread.sleep(forTimeInterval: 0.005)
+            }
+            guard task?.state ?? .running == .running else {
+                stubStopped.withLock { _ = $0.insert(url.path) }
+                return
+            }
             let finalPriority = task?.priority ?? -1
             stubPriorities.withLock { $0[url.path, default: []].append(finalPriority) }
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
@@ -857,7 +872,11 @@
         let directory = temporaryCache()
         defer { try? FileManager.default.removeItem(at: directory) }
         let cache = stubCache(directory)
-        let url = URL(string: "https://image-cache.test/away-slow.webp")!
+        let url = URL(string: "https://image-cache.test/away-held.webp")!
+        // The server answers only when the test lets it: the image leaves while its download
+        // is certainly under way.
+        stubHeld.withLock { _ = $0.insert(url.path) }
+        defer { stubHeld.withLock { _ = $0.remove(url.path) } }
         let image = Image(source: .url(url), pipeline: ImagePipeline(cache: cache))
         let shelf = Shelf(image)
         let host = NodeHost(root: shelf, size: LayoutSize(width: 600, height: 600))
@@ -868,11 +887,16 @@
         shelf.shows = false
         host.layoutIfNeeded()
         while await cache.downloadWaiters(for: url) > 0 { await Task.yield() }
-        try await Task.sleep(for: .milliseconds(400))
+        // The request was cancelled on the server's side.
+        for _ in 0..<1000 where !stubStopped.withLock({ $0.contains(url.path) }) {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(stubStopped.withLock { $0.contains(url.path) })
         #expect(image.phase == .loading)
         #expect(image.pixelSize == nil)
         #expect(try await cache.cachedData(for: url) == nil)
 
+        stubHeld.withLock { _ = $0.remove(url.path) }
         shelf.shows = true
         host.layoutIfNeeded()
         // Other tests' slow stub responses can hold the loading threads, so allow seconds.

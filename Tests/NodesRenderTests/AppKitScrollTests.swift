@@ -2,6 +2,7 @@
     import AppKit
     import LayoutCore
     import Nodes
+    import NodesRender
     import Testing
 
     @testable import NodesAppKit
@@ -231,7 +232,10 @@
         }
     }
 
-    @Test @MainActor
+    /// Whether the Mac's display is awake: a sleeping display gives no frames.
+    private let displayIsAwake = CGDisplayIsAsleep(CGMainDisplayID()) == 0
+
+    @Test(.enabled(if: displayIsAwake, "a sleeping display gives no frames")) @MainActor
     func anAnimatedFarScrollOfALazyStackMovesWithTheDisplaysFrames() async throws {
         let feed = Feed()
         let view = NodeNSView(root: feed)
@@ -276,5 +280,78 @@
         #expect(feed.scroll.contentOffset.y == 15_000)
         view.host.detach()
         window.contentView = nil
+    }
+
+    /// A line of text, as long as its text wraps to.
+    @MainActor
+    private final class Line: Node {
+        let label = Text("", style: TextStyle(size: 15))
+
+        func showing(_ number: Int) -> Line {
+            let text =
+                number % 3 == 0
+                ? "Line \(number): a longer line that wraps to more than one line of text here."
+                : "Line \(number)"
+            if label.text != text {
+                label.text = text
+            }
+            return self
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { label }.padding(4)
+        }
+    }
+
+    /// Ten thousand lines of text, some longer than the estimate.
+    @MainActor
+    private final class LongFeed: Node {
+        let lines = NodeCache<Int, Line> { _ in Line() }
+        lazy var stack = LazyStack<Numbered>(estimatedLength: 26) { [lines] item in
+            lines[item.id].showing(item.id)
+        }
+        lazy var scroll = Scroll(.vertical, content: stack)
+
+        override init() {
+            super.init()
+            stack.items = (0..<10_000).map { Numbered(id: $0) }
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { scroll }
+        }
+    }
+
+    @Test @MainActor
+    func aFastGlideOverALazyStackSolvedInTheBackgroundNeverShowsItEmpty() async throws {
+        let feed = LongFeed()
+        let view = NodeNSView(root: feed)
+        view.frame = CGRect(x: 0, y: 0, width: 400, height: 600)
+        view.layout()
+        view.host.solvesInBackground = true
+
+        // Half a screen on every frame of a display at 120 Hz, for a second.
+        var empty: [Double] = []
+        let clock = ContinuousClock()
+        for _ in 0..<120 {
+            view.scroll(by: LayoutPoint(x: 0, y: 300), at: LayoutPoint(x: 10, y: 10))
+            view.layout()
+            let top = feed.scroll.contentOffset.y
+            for probe in [0.0, 300, 599] {
+                let shown = feed.stack.subnodes.contains { node in
+                    guard let rect = feed.scroll.frame(of: node) else { return false }
+                    return rect.origin.y <= top + probe
+                        && rect.origin.y + rect.size.height > top + probe
+                }
+                if !shown {
+                    empty.append(top + probe)
+                }
+            }
+            try await clock.sleep(for: .milliseconds(8))
+        }
+
+        #expect(empty.isEmpty, "nothing shows at \(empty.prefix(5))")
+        #expect(feed.scroll.contentOffset.y > 30_000)
+        view.host.detach()
     }
 #endif
