@@ -587,6 +587,33 @@
     }
 
     @Test @MainActor
+    func retryUsesTheDiskCopyUntilTheEntryIsRemoved() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = stubCache(directory)
+        let url = URL(string: "https://image-cache.test/retry.webp")!
+        let image = Image(source: .url(url), pipeline: ImagePipeline(cache: cache))
+        for _ in 0..<1000 where image.phase != .ready {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(stubRequests.withLock { $0[url.path] } == 1)
+
+        image.retry()
+        for _ in 0..<1000 where image.phase != .ready {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(stubRequests.withLock { $0[url.path] } == 1)
+
+        try await cache.remove(for: url)
+        image.retry()
+        for _ in 0..<1000 where image.phase != .ready {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(image.phase == .ready)
+        #expect(stubRequests.withLock { $0[url.path] } == 2)
+    }
+
+    @Test @MainActor
     func releasingTheNodeCancelsItsDownload() async throws {
         let directory = temporaryCache()
         defer { try? FileManager.default.removeItem(at: directory) }

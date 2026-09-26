@@ -565,7 +565,9 @@
             }
         }
 
-        /// Tries the current source again after an initial failure or a changed resource.
+        /// Loads the current source again: after a failure, or after a file changed. A remote
+        /// URL goes through the disk cache, which still returns an unexpired copy; remove the
+        /// entry from the cache first to download it anew.
         ///
         /// Ownership: starts a node-owned task. Isolation: MainActor. Errors: none.
         /// Cancellation: replaces the previous load and its detail request.
