@@ -8,7 +8,7 @@ import PackageDescription
 import AppleProductTypes
 
 let package = Package(
-    name: "LayoutDemo",
+    name: "LayoutDemoiOS",
     platforms: [
         .iOS("17.0")
     ],
@@ -39,6 +39,10 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "AppModule",
+            dependencies: [
+                .product(name: "DemoScreens", package: "LayoutDemo"),
+                .product(name: "NodesUIKit", package: "Espalier"),
+            ],
             path: "."
         )
     ],
