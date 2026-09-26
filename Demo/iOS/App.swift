@@ -1,6 +1,7 @@
-// SwiftUI is used only here, as the app's shell: the screen itself is made of nodes, whose
-// `Text`, `Color` and `Button` would clash with SwiftUI's names in one file.
-import DemoScreens
+// The demo screen on iPhone and iPad, and on the Mac through Mac Catalyst: the
+// `LayoutDemoiOS` scheme of `Demo.xcodeproj`. SwiftUI is used only here, as the app's shell:
+// the screen itself is made of nodes, whose `Text`, `Color` and `Button` would clash with
+// SwiftUI's names in one file.
 import NodesUIKit
 import SwiftUI
 

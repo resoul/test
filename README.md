@@ -31,10 +31,13 @@
 - `Nodes`, `NodesRender`, `NodesUIKit`, `NodesAppKit` — дерево нод, отрисовка в
   `CALayer`, текст на CoreText, картинки (`Image`: `Data`/URL, дисковый кэш, декодирование
   под рамку — [11-image.md](docs/11-image.md)), `view.addSubnode(node)`.
-- `Demo/` — экран на нодах (`DemoScreens`) и окно для Mac: `cd Demo && swift run`.
-- `DemoiOS.swiftpm` — тот же экран на iPhone/iPad: открыть папку в Xcode, запустить на
-  симуляторе; или из командной строки — `cd DemoiOS.swiftpm && xcodebuild build -scheme
-  LayoutDemoiOS -destination 'platform=iOS Simulator,name=iPhone 17'`.
+- `Demo/Demo.xcodeproj` — демо: один экран на нодах (`Demo/Shared`) в приложениях для всех
+  платформ, по таргету и схеме на каждое. `LayoutDemoMac` — окно на Mac (`NodesAppKit`);
+  `LayoutDemoiOS` — iPhone, iPad и Mac Catalyst (`NodesUIKit`); `LayoutDemoTV` — Apple TV, с
+  UI-тестом пульта `LayoutDemoTVUITests`. Открыть проект в Xcode и выбрать схему; из
+  командной строки — `cd Demo && xcodebuild build -project Demo.xcodeproj -scheme
+  LayoutDemoiOS -destination 'platform=iOS Simulator,name=iPhone 17'`. Пакет подключён
+  локально (`..`): правки в `Sources/` сразу попадают в демо.
 - `Benchmarks/` — отдельный пакет: скорость движка рядом со старым движком Trellis на тех
   же деревьях. Старый движок — замороженная копия его исходников в
   `Benchmarks/Sources/PreviousLayoutEngine`, пакет ничего не берёт извне репозитория.

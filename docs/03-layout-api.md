@@ -189,7 +189,7 @@ easeOut, easeInOut, spring(response, dampingRatio). 6 тестов на Linux, 1
 по `UIFocusItem` на ноду (`NodeHost.focusItems()`), `didUpdateFocus` сообщает хосту
 (`NodeHost.focus`), нода узнаёт через `focusChanged` внутри `focusAnimation`; по умолчанию —
 увеличение на 10 %, `Button` добавляет тень. Кнопка Select нажимает сфокусированную ноду.
-`Appearance.scale` и `Appearance.shadow` анимируются. Демо — `DemotvOS/`. 6 тестов на
+`Appearance.scale` и `Appearance.shadow` анимируются. Демо — таргет `LayoutDemoTV` в `Demo/Demo.xcodeproj`. 6 тестов на
 Linux, 1 рендерера — на Mac.
 
 Проверено вживую на Apple TV Simulator (2026-09-24): стрелки переводят фокус между
@@ -306,7 +306,7 @@ FlexContainer(.column) {          // секция
 Фокус к нодам за краем окна (2026-09-25, [05](05-platform-adapters.md#прокрутка)): на tvOS и
 iPad с клавиатурой каждая прокрутка — `UIFocusItemScrollableContainer`, движок фокуса ищет
 по всему содержимому и сам прокручивает. Проверено UI-тестом с пультом на Apple TV
-Simulator (`DemotvOS`, `LayoutDemoTVUITests`): до исправления фокус не доходил до кнопки под
+Simulator (`LayoutDemoTVUITests`): до исправления фокус не доходил до кнопки под
 карточками, после — доходит, Select нажимает, кнопка на экране.
 
 VoiceOver (2026-09-25, UIKit): три пальца листают страницу ближайшей прокрутки вокруг

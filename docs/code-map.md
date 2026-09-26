@@ -268,7 +268,7 @@
 | `Node.stickyOffset`, `stick`, `shownOrigin` | сдвиг по CSS Positioned Layout §3.4 из смещения прокрутки, без прохода раскладки | [03](03-layout-api.md) |
 | `Node.subnodesInDrawingOrder`; `hitTest`, `LayerRenderer.enter` | sticky поверх остальных элементов контейнера — как позиционированный блок в CSS | CSS painting order |
 | `LayerRenderer.stickyNodes`, `position(of:)` | быстрый путь прокрутки двигает и слои sticky | — |
-| `ScrollFocusContainer` (UIKit), `NodeFocusItem.parent`, `NodeView.topFocusItems` | прокрутка — `UIFocusItemScrollableContainer`: движок фокуса ищет по всему содержимому и двигает `contentOffset` | [05](05-platform-adapters.md#прокрутка); UI-тест `DemotvOS/UITests` |
+| `ScrollFocusContainer` (UIKit), `NodeFocusItem.parent`, `NodeView.topFocusItems` | прокрутка — `UIFocusItemScrollableContainer`: движок фокуса ищет по всему содержимому и двигает `contentOffset` | [05](05-platform-adapters.md#прокрутка); UI-тест `Demo/TVUITests` |
 | `NodeHost.scrollPage`, `Scroll.scrollPage`, `ScrollPage`; `NodeHost.reveal` | прокрутка для технологий доступности: страница, «Page N of M», показ элемента | UIKit `accessibilityScroll` |
 | `NodeView.accessibilityByNode`, `NodeAccessibilityElement.update` | элемент живёт, пока нода — элемент; VoiceOver держит место по объекту | прокрутка перерисовывает много раз в секунду |
 | `NodeNSView.WheelPhase`, `pulled`, `stretch`, `springBack`, `glideIsSpent` | отскок трекпада: сопротивление `(1 − 1/(x·0.55/d + 1))·d`, возврат пружиной, инерция отскакивает раз | как `NSScrollView` |
@@ -297,4 +297,4 @@
 | `NodeNSView.zoom`, `contentLayer` | то же на Mac; по умолчанию 1 | [03](03-layout-api.md) |
 | `LayoutReport`, `NodeHost.onLayoutReport`, `number`, `traceAreas`, `tracedNodes`; `finish` — отклонение прохода | отчёт прохода, дубликаты | [03](03-layout-api.md#управление-subnodes), [10](10-layout-engine.md#диагностика) |
 | `NodeView`/`NodeNSView` — `onLayoutReport` в `DEBUG`, `os.Logger` | вывод решает адаптер | [10](10-layout-engine.md#диагностика) |
-| `DemotvOS/` | tvOS-приложение с демо-экраном (`project.pbxproj` написан вручную, по образцу `Playground`) | — |
+| `Demo/Demo.xcodeproj` | одно демо: экран `Demo/Shared` в таргетах `LayoutDemoMac`, `LayoutDemoiOS` (с Catalyst), `LayoutDemoTV` и `LayoutDemoTVUITests`; папки таргетов — синхронизированные группы, пакет подключён локально (`..`) | решение пользователя 2026-09-26: один проект с разными таргетами |
