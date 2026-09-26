@@ -1,8 +1,7 @@
 // The demo screen on Apple TV: the remote moves the focus between the Follow badges and the
 // Rename button, the select button presses the focused one, and Play/Pause brings the focus
-// back to Ada's badge. Open `DemotvOS.xcodeproj` in Xcode and run it on an Apple TV
+// back to Ada's badge: the `LayoutDemoTV` scheme of `Demo.xcodeproj`, on an Apple TV
 // simulator.
-import DemoScreens
 import NodesUIKit
 import UIKit
 
