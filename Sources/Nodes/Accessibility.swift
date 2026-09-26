@@ -116,6 +116,53 @@ public struct AccessibilityList: Sendable, Hashable {
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public let frame: LayoutRect
+    /// The direction the items follow each other in.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public let axis: ScrollAxis
+    /// How many items stand side by side across `axis`; 1 or more.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public let lanes: Int
+
+    /// The list as a table: the lines of a vertical list are its rows and the lanes its
+    /// columns; a horizontal list is the other way round. A plain vertical list is one column
+    /// of rows, a plain horizontal one a row of columns.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var rowCount: Int {
+        axis == .vertical ? lineCount : min(lanes, count)
+    }
+
+    /// See `rowCount`.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var columnCount: Int {
+        axis == .vertical ? min(lanes, count) : lineCount
+    }
+
+    /// The row and column of the item at `index` in the table `rowCount` describes.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public func position(ofItem index: Int) -> (row: Int, column: Int) {
+        let line = index / lanes
+        let lane = index % lanes
+        return axis == .vertical ? (line, lane) : (lane, line)
+    }
+
+    /// The index of the item at `row` and `column`, or `nil` when there is none — outside
+    /// the table, or past the last item of the last line.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public func item(row: Int, column: Int) -> Int? {
+        guard row >= 0, column >= 0, row < rowCount, column < columnCount else { return nil }
+
+        let (line, lane) = axis == .vertical ? (row, column) : (column, row)
+        let index = line * lanes + lane
+        return index < count ? index : nil
+    }
+
+    private var lineCount: Int { (count + lanes - 1) / lanes }
 }
 
 /// One entry of a tree's accessibility in reading order.
