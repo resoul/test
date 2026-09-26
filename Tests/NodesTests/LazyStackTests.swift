@@ -766,3 +766,313 @@ func anAnimatedMoveToTheEndStaysOnForTheLengthItsLastFrameFound() {
     #expect(feed.cells[9999].isMounted)
     host.detach()
 }
+
+// MARK: - Scrolling to an item
+
+@Test @MainActor
+func scrollingToAnItemPutsItAtTheWindowsStartThoughTheItemsAroundItWereGuessed() {
+    // Every item is 45 long, half again its estimate: where item 500 is was a guess.
+    let feed = Feed(count: 1000, length: 45)
+    let host = host(feed)
+
+    #expect(feed.stack.scroll(to: 500))
+    host.layoutIfNeeded()
+
+    #expect(shown(feed.cells[500], in: feed.scroll) == 0)
+    host.detach()
+}
+
+@Test @MainActor
+func anAnimatedScrollToAFarItemEndsOnItThoughTheItemsOnTheWayGrew() {
+    for (from, to) in [(0.0, 700), (40000.0, 20)] {
+        let feed = Feed(count: 1000, length: 45)
+        let (host, _) = framedHost(feed)
+        feed.scroll.contentOffset = LayoutPoint(x: 0, y: from)
+        host.layoutIfNeeded()
+
+        withAnimation(.easeInOut(duration: 1)) {
+            #expect(feed.stack.scroll(to: to))
+        }
+        #expect(host.needsFrames)
+        var frame = 0
+        while host.needsFrames, frame < 40 {
+            host.advanceFrames(to: Double(frame) * 0.05)
+            host.layoutIfNeeded()
+            frame += 1
+        }
+
+        #expect(!host.needsFrames)
+        #expect(shown(feed.cells[to], in: feed.scroll) == 0, "from \(from) to item \(to)")
+        host.detach()
+    }
+}
+
+@Test @MainActor
+func anItemNearTheEndShowsAsFarAsTheScrollGoes() {
+    let feed = Feed(count: 1000)
+    let host = host(feed)
+
+    #expect(feed.stack.scroll(to: 998))
+    host.layoutIfNeeded()
+
+    #expect(feed.scroll.contentOffset == feed.scroll.offsetRange.highest)
+    #expect(shown(feed.cells[998], in: feed.scroll) == 90)
+    host.detach()
+}
+
+@Test @MainActor
+func anAnimatedScrollToAnItemNearTheEndEndsWithItsTime() {
+    let feed = Feed(count: 1000)
+    let (host, _) = framedHost(feed)
+
+    withAnimation(.linear(duration: 1)) {
+        #expect(feed.stack.scroll(to: 998))
+    }
+    var frames = 0
+    while host.needsFrames, frames < 40 {
+        host.advanceFrames(to: Double(frames) * 0.05)
+        host.layoutIfNeeded()
+        frames += 1
+    }
+
+    // The item cannot get to the window's start: the move gets to the end on its time, and
+    // the frame after finds it still there.
+    #expect(frames == 22, "frames \(frames)")
+    #expect(feed.scroll.contentOffset == feed.scroll.offsetRange.highest)
+    host.detach()
+}
+
+@Test @MainActor
+func scrollingToAnItemOfAStackBelowAHeaderCountsTheHeader() {
+    let feed = Feed(count: 1000, header: 400)
+    let host = host(feed)
+
+    #expect(feed.stack.scroll(to: 10))
+    host.layoutIfNeeded()
+
+    #expect(feed.scroll.contentOffset.y == 700)
+    #expect(shown(feed.cells[10], in: feed.scroll) == 0)
+    host.detach()
+}
+
+@Test @MainActor
+func scrollingToAnItemThatIsNotThereDoesNotMove() {
+    let feed = Feed(count: 1000)
+    let host = host(feed)
+    feed.scroll.contentOffset = LayoutPoint(x: 0, y: 300)
+    host.layoutIfNeeded()
+
+    #expect(!feed.stack.scroll(to: 5000))
+    #expect(feed.scroll.contentOffset.y == 300)
+    host.detach()
+}
+
+@Test @MainActor
+func scrollingToAnItemOfAGridShowsItsLine() {
+    let grid = Grid((0..<1000).map { Entry(id: $0, length: $0 % 2 == 0 ? 60 : 30) })
+    let host = host(grid, width: 210, height: 150)
+
+    #expect(grid.stack.scroll(to: 301))
+    host.layoutIfNeeded()
+
+    // Item 301 is second in line 100: the line starts where the window does.
+    #expect(grid.scroll.frame(of: grid.cells[301])?.origin.y == grid.scroll.contentOffset.y)
+    #expect(grid.scroll.frame(of: grid.cells[300])?.origin.y == grid.scroll.contentOffset.y)
+    host.detach()
+}
+
+@Test @MainActor
+func scrollingToAnItemOfARowRightToLeftPutsItAtTheRight() {
+    let strip = Strip()
+    let host = NodeHost(root: strip, size: LayoutSize(width: 200, height: 40))
+    host.direction = .rightToLeft
+    host.layoutIfNeeded()
+
+    #expect(strip.stack.scroll(to: 50))
+    host.layoutIfNeeded()
+
+    #expect(strip.scroll.contentOffset.x == -5000)
+    #expect(strip.scroll.frame(of: strip.cells[50])?.origin.x == -4900)
+    host.detach()
+}
+
+@Test @MainActor
+func aMoveToAnEndThatNeverSettlesStopsAFewFramesPastItsTime() {
+    let feed = Feed(count: 1000)
+    let (host, _) = framedHost(feed)
+    withAnimation(.linear(duration: 1)) {
+        feed.scroll.contentOffset = feed.scroll.offsetRange.highest
+    }
+    var frames = 0
+    while host.needsFrames, frames < 100 {
+        host.advanceFrames(to: Double(frames) * 0.05)
+        host.layoutIfNeeded()
+        // An item comes on every frame, and the end moves on with it.
+        feed.stack.items.append(Entry(id: 2000 + frames))
+        host.layoutIfNeeded()
+        frames += 1
+    }
+
+    // Its time is 21 frames; a few more at most look for the end.
+    #expect(frames <= 30, "frames \(frames)")
+    host.detach()
+}
+
+/// A lazy stack and a 40-point title that sticks to the top of the scroll.
+@MainActor
+private final class TitledFeed: Node {
+    enum Arrangement {
+        /// The title, then the stack.
+        case titleAbove
+        /// The title in a section of its own, 240 points long, then the stack.
+        case titleInItsOwnSection
+        /// The stack, then the title and 200 points after it.
+        case titleBelow
+    }
+
+    let cells = NodeCache<Int, Cell> { _ in Cell() }
+    let title = Cell().showing(Entry(id: -3, length: 40))
+    let filler = Cell().showing(Entry(id: -4, length: 200))
+    let arrangement: Arrangement
+    lazy var stack = LazyStack<Entry>(estimatedLength: 30) { [cells] entry in
+        cells[entry.id].showing(entry)
+    }
+    lazy var scroll = Scroll(.vertical, content: Body(owner: self))
+
+    init(_ arrangement: Arrangement = .titleAbove, count: Int = 1000) {
+        self.arrangement = arrangement
+        super.init()
+        stack.items = (0..<count).map { Entry(id: $0) }
+    }
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.column) { scroll }
+    }
+
+    private final class Body: Node {
+        unowned let owner: TitledFeed
+
+        init(owner: TitledFeed) {
+            self.owner = owner
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            switch owner.arrangement {
+            case .titleAbove:
+                return FlexContainer(.column) {
+                    owner.title.sticky(top: 0)
+                    owner.stack
+                }
+            case .titleInItsOwnSection:
+                return FlexContainer(.column) {
+                    FlexContainer(.column) {
+                        owner.title.sticky(top: 0)
+                        owner.filler
+                    }
+                    owner.stack
+                }
+            case .titleBelow:
+                return FlexContainer(.column) {
+                    owner.stack
+                    owner.title.sticky(top: 0)
+                    owner.filler
+                }
+            }
+        }
+    }
+}
+
+@Test @MainActor
+func anItemScrolledToShowsBelowATitleStuckToTheTop() {
+    let feed = TitledFeed()
+    let host = host(feed)
+
+    #expect(feed.stack.scroll(to: 100))
+    host.layoutIfNeeded()
+
+    #expect(shown(feed.cells[100], in: feed.scroll) == 40)
+    host.detach()
+}
+
+@Test @MainActor
+func aTitleWhoseSectionScrolledAwayDoesNotMoveTheItem() {
+    let feed = TitledFeed(.titleInItsOwnSection)
+    let host = host(feed)
+
+    #expect(feed.stack.scroll(to: 100))
+    host.layoutIfNeeded()
+
+    #expect(shown(feed.cells[100], in: feed.scroll) == 0)
+    host.detach()
+}
+
+@Test @MainActor
+func aTitleFurtherDownTheWindowDoesNotMoveTheItem() {
+    // Three items, then the title: in the window, but not at its top.
+    let feed = TitledFeed(.titleBelow, count: 3)
+    let host = host(feed)
+
+    #expect(feed.stack.scroll(to: 1))
+    host.layoutIfNeeded()
+
+    #expect(shown(feed.cells[1], in: feed.scroll) == 0)
+    host.detach()
+}
+
+/// A row that scrolls sideways: a 40-point title sticking to the leading edge, then a lazy
+/// stack of 100-point items.
+@MainActor
+private final class TitledStrip: Node {
+    let cells = NodeCache<Int, Cell> { _ in Cell(.horizontal) }
+    let title = Cell(.horizontal).showing(Entry(id: -3, length: 40))
+    lazy var stack = LazyStack<Entry>(.horizontal, estimatedLength: 100) { [cells] entry in
+        cells[entry.id].showing(entry)
+    }
+    lazy var scroll = Scroll(.horizontal, content: Body(owner: self))
+
+    override init() {
+        super.init()
+        stack.items = (0..<100).map { Entry(id: $0, length: 100) }
+    }
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.column) { scroll }
+    }
+
+    private final class Body: Node {
+        unowned let owner: TitledStrip
+
+        init(owner: TitledStrip) {
+            self.owner = owner
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.row) {
+                owner.title.sticky(leading: 0)
+                owner.stack
+            }
+        }
+    }
+}
+
+@Test @MainActor
+func anItemOfARowScrolledToShowsAfterATitleStuckToTheLeadingEdge() {
+    for direction in [LayoutDirection.leftToRight, .rightToLeft] {
+        let strip = TitledStrip()
+        let host = NodeHost(root: strip, size: LayoutSize(width: 200, height: 40))
+        host.direction = direction
+        host.layoutIfNeeded()
+
+        #expect(strip.stack.scroll(to: 50))
+        host.layoutIfNeeded()
+
+        let item = strip.scroll.frame(of: strip.cells[50])!
+        let window = strip.scroll.contentOffset.x
+        if direction == .leftToRight {
+            #expect(item.origin.x - window == 40)
+        } else {
+            #expect(window + 200 - (item.origin.x + item.size.width) == 40)
+        }
+        host.detach()
+    }
+}

@@ -284,6 +284,8 @@
 | `NodeHost.laysOutForFrame` в `layOut()` | проход кадра — на главном потоке и при `solvesInBackground` | [03](03-layout-api.md) (десятый срез, переход) |
 | `OffsetMove.followsEnd`, `settled` в `advanceMove`; `shiftOffset(by:movesTarget:)`, `OffsetMove.progress` | к концу — до конца, как бы ни вырос список; якорь сдвигает цель за окном, перед окном — пересчитывает начало пути | [03](03-layout-api.md) (десятый срез, переход) |
 | `Animation.progress(at:)`, `bezier`, `spring` | кривые покадрового движения — как у Core Animation | [03](03-layout-api.md) (десятый срез, переход); CSS Easing (cubic-bezier) |
+| `LazyStack.scroll(to:)`, `offset(showing:in:)`, `scrolledTo`, `keepScrolledTo`; `Scroll.scroll(to:following:)`, `OffsetMove.following`, `framesPast`, `settlingFrames` | переход к элементу: цель уточняется на каждом кадре и после проходов | [03](03-layout-api.md) (десятый срез, переход к элементу) |
+| `Scroll.stuckLength(at:)`, `Node.stickyOffset(showing:)` | элемент встаёт после нод, прилипших к началу окна на целевом смещении | дефект #184; CSS `scroll-padding` по смыслу |
 | `FrameTarget`, `startFrames`, `displayFrame` (UIKit, AppKit) | кадры дисплея для покадрового движения | [05](05-platform-adapters.md#прокрутка) |
 | `untracked` в `LazyStack.layoutSpec` | смещение прокрутки не зависимость раскладки стека | иначе проход на каждом кадре; тест `scrollingWithinWhatIsLaidOutDoesNotLayOutAgain` |
 | `ViewportDependent`, `NodeHost.viewportDependents`, `viewportMoved`, `settlingPasses`, `preparing`; `layOut()` | хост сообщает о проходах и движении; до 4 проходов подряд в `layoutIfNeeded` | [03](03-layout-api.md) (десятый срез) |

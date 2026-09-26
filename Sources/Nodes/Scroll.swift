@@ -95,22 +95,34 @@ public final class Scroll: Node {
     public var contentOffset: LayoutPoint {
         get { offsetRange.clamp(requestedOffset.value) }
         set {
-            if let animation = Animation.current, let host, isMounted,
-                host.movesFrameByFrame(self, by: offsetRange.clamp(newValue) - contentOffset)
-            {
-                let to = offsetRange.clamp(newValue)
-                move = OffsetMove(
-                    from: contentOffset,
-                    to: to,
-                    followsEnd: to == offsetRange.highest,
-                    animation: animation
-                )
-                host.startFrames(for: self)
-                return
+            var following: (@MainActor () -> LayoutPoint?)?
+            if isMounted, offsetRange.clamp(newValue) == offsetRange.highest {
+                // The content's length changes as its parts get laid out on the way.
+                following = { [weak self] in self?.offsetRange.highest }
             }
-            move = nil
-            place(at: newValue)
+            scroll(to: newValue, following: following)
         }
+    }
+
+    /// Sets the offset to `newValue`, as `contentOffset` does. A move made frame by frame
+    /// asks `following` on every frame where its end is now — content on the way may turn
+    /// out longer or shorter than it was thought — and ends once a frame finds the offset
+    /// there.
+    func scroll(to newValue: LayoutPoint, following: (@MainActor () -> LayoutPoint?)?) {
+        if let animation = Animation.current, let host, isMounted,
+            host.movesFrameByFrame(self, by: offsetRange.clamp(newValue) - contentOffset)
+        {
+            move = OffsetMove(
+                from: contentOffset,
+                to: offsetRange.clamp(newValue),
+                following: following,
+                animation: animation
+            )
+            host.startFrames(for: self)
+            return
+        }
+        move = nil
+        place(at: newValue)
     }
 
     /// Where the offset goes: the end of the move under way, or where it is.
@@ -126,15 +138,18 @@ public final class Scroll: Node {
 
         let start = move.start ?? time
         move.start = start
-        if move.followsEnd {
-            // The content's length changes as its parts get laid out on the way.
-            move.to = offsetRange.highest
+        if let now = move.following?() {
+            move.to = offsetRange.clamp(now)
         }
         guard time - start < move.animation.duration else {
             // The layout of the frame that got to the end lays out the content there, which
-            // may be longer than was thought: the move ends once a frame finds it still at
-            // the end.
-            let settled = !move.followsEnd || contentOffset == move.to
+            // may be longer or shorter than was thought: a move that follows its end ends
+            // once a frame finds the offset still there — or after a few frames, should the
+            // content never settle.
+            move.framesPast += 1
+            let settled =
+                move.following == nil || contentOffset == move.to
+                || move.framesPast > OffsetMove.settlingFrames
             self.move = settled ? nil : move
             place(at: move.to)
             return !settled
@@ -342,6 +357,51 @@ public final class Scroll: Node {
         )
     }
 
+    /// How far into the window from where it starts along `axis` — its top, or its leading
+    /// edge — nodes sticking there cover it, were the offset `offset`: what goes to the
+    /// window's start goes this much after it, to show.
+    func stuckLength(at offset: LayoutPoint) -> Double {
+        var covered = 0.0
+        var pending = subnodes
+        while let node = pending.popLast() {
+            guard !node.isHidden else { continue }
+
+            if !(node is Scroll) {
+                pending.append(contentsOf: node.subnodes)
+            }
+            guard let sticky = node.sticky, let rect = frame(of: node) else { continue }
+
+            let shift = node.stickyOffset(showing: offset)
+            switch axis {
+            case .vertical:
+                guard let top = sticky.top else { continue }
+
+                let start = rect.origin.y + shift.y
+                let end = start + rect.size.height
+                if start <= offset.y + top, end > offset.y {
+                    covered = max(covered, end - offset.y)
+                }
+            case .horizontal where host?.direction == .rightToLeft:
+                guard let right = sticky.right else { continue }
+
+                let windowEnd = offset.x + frame.size.width
+                let start = rect.origin.x + shift.x
+                if start + rect.size.width >= windowEnd - right, start < windowEnd {
+                    covered = max(covered, windowEnd - start)
+                }
+            case .horizontal:
+                guard let left = sticky.left else { continue }
+
+                let start = rect.origin.x + shift.x
+                let end = start + rect.size.width
+                if start <= offset.x + left, end > offset.x {
+                    covered = max(covered, end - offset.x)
+                }
+            }
+        }
+        return covered
+    }
+
     /// Scrolls by one window toward the content's end, or its start, and returns the page
     /// shown then — `nil`, not moving, when already at that end.
     ///
@@ -469,13 +529,18 @@ public struct ScrollPage: Sendable, Hashable {
 private struct OffsetMove {
     var from: LayoutPoint
     var to: LayoutPoint
-    /// Set to the end of the content: the move ends there however long the content gets.
-    let followsEnd: Bool
+    /// Where the end is now, asked on every frame; `nil` keeps `to`.
+    let following: (@MainActor () -> LayoutPoint?)?
     let animation: Animation
     /// When the first frame of the move was drawn.
     var start: Double?
     /// How far along the way the last frame was, from 0 to 1.
     var progress = 0.0
+    /// Frames after the animation's time that did not find the offset at the end.
+    var framesPast = 0
+
+    /// Frames a move that follows its end goes on past its time at most.
+    static let settlingFrames = 8
 }
 
 extension LayoutPoint {
