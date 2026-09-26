@@ -158,6 +158,8 @@ public final class NodeHost {
     private var mounted: [NodeID: Node] = [:]
     /// Mounted nodes whose layout depends on where they show, in layout order.
     private var viewportDependents: [any ViewportDependent] = []
+    /// Mounted nodes that track whether they are on screen, in layout order.
+    private var screenTrackers: [Node] = []
     /// Nodes of the layout being solved in the background that are not mounted yet.
     private var pending: [Node] = []
     private var pressed: Node?
@@ -407,13 +409,22 @@ public final class NodeHost {
         for dependent in viewportDependents {
             dependent.layoutApplied()
         }
+        updateScreen()
         return true
     }
 
-    /// A scroll moved: nodes whose layout depends on where they show look again.
+    /// A scroll moved: nodes whose layout depends on where they show look again, and nodes
+    /// that track the screen learn whether they are on it.
     func viewportMoved() {
         for dependent in viewportDependents {
             dependent.viewportMoved()
+        }
+        updateScreen()
+    }
+
+    private func updateScreen() {
+        for node in screenTrackers {
+            node.updateScreen()
         }
     }
 
@@ -998,6 +1009,7 @@ public final class NodeHost {
         }
         mounted = [:]
         viewportDependents = []
+        screenTrackers = []
         root.unmount()
         root.hostOfRoot = nil
         onNeedsLayout = nil
@@ -1012,14 +1024,23 @@ public final class NodeHost {
         var present: [NodeID: Node] = [root.id: root]
         var parent: [NodeID: Node] = [:]
         var dependents: [any ViewportDependent] = []
+        var trackers: [Node] = []
         if let dependent = root as? any ViewportDependent {
             dependents.append(dependent)
+        }
+        if root.tracksScreen {
+            trackers.append(root)
         }
         for placement in placements {
             guard let node = placement.element as? Node, node !== root else { continue }
 
-            if present[node.id] == nil, let dependent = node as? any ViewportDependent {
-                dependents.append(dependent)
+            if present[node.id] == nil {
+                if let dependent = node as? any ViewportDependent {
+                    dependents.append(dependent)
+                }
+                if node.tracksScreen {
+                    trackers.append(node)
+                }
             }
             present[node.id] = node
             if let container = placement.container as? Node,
@@ -1051,5 +1072,6 @@ public final class NodeHost {
         }
         mounted = present
         viewportDependents = dependents
+        screenTrackers = trackers
     }
 }

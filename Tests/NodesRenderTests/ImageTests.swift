@@ -1131,6 +1131,150 @@
         await gate.release()
     }
 
+    /// Takes a slot of `gate` and records `name` once it has one, releasing it at once.
+    private func decode(
+        _ name: String,
+        in gate: DecodeGate,
+        order: OSAllocatedUnfairLock<[String]>,
+        isUrgent: @escaping @Sendable () -> Bool = { false }
+    ) -> Task<Void, Error> {
+        Task {
+            try await gate.acquire(isUrgent: isUrgent)
+            order.withLock { $0.append(name) }
+            await gate.release()
+        }
+    }
+
+    @Test
+    func anUrgentDecodeGoesBeforeTheOnesWaitingLonger() async throws {
+        let gate = DecodeGate()
+        let order = OSAllocatedUnfairLock(initialState: [String]())
+        try await gate.acquire()
+        let first = decode("first", in: gate, order: order)
+        while await gate.waitingCount < 1 { await Task.yield() }
+        let urgent = decode("urgent", in: gate, order: order, isUrgent: { true })
+        while await gate.waitingCount < 2 { await Task.yield() }
+        let last = decode("last", in: gate, order: order)
+        while await gate.waitingCount < 3 { await Task.yield() }
+
+        await gate.release()
+        for task in [first, urgent, last] { try await task.value }
+
+        #expect(order.withLock { $0 } == ["urgent", "first", "last"])
+    }
+
+    @Test
+    func aDecodeThatBecomesUrgentWhileWaitingOvertakes() async throws {
+        let gate = DecodeGate()
+        let order = OSAllocatedUnfairLock(initialState: [String]())
+        let urgency = LoadUrgency()
+        try await gate.acquire()
+        let first = decode("first", in: gate, order: order)
+        while await gate.waitingCount < 1 { await Task.yield() }
+        let second = decode("second", in: gate, order: order, isUrgent: { urgency.isUrgent })
+        while await gate.waitingCount < 2 { await Task.yield() }
+
+        // Its node scrolled into sight.
+        urgency.isUrgent = true
+        await gate.release()
+        for task in [first, second] { try await task.value }
+
+        #expect(order.withLock { $0 } == ["second", "first"])
+    }
+
+    @Test
+    func thePipelineDecodesAnImageOnScreenBeforeOnesQueuedEarlier() async throws {
+        let gate = DecodeGate()
+        let pipeline = ImagePipeline(
+            cache: ImageCache(),
+            maximumDecodedPixelDimension: nil,
+            previewPixelDimension: 256,
+            maximumDecodedCacheBytes: 0,
+            decodeGate: gate
+        )
+        let order = OSAllocatedUnfairLock(initialState: [String]())
+        let offScreen = LoadUrgency()
+        let onScreen = LoadUrgency()
+        onScreen.isUrgent = true
+        // Another decode holds the gate while these two queue behind it.
+        try await gate.acquire()
+        func load(_ name: String, width: Int, urgency: LoadUrgency) throws -> Task<Void, Error> {
+            let data = try encodedImage(width: width, height: 10)
+            return Task {
+                _ = try await pipeline.load(.data(data), targetPixelDimension: 64, urgency: urgency)
+                order.withLock { $0.append(name) }
+            }
+        }
+        let first = try load("off screen", width: 20, urgency: offScreen)
+        while await gate.waitingCount < 1 { await Task.yield() }
+        let second = try load("on screen", width: 30, urgency: onScreen)
+        while await gate.waitingCount < 2 { await Task.yield() }
+
+        await gate.release()
+        for task in [first, second] { try await task.value }
+        #expect(order.withLock { $0 } == ["on screen", "off screen"])
+    }
+
+    @Test
+    func aSharedDecodeIsUrgentWhileAnyOfItsCallersIs() {
+        let shared = SharedUrgency()
+        let onScreen = LoadUrgency()
+        onScreen.isUrgent = true
+        shared.add(LoadUrgency(), for: 1)
+        #expect(!shared.isUrgent)
+        shared.add(onScreen, for: 2)
+        #expect(shared.isUrgent)
+        shared.remove(2)
+        #expect(!shared.isUrgent)
+    }
+
+    /// Two images in a scroll 100 points tall: one at the top, one 300 points down.
+    @MainActor
+    private final class Pair: Node {
+        let top = Image(placeholder: ImagePlaceholder(size: LayoutSize(width: 40, height: 40)))
+        let below = Image(placeholder: ImagePlaceholder(size: LayoutSize(width: 40, height: 40)))
+        lazy var scroll = Scroll(.vertical, content: Stacked(top, below))
+
+        final class Stacked: Node {
+            let first: Image
+            let second: Image
+
+            init(_ first: Image, _ second: Image) {
+                self.first = first
+                self.second = second
+            }
+
+            override func layoutSpec() -> LayoutSpec? {
+                FlexContainer(.column) {
+                    first
+                    second
+                }
+                .gap(260)
+                .alignItems(.start)
+            }
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { scroll }
+        }
+    }
+
+    @Test @MainActor
+    func anImageLoadsFirstWhileItIsOnScreen() {
+        let pair = Pair()
+        let host = NodeHost(root: pair, size: LayoutSize(width: 100, height: 100))
+        host.layoutIfNeeded()
+        #expect(pair.top.urgency.isUrgent)
+        #expect(!pair.below.urgency.isUrgent)
+
+        pair.scroll.contentOffset = LayoutPoint(x: 0, y: 280)
+        #expect(!pair.top.urgency.isUrgent)
+        #expect(pair.below.urgency.isUrgent)
+
+        host.detach()
+        #expect(!pair.below.urgency.isUrgent)
+    }
+
     @Test
     func unchangedFileIsNotReadAgainForADecodedSize() async throws {
         let file = temporaryCache().appendingPathExtension("png")
