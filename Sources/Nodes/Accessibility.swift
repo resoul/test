@@ -112,7 +112,9 @@ public struct AccessibilityList: Sendable, Hashable {
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public let laidOut: Range<Int>
-    /// The part of the list that shows, in the root's coordinates.
+    /// The part of the list that shows, in the root's coordinates; the whole list when none
+    /// of it shows. Platforms take an empty frame for none at all, and the frames of the
+    /// items are measured from this one.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public let frame: LayoutRect

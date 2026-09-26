@@ -1030,7 +1030,7 @@ public final class NodeHost {
             node: node,
             count: list.itemCount,
             laidOut: list.laidOutItems,
-            frame: shownFrame(of: stack),
+            frame: shownFrame(of: stack) ?? frameInRoot(of: stack),
             axis: list.itemAxis,
             lanes: list.itemLanes
         )
@@ -1085,8 +1085,8 @@ public final class NodeHost {
     }
 
     /// The part of `node` that shows within the nodes around it that clip their content, in
-    /// the root's coordinates.
-    private func shownFrame(of node: Node) -> LayoutRect {
+    /// the root's coordinates; `nil` when none of it shows.
+    private func shownFrame(of node: Node) -> LayoutRect? {
         let origin = originInRoot(of: node)
         var minX = origin.x
         var minY = origin.y
@@ -1103,7 +1103,19 @@ public final class NodeHost {
             }
             current = clipping.supernode
         }
-        return LayoutRect(x: minX, y: minY, width: max(0, maxX - minX), height: max(0, maxY - minY))
+        guard maxX > minX, maxY > minY else { return nil }
+
+        return LayoutRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
+
+    private func frameInRoot(of node: Node) -> LayoutRect {
+        let origin = originInRoot(of: node)
+        return LayoutRect(
+            x: origin.x,
+            y: origin.y,
+            width: node.frame.size.width,
+            height: node.frame.size.height
+        )
     }
 
     /// The item of a list laid out by where it shows that `node` is in, if any: the nearest

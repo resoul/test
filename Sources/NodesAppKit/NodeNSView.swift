@@ -34,8 +34,12 @@
         /// keeps its place by the element's identity, and a scroll redraws many times a
         /// second.
         private var accessibilityByNode: [NodeID: NodeAccessibilityElement] = [:]
+        /// The element of each lazy list, kept while the list shows, for the same reason.
+        private var accessibilityLists: [NodeID: ListAccessibilityElement] = [:]
+        /// The elements of the items laid out in each list, by item.
+        private var accessibilityListItems: [NodeID: [Int: [NodeAccessibilityElement]]] = [:]
         /// The elements in reading order; `nil` after a drawing, until asked for.
-        private var accessibilityOrder: [NodeAccessibilityElement]?
+        private var accessibilityOrder: [NSAccessibilityElement]?
         private let focusRing = FocusRing()
         /// Return or Space went down on a focused node and has not come up yet.
         private var isSelecting = false
@@ -227,8 +231,9 @@
             false
         }
 
-        /// The tree's accessibility elements (`NodeHost.accessibilityItems()`), brought up to
-        /// date after every drawing; a node keeps its element.
+        /// The tree's accessibility elements (`NodeHost.accessibilityEntries()`), brought up to
+        /// date after every drawing; a node keeps its element. A lazy list is one element, a
+        /// list with a row for each of its items, whether laid out or not.
         ///
         /// Ownership: the view keeps the elements. Isolation: MainActor. Errors: none.
         /// Cancellation: none.
@@ -236,19 +241,106 @@
             accessibilityOrder ?? updateAccessibilityElements()
         }
 
-        private func updateAccessibilityElements() -> [NodeAccessibilityElement] {
+        @discardableResult
+        private func updateAccessibilityElements() -> [NSAccessibilityElement] {
             var kept: [NodeID: NodeAccessibilityElement] = [:]
-            let order = host.accessibilityItems().map { item in
+            var keptLists: [NodeID: ListAccessibilityElement] = [:]
+            var listItems: [NodeID: [Int: [NodeAccessibilityElement]]] = [:]
+            /// The element of `item` in `parent`, which takes `container` in the view.
+            func element(
+                _ item: AccessibilityItem,
+                in parent: Any,
+                container: CGRect
+            ) -> NodeAccessibilityElement {
                 let element =
                     accessibilityByNode[item.node]
                     ?? NodeAccessibilityElement(parent: self, node: item.node)
-                element.update(item, zoom: factor)
+                element.setAccessibilityParent(parent)
+                element.update(item, frame: parentSpace(zoomed(item.frame), in: container))
                 kept[item.node] = element
                 return element
             }
+            var order: [NSAccessibilityElement] = []
+            for entry in host.accessibilityEntries() {
+                switch entry {
+                case .element(let item):
+                    order.append(element(item, in: self, container: bounds))
+                case .list(let list, let items):
+                    let group =
+                        accessibilityLists[list.node]
+                        ?? ListAccessibilityElement(view: self, list: list.node)
+                    let frame = zoomed(list.frame)
+                    var byItem: [Int: [NodeAccessibilityElement]] = [:]
+                    for item in items {
+                        guard let index = item.listItem?.index else { continue }
+
+                        let row = group.row(index)
+                        let container = accessibilityFrame(ofItem: index, in: list.node) ?? frame
+                        byItem[index, default: []].append(
+                            element(item, in: row, container: container)
+                        )
+                    }
+                    group.update(list, frame: parentSpace(frame, in: bounds), elements: byItem)
+                    listItems[list.node] = byItem
+                    keptLists[list.node] = group
+                    order.append(group)
+                }
+            }
             accessibilityByNode = kept
+            accessibilityLists = keptLists
+            accessibilityListItems = listItems
             accessibilityOrder = order
             return order
+        }
+
+        /// `rect`, in the tree's points, in the view's points.
+        private func zoomed(_ rect: LayoutRect) -> CGRect {
+            CGRect(
+                x: rect.origin.x * factor,
+                y: rect.origin.y * factor,
+                width: rect.size.width * factor,
+                height: rect.size.height * factor
+            )
+        }
+
+        /// `rect`, in the view's points from its top left, as a frame in the space of a
+        /// parent that takes `container` in the view. AppKit measures a frame in its parent's
+        /// space from the parent's bottom left even when the parent is a flipped view.
+        fileprivate func parentSpace(_ rect: CGRect, in container: CGRect) -> CGRect {
+            CGRect(
+                x: rect.minX - container.minX,
+                y: container.maxY - rect.maxY,
+                width: rect.width,
+                height: rect.height
+            )
+        }
+
+        /// Where the item at `index` of `list` is, or is expected, in the view's points.
+        fileprivate func accessibilityFrame(ofItem index: Int, in list: NodeID) -> CGRect? {
+            host.accessibilityFrame(ofItem: index, in: list).map(zoomed)
+        }
+
+        /// VoiceOver moved to an item of `list`: the list scrolls to it and lays it out, and
+        /// VoiceOver is told of the item's elements.
+        fileprivate func accessibilityReveal(item index: Int, in list: NodeID) -> Bool {
+            guard host.revealItem(index, in: list) else { return false }
+
+            layoutSubtreeIfNeeded()
+            updateAccessibilityElements()
+            let elements = accessibilityListItems[list]?[index] ?? []
+            NSAccessibility.post(
+                element: accessibilityLists[list] ?? self,
+                notification: .layoutChanged,
+                userInfo: [.uiElements: elements]
+            )
+            return true
+        }
+
+        /// VoiceOver moved to the element of `node`: the scrolls around it show it.
+        fileprivate func accessibilityReveal(_ node: NodeID) -> Bool {
+            host.reveal(node)
+            layoutSubtreeIfNeeded()
+            return true
         }
 
         /// No width of its own — the surroundings give it one (constraints, SwiftUI, a
@@ -566,8 +658,6 @@
         }
     }
 
-    /// One accessibility element of a node tree. It keeps the node's identity and asks the
-    /// host to act on it; it never holds the node itself.
     /// Takes the display's frames for a node view without keeping it: a display link keeps
     /// its target until it is invalidated.
     @MainActor
@@ -588,8 +678,48 @@
         }
     }
 
+    /// The action VoiceOver sends an element it moves to, so that it shows. AppKit names it
+    /// `NSAccessibilityScrollToVisibleAction` from macOS 26; the name is older.
+    private let scrollToVisible = NSAccessibility.Action(rawValue: "AXScrollToVisible")
+
+    /// An accessibility element that VoiceOver can ask to show: moving to an element, it sends
+    /// the element the scroll-to-visible action, and the element's scrolls bring it into view.
+    ///
+    /// AppKit has no method of the NSAccessibility protocol for that action, as it has
+    /// `accessibilityPerformPress` for a press: the element takes it through the action
+    /// methods AppKit marks deprecated, the only ones it still calls with it.
+    class ShowableAccessibilityElement: NSAccessibilityElement {
+        /// Shows the element; `Sendable`, so the action method can run it on the main actor.
+        private let show: @MainActor @Sendable () -> Bool
+        /// Whether the element takes a press as well.
+        private let pressable: Bool
+
+        init(pressable: Bool, show: @escaping @MainActor @Sendable () -> Bool) {
+            self.pressable = pressable
+            self.show = show
+            super.init()
+        }
+
+        override func accessibilityActionNames() -> [NSAccessibility.Action] {
+            pressable ? [.press, scrollToVisible] : [scrollToVisible]
+        }
+
+        // AppKit declares the action methods without actor isolation but calls them on the
+        // main thread; `assumeIsolated` checks that at run time.
+        override func accessibilityPerformAction(_ action: NSAccessibility.Action) {
+            if action == scrollToVisible {
+                let show = show
+                MainActor.assumeIsolated { _ = show() }
+            } else if action == .press, pressable {
+                _ = accessibilityPerformPress()
+            }
+        }
+    }
+
+    /// One accessibility element of a node tree. It keeps the node's identity and asks the
+    /// host to act on it; it never holds the node itself.
     @MainActor
-    final class NodeAccessibilityElement: NSAccessibilityElement {
+    final class NodeAccessibilityElement: ShowableAccessibilityElement {
         /// Presses the node: it holds the node's identity and the host weakly. A `Sendable`
         /// constant, so the nonisolated press can read it without touching `self`'s state.
         private let press: @MainActor @Sendable () -> Bool
@@ -598,26 +728,21 @@
             press = { [weak host = parent.host] in
                 host?.activate(node) ?? false
             }
-            super.init()
+            super.init(pressable: true) { [weak parent] in
+                parent?.accessibilityReveal(node) ?? false
+            }
             setAccessibilityParent(parent)
         }
 
-        /// Shows what `item` says, at its frame zoomed by `zoom`.
-        func update(_ item: AccessibilityItem, zoom: Double) {
+        /// Shows what `item` says, at `frame` in its parent's space.
+        func update(_ item: AccessibilityItem, frame: CGRect) {
             setAccessibilityLabel(item.label)
             setAccessibilityValue(item.value)
             setAccessibilityHelp(item.hint)
             setAccessibilityRole(NodeAccessibilityElement.role(item.traits))
             setAccessibilitySelected(item.traits.contains(.selected))
             setAccessibilityEnabled(!item.traits.contains(.notEnabled))
-            setAccessibilityFrameInParentSpace(
-                NSRect(
-                    x: item.frame.origin.x * zoom,
-                    y: item.frame.origin.y * zoom,
-                    width: item.frame.size.width * zoom,
-                    height: item.frame.size.height * zoom
-                )
-            )
+            setAccessibilityFrameInParentSpace(frame)
         }
 
         // AppKit declares this without actor isolation but calls it on the main thread;
@@ -632,6 +757,170 @@
             if traits.contains(.image) { return .image }
             if traits.contains(.staticText) || traits.contains(.header) { return .staticText }
             return .group
+        }
+    }
+
+    /// A lazy list as VoiceOver goes through it: a row for each of all its items. The rows of
+    /// items laid out hold their elements; the others are empty, at the frame the item is
+    /// expected to take, and VoiceOver moving to one lays the item out. Rows are made as
+    /// they are asked for: a list may have far more items than anyone reads.
+    ///
+    /// Not bound to the main actor, as AppKit asks for rows from outside any: the view hands
+    /// it what it needs, and it goes to the view on the main actor only for values.
+    final class ListAccessibilityElement: NSAccessibilityElement {
+        let list: NodeID
+        private weak var view: NodeNSView?
+        private var count = 0
+        private var laidOut: Range<Int> = 0..<0
+        private var rows: [Int: ListRowAccessibilityElement] = [:]
+
+        init(view: NodeNSView, list: NodeID) {
+            self.view = view
+            self.list = list
+            super.init()
+            setAccessibilityParent(view)
+            setAccessibilityRole(.list)
+        }
+
+        /// Takes what `list` says, `frame` in the view's space, and the elements of the items
+        /// laid out, by item.
+        func update(
+            _ list: AccessibilityList,
+            frame: CGRect,
+            elements: [Int: [NodeAccessibilityElement]]
+        ) {
+            for index in laidOut where elements[index] == nil {
+                rows[index]?.elements = []
+            }
+            count = list.count
+            laidOut = list.laidOut
+            rows = rows.filter { $0.key < count }
+            for (index, elements) in elements {
+                row(index).elements = elements
+            }
+            setAccessibilityFrameInParentSpace(frame)
+        }
+
+        /// The row of the item at `index`.
+        func row(_ index: Int) -> ListRowAccessibilityElement {
+            if let row = rows[index] { return row }
+
+            let row = ListRowAccessibilityElement(list: self, item: index, view: view)
+            rows[index] = row
+            return row
+        }
+
+        /// The rows of the items in `range`, clamped to the items there are.
+        private func rows(_ range: Range<Int>) -> [ListRowAccessibilityElement] {
+            range.clamped(to: 0..<count).map { row($0) }
+        }
+
+        override func accessibilityRows() -> [Any]? {
+            rows(0..<count)
+        }
+
+        override func accessibilityChildren() -> [Any]? {
+            rows(0..<count)
+        }
+
+        override func accessibilityVisibleRows() -> [Any]? {
+            rows(laidOut)
+        }
+
+        override func accessibilityRowCount() -> Int {
+            count
+        }
+
+        // Clients that read a few rows at a time ask for them by index; answering without
+        // the whole array makes a row only for each of those.
+        override func accessibilityArrayAttributeCount(
+            _ attribute: NSAccessibility.Attribute
+        ) -> Int {
+            guard attribute == .children || attribute == .rows else {
+                return super.accessibilityArrayAttributeCount(attribute)
+            }
+
+            return count
+        }
+
+        override func accessibilityArrayAttributeValues(
+            _ attribute: NSAccessibility.Attribute,
+            index: Int,
+            maxCount: Int
+        ) -> [Any] {
+            guard attribute == .children || attribute == .rows else {
+                return super.accessibilityArrayAttributeValues(
+                    attribute,
+                    index: index,
+                    maxCount: maxCount
+                )
+            }
+
+            let start = max(0, index)
+            return rows(start..<start + max(0, maxCount))
+        }
+
+        override func accessibilityIndex(ofChild child: Any) -> Int {
+            guard let row = child as? ListRowAccessibilityElement else {
+                return super.accessibilityIndex(ofChild: child)
+            }
+
+            return row.list === self && row.item < count ? row.item : NSNotFound
+        }
+
+        /// The frame of the item at `index` in this element's space.
+        fileprivate func frame(ofItem index: Int) -> CGRect {
+            let shown = accessibilityFrameInParentSpace()
+            let view = view
+            let list = list
+            // AppKit asks on the main thread; `assumeIsolated` checks that at run time.
+            return MainActor.assumeIsolated {
+                guard let view, let item = view.accessibilityFrame(ofItem: index, in: list)
+                else { return .zero }
+
+                // The list's frame back in the view's points from the top left.
+                let container = CGRect(
+                    x: shown.minX,
+                    y: view.bounds.height - shown.maxY,
+                    width: shown.width,
+                    height: shown.height
+                )
+                return view.parentSpace(item, in: container)
+            }
+        }
+    }
+
+    /// The row of one item of a lazy list: where the item is, or is expected to be, and its
+    /// elements when it is laid out. It asks the list for its frame each time: the list
+    /// scrolls, and a row may be one of thousands never read. VoiceOver moving to it lays the
+    /// item out.
+    final class ListRowAccessibilityElement: ShowableAccessibilityElement {
+        fileprivate unowned let list: ListAccessibilityElement
+        let item: Int
+        /// The elements of the item, while it is laid out.
+        fileprivate(set) var elements: [NodeAccessibilityElement] = []
+
+        init(list: ListAccessibilityElement, item: Int, view: NodeNSView?) {
+            self.list = list
+            self.item = item
+            let id = list.list
+            super.init(pressable: false) { [weak view] in
+                view?.accessibilityReveal(item: item, in: id) ?? false
+            }
+            setAccessibilityParent(list)
+            setAccessibilityRole(.row)
+        }
+
+        override func accessibilityIndex() -> Int {
+            item
+        }
+
+        override func accessibilityFrameInParentSpace() -> NSRect {
+            list.frame(ofItem: item)
+        }
+
+        override func accessibilityChildren() -> [Any]? {
+            elements
         }
     }
 #endif
