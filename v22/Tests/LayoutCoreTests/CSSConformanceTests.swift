@@ -271,6 +271,17 @@ private func makeNode(
                 width: try number(size[0], property),
                 height: try number(size[1], property)
             )
+        case "image":
+            guard case let .list(size) = value, size.count == 2 else {
+                throw Unsupported(reason: "image: \(value)")
+            }
+
+            content = .proportional(
+                LayoutSize(
+                    width: try number(size[0], property),
+                    height: try number(size[1], property)
+                )
+            )
         case "text":
             guard case let .list(values) = value, let first = values.first else {
                 throw Unsupported(reason: "text: \(value)")
@@ -470,6 +481,7 @@ func cssFlexboxConformance() throws {
         "fixtures/random-text.json",
         "fixtures/random-baseline.json",
         "fixtures/reduced.json",
+        "fixtures/image.json",
     ]
     let expectationsURL = conformanceRoot.appendingPathComponent("expectations/engine.json")
     let reportURL = conformanceRoot.appendingPathComponent("reports/engine.md")

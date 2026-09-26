@@ -768,6 +768,44 @@
         }
     }
 
+    /// Holds an image in a row of a fixed height, with or without a height of its own.
+    @MainActor
+    private final class Strip: Node {
+        let image: Image
+        let height: Length
+
+        init(_ image: Image, height: Length) {
+            self.image = image
+            self.height = height
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                FlexContainer(.row) { image.height(height) }
+                    .height(.points(40))
+            }
+            .alignItems(.start)
+        }
+    }
+
+    /// Chromium 153 gives a 400×200 `<img>` in a row 40 points high, or with a height of 40, a
+    /// width of 80: the width follows the height through the proportions.
+    @Test @MainActor
+    func imageTakesItsWidthFromItsHeight() async throws {
+        let data = try encodedImage(width: 400, height: 200)
+        for height in [Length.auto, .points(40)] {
+            let image = Image(source: .data(data))
+            try await loaded(image)
+            let host = NodeHost(
+                root: Strip(image, height: height),
+                size: LayoutSize(width: 600, height: 600)
+            )
+            host.layoutIfNeeded()
+            #expect(image.frame.size == LayoutSize(width: 80, height: 40), "height \(height)")
+            host.detach()
+        }
+    }
+
     @Test @MainActor
     func scaleTurnsSourcePixelsIntoPoints() async throws {
         let image = Image(source: .data(try encodedImage(width: 400, height: 200)), scale: 2)

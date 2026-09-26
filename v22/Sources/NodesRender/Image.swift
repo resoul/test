@@ -395,18 +395,6 @@
         }
     }
 
-    /// An image's own size, keeping its proportions: as wide as its natural width when
-    /// nothing limits it, and as tall as its proportions give for whatever width it gets.
-    struct NaturalSizeMeasurer: ContentMeasurer {
-        let size: LayoutSize
-
-        func minContentWidth() -> Double { size.width }
-
-        func maxContentWidth() -> Double { size.width }
-
-        func height(forWidth width: Double) -> Double { width * size.height / size.width }
-    }
-
     struct LoadedImage: Sendable {
         let image: CGImage
         let size: LayoutSize
@@ -492,7 +480,7 @@
                 return .size(natural ?? .zero)
             }
 
-            return .measured(NaturalSizeMeasurer(size: natural))
+            return .proportional(natural)
         }
 
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.

@@ -289,7 +289,8 @@ struct Solver {
                 direction: node.direction,
                 children: [],
                 hasAspectRatio: node.style.aspectRatio != nil
-                    || node.variants.contains { $0.style.aspectRatio != nil },
+                    || node.variants.contains { $0.style.aspectRatio != nil }
+                    || node.content?.naturalRatio != nil,
                 flowOrder: FlatNode.flowOrder(node.style),
                 dependsOnParent: !node.variants.isEmpty || node.style.hasPercentageSize
             )
@@ -368,16 +369,20 @@ struct Solver {
     /// style. Without a definite width the base style applies.
     @inline(never)
     func style(_ index: Int, parentWidth: Double?) -> FlexStyle {
-        guard !nodes[index].variants.isEmpty else { return nodes[index].style }
-
-        guard let width = parentWidth else {
-            variantsWithoutWidth.indices.insert(index)
-            return nodes[index].style
-        }
-
         var chosen = nodes[index].style
-        for variant in nodes[index].variants where variant.minWidth <= width + 1e-9 {
-            chosen = variant.style
+        if !nodes[index].variants.isEmpty {
+            if let width = parentWidth {
+                for variant in nodes[index].variants where variant.minWidth <= width + 1e-9 {
+                    chosen = variant.style
+                }
+            } else {
+                variantsWithoutWidth.indices.insert(index)
+            }
+        }
+        // Proportional content brings its own ratio, as a picture's `aspect-ratio: auto` is
+        // its natural one; a ratio in the style wins.
+        if chosen.aspectRatio == nil, let ratio = nodes[index].content?.naturalRatio {
+            chosen.aspectRatio = ratio
         }
         return chosen
     }
@@ -525,6 +530,7 @@ struct Solver {
         )
         let contentWidth = content.width + own.paddingWidth
         let contentHeight = content.height + own.paddingHeight
+        let isProportional = nodes[index].content?.isProportional ?? false
         var width = own.width
         var height = own.height
 
@@ -552,7 +558,7 @@ struct Solver {
                     minimum: own.minHeight,
                     maximum: own.maxHeight,
                     floor: own.paddingHeight,
-                    automaticMinimum: style.minHeight == .auto
+                    automaticMinimum: !isProportional && style.minHeight == .auto
                         && (style.height == .auto || contentOnly == .vertical)
                 )
             } else if let base = height, width == nil {
@@ -565,7 +571,7 @@ struct Solver {
                     minimum: own.minWidth,
                     maximum: own.maxWidth,
                     floor: own.paddingWidth,
-                    automaticMinimum: style.minWidth == .auto
+                    automaticMinimum: !isProportional && style.minWidth == .auto
                 )
             }
         }

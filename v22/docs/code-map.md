@@ -50,6 +50,8 @@
 | `ContentMeasurer` | min-/max-content ширина и высота при ширине | [10](10-layout-engine.md#статус-e2-текст); три запроса к листу — [10](10-layout-engine.md#ключевые-структуры) |
 | `LeafContent.size(knownWidth:available:)` | ширина по ограничению, высота при ней | [10](10-layout-engine.md#статус-e2-текст) |
 | `LeafContent.minContentWidth` | автоминимум ширины листа с пропорцией | дефект #144 |
+| `LeafContent.proportional`, `naturalRatio`, `isProportional` | содержимое с собственным размером и пропорцией, как картинка (заменяемый элемент CSS) | дефект #157; [11](11-image.md) |
+| `FlexboxEngine.style(_:parentWidth:)` (собственная пропорция), `leafSize` (`automaticMinimum`) | пропорция содержимого как `aspect-ratio: auto`; сторона по пропорции без минимума по содержимому (CSS Sizing 4 §5.2.1 — только незаменяемые) | дефект #157; расхождение с отступами — #169 |
 | `ContentMeasurer.firstBaseline(forWidth:)`, `LeafContent.baseline(width:)` | первая базовая линия листа; без неё — низ содержимого | [10](10-layout-engine.md#статус-e2-текст) |
 
 ## `Sources/LayoutCore/DSL`, `Sources/LayoutUIKit`, `Sources/LayoutAppKit`
@@ -201,7 +203,7 @@
 | `Text`, `TextMeasurer`, `TextLayout` | одна `TextLayout` для замера и рисования | правило Trellis: измерение и рисование — одна строка (дефект #37 Trellis) |
 | `Image`, `ImagePipeline`, `ImagePlaceholder`, `ImageLoadPhase` | статичная картинка как нода; placeholder и состояние загрузки; превью, декодирование под рамку × масштаб, общий ограниченный кэш bitmap и защита от запоздавшего результата | [11](11-image.md) |
 | `DecodeGate`, `ImagePipeline.load` (очередь декодирования) | декодирования pipeline идут по одному вне актора; отменённый в очереди запрос уходит без работы; дефект #155 | [11](11-image.md), [defects](defects.md) |
-| `Image.layoutContent`, `Image.scale`, `NaturalSizeMeasurer` | размер в точках (`пиксели / scale`), высота по ширине — как `<img>` в Chromium 152; ширина по высоте открыта; дефект #157 | [11](11-image.md), [defects](defects.md) |
+| `Image.layoutContent`, `Image.scale` | размер в точках (`пиксели / scale`) как `LeafContent.proportional`: высота по ширине и ширина по высоте — как `<img>`; дефект #157 | [11](11-image.md), [defects](defects.md) |
 | `ImagePipeline.load` (`digests`, `reuse`), `ImageCache.stamp`, `ImageFileStamp` | попадание в кэш памяти без чтения файла: отпечаток по штампу (размер, даты, свежие атрибуты — не `resourceValues`); дефект #160 | [11](11-image.md), [defects](defects.md) |
 | `LayerDrawing.layerImage`, `LayerImage`, `LayerRenderer.show`, `fillCrop`, `Image.solidImage` | картинка в `contents` без копии под рамку; вписывание — gravity и `contentsRect`; placeholder — один пиксель | [11](11-image.md) |
 | `LayerDrawing.prepareDrawing`, `LayerRenderer.draw` | рендерер сообщает размер и масштаб до рисования, чтобы нода могла обновить детализацию | [11](11-image.md) |
