@@ -806,6 +806,106 @@ func scrollingToAnItemPutsItAtTheWindowsStartThoughTheItemsAroundItWereGuessed()
 }
 
 @Test @MainActor
+func scrollingToAnItemCanPutItInTheMiddleOrAtTheEndOfTheWindow() {
+    // Items 45 long against an estimate of 30: where item 500 is was a guess.
+    for (alignment, at) in [(ScrollAlignment.center, 52.5), (.end, 105)] {
+        let feed = Feed(count: 1000, length: 45)
+        let host = host(feed)
+
+        #expect(feed.stack.scroll(to: 500, at: alignment))
+        host.layoutIfNeeded()
+
+        // A window of 150: halfway leaves 52.5 on each side, the end leaves 105 before it.
+        #expect(shown(feed.cells[500], in: feed.scroll) == at, "\(alignment)")
+        host.detach()
+    }
+}
+
+@Test @MainActor
+func anItemInTheMiddleOfTheWindowIsInTheMiddleOfWhatATitleLeaves() {
+    for (alignment, at) in [(ScrollAlignment.center, 80.0), (.end, 120)] {
+        let feed = TitledFeed()
+        let host = host(feed)
+
+        #expect(feed.stack.scroll(to: 100, at: alignment))
+        host.layoutIfNeeded()
+
+        // The 40-point title covers the top: halfway through the 110 points under it, and at
+        // the end whatever covers the top.
+        #expect(shown(feed.cells[100], in: feed.scroll) == at, "\(alignment)")
+        host.detach()
+    }
+}
+
+@Test @MainActor
+func anItemNearTheStartOrTheEndGoesAsFarAsTheScrollGoes() {
+    let feed = Feed(count: 1000)
+    let host = host(feed)
+
+    #expect(feed.stack.scroll(to: 0, at: .end))
+    host.layoutIfNeeded()
+    #expect(feed.scroll.contentOffset.y == 0)
+
+    #expect(feed.stack.scroll(to: 999, at: .center))
+    host.layoutIfNeeded()
+    #expect(feed.scroll.contentOffset == feed.scroll.offsetRange.highest)
+    #expect(shown(feed.cells[999], in: feed.scroll) == 120)
+    host.detach()
+}
+
+@Test @MainActor
+func anItemOfAGridInTheMiddleOfTheWindowBringsItsLine() {
+    // Even items are 60 long, odd ones 30: every line is 60.
+    let grid = Grid((0..<1000).map { Entry(id: $0, length: $0 % 2 == 0 ? 60 : 30) })
+    let host = host(grid, width: 210, height: 150)
+
+    #expect(grid.stack.scroll(to: 301, at: .center))
+    host.layoutIfNeeded()
+
+    let line = grid.scroll.frame(of: grid.cells[300]).map { $0.origin.y }
+    #expect(line.map { $0 - grid.scroll.contentOffset.y } == 45)
+    host.detach()
+}
+
+@Test @MainActor
+func anItemOfARowRightToLeftAtTheEndIsAtTheLeft() {
+    for (alignment, offset) in [(ScrollAlignment.end, -4900.0), (.center, -4950)] {
+        let strip = Strip()
+        let host = NodeHost(root: strip, size: LayoutSize(width: 200, height: 40))
+        host.direction = .rightToLeft
+        host.layoutIfNeeded()
+
+        #expect(strip.stack.scroll(to: 50, at: alignment))
+        host.layoutIfNeeded()
+
+        // Item 50 is at -4900: at the end its left edge is the window's.
+        #expect(strip.scroll.frame(of: strip.cells[50])?.origin.x == -4900)
+        #expect(strip.scroll.contentOffset.x == offset, "\(alignment)")
+        host.detach()
+    }
+}
+
+@Test @MainActor
+func anAnimatedScrollToTheMiddleEndsWithTheItemThere() {
+    let feed = Feed(count: 1000, length: 45)
+    let (host, _) = framedHost(feed)
+
+    withAnimation(.easeInOut(duration: 1)) {
+        #expect(feed.stack.scroll(to: 700, at: .center))
+    }
+    var frame = 0
+    while host.needsFrames, frame < 40 {
+        host.advanceFrames(to: Double(frame) * 0.05)
+        host.layoutIfNeeded()
+        frame += 1
+    }
+
+    #expect(!host.needsFrames)
+    #expect(shown(feed.cells[700], in: feed.scroll) == 52.5)
+    host.detach()
+}
+
+@Test @MainActor
 func anAnimatedScrollToAFarItemEndsOnItThoughTheItemsOnTheWayGrew() {
     for (from, to) in [(0.0, 700), (40000.0, 20)] {
         let feed = Feed(count: 1000, length: 45)

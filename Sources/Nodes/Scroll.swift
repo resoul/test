@@ -1,6 +1,24 @@
 import LayoutCore
 import StateCore
 
+/// Where in a scroll's window a scroll to an item puts it, along the scroll's axis.
+///
+/// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+public enum ScrollAlignment: Sendable, Hashable {
+    /// At the window's start — its top, or its leading edge — after the nodes sticking there.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    case start
+    /// Halfway between the window's start, after the nodes sticking there, and its end.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    case center
+    /// At the window's end — its bottom, or its trailing edge.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    case end
+}
+
 /// The direction a `Scroll` moves its content in.
 ///
 /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
