@@ -107,6 +107,9 @@ public final class LazyStack<Item: Identifiable>: Node {
     /// The part of the stack, from its start, that the nodes placed cover once laid out;
     /// the ends are unbounded where the first or the last item is among them.
     private var covered: (start: Double, end: Double) = (.infinity, -.infinity)
+    /// The part the mounted nodes cover — behind `covered` while a layout is solved in the
+    /// background.
+    private var mountedCover: (start: Double, end: Double) = (.infinity, -.infinity)
     /// An item that shows as a layout begins, and where it is then in `scroll`: the layout
     /// is followed by a scroll that puts it back there.
     private var anchor: Anchor?
@@ -511,6 +514,7 @@ public final class LazyStack<Item: Identifiable>: Node {
                     ? .infinity : start(of: last) + along(last.frame.size)
             )
         }
+        mountedCover = covered
 
         // An item `scroll(to:)` sent the scroll to decides where it is, not what showed.
         if !keepScrolledTo(), let anchor,
@@ -544,7 +548,13 @@ public final class LazyStack<Item: Identifiable>: Node {
         let needed = (start: max(0, span.start - reach), end: min(length, span.end + reach))
         guard needed.start < needed.end else { return }
 
-        if needed.start < covered.start || needed.end > covered.end {
+        let shown = (start: max(0, span.start), end: min(length, span.end))
+        if shown.start < shown.end,
+            shown.start < mountedCover.start || shown.end > mountedCover.end
+        {
+            // Part of what shows is not laid out: it is missing on screen until it is.
+            host.setNeedsLayoutNow()
+        } else if needed.start < covered.start || needed.end > covered.end {
             setNeedsLayout()
         }
     }

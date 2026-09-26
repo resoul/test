@@ -90,7 +90,8 @@ public final class NodeHost {
     /// arrive, and a solve that a newer layout overtakes is cancelled and its result dropped.
     /// A layout whose content only measures on the main thread (views inside it) is solved
     /// there anyway, and so is the layout of each frame of a scroll moving frame by frame
-    /// (`needsFrames`).
+    /// (`needsFrames`), and a layout a scroll needs because its window moved past the content
+    /// laid out: what shows would be missing until it lands.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public var solvesInBackground = false
@@ -163,8 +164,10 @@ public final class NodeHost {
     private var screenTrackers: [Node] = []
     /// Scrolls moving frame by frame.
     private var movingScrolls: [Scroll] = []
-    /// Scrolls moved to where a frame shows them, and the layout for that frame is to come.
-    private var laysOutForFrame = false
+    /// The next layout is solved on the main thread, even when the host solves in the
+    /// background: a scroll moved to where a frame shows it, or the window moved past the
+    /// content laid out, and what shows is missing until the layout lands.
+    private var laysOutNow = false
     /// Nodes of the layout being solved in the background that are not mounted yet.
     private var pending: [Node] = []
     private var pressed: Node?
@@ -226,6 +229,13 @@ public final class NodeHost {
         onNeedsLayout?()
     }
 
+    /// Marks the tree as needing a layout that shows what is missing on screen now: it is
+    /// solved on the main thread, even when the host solves in the background.
+    func setNeedsLayoutNow() {
+        laysOutNow = true
+        setNeedsLayout()
+    }
+
     /// Marks the tree as needing to be drawn again.
     ///
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
@@ -275,7 +285,7 @@ public final class NodeHost {
     ///
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public func advanceFrames(to time: Double) {
-        laysOutForFrame = laysOutForFrame || !movingScrolls.isEmpty
+        laysOutNow = laysOutNow || !movingScrolls.isEmpty
         for scroll in movingScrolls {
             if scroll.host === self {
                 _ = scroll.advanceMove(to: time)
@@ -341,7 +351,7 @@ public final class NodeHost {
     /// Ownership: sets frames and subnodes of the tree. Isolation: MainActor; synchronous.
     /// Errors: none. Cancellation: not applicable.
     public func layoutIfNeeded() {
-        defer { laysOutForFrame = false }
+        defer { laysOutNow = false }
         for _ in 0..<NodeHost.settlingPasses {
             StateUpdates.flush()
             guard needsLayout, layOut() else { return }
@@ -365,9 +375,10 @@ public final class NodeHost {
         let rect = LayoutRect(origin: .zero, size: size)
         let trace = traceRequest(for: prepared)
         // A scroll moving frame by frame needs each frame's layout in that frame, the last
-        // one's too: solved in the background, every frame's pass would overtake the one
-        // before.
-        guard solvesInBackground, passes > 0, !laysOutForFrame, !prepared.requiresMainThread
+        // one's too, and a window moved past what is laid out shows nothing until its layout
+        // lands: solved in the background, it would land frames later, and while a scroll
+        // goes on every pass would overtake the one before.
+        guard solvesInBackground, passes > 0, !laysOutNow, !prepared.requiresMainThread
         else {
             let context = LayoutContext(trace: trace, stackBudget: mainThreadStackBudget)
             let clock = ContinuousClock()
