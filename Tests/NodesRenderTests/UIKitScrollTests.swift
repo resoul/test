@@ -178,6 +178,42 @@
     }
 
     @Test @MainActor
+    func anAnimatedFarScrollOfALazyStackMovesWithTheDisplaysFrames() async throws {
+        let feed = Feed()
+        let view = NodeView(root: feed)
+        view.zoom = 1
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 150)
+        view.layoutIfNeeded()
+
+        withAnimation(.linear(duration: 0.3)) {
+            feed.scroll.contentOffset = LayoutPoint(x: 0, y: 15_000)
+        }
+        #expect(view.host.needsFrames)
+
+        // The view is in no window, so nothing lays it out but the test.
+        var between = 0
+        let clock = ContinuousClock()
+        let deadline = clock.now + .seconds(5)
+        while view.host.needsFrames, clock.now < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+            view.layoutIfNeeded()
+            let top = feed.scroll.contentOffset.y
+            if top > 0, top < 15_000 {
+                between += 1
+                // What shows on the way is drawn.
+                let row = try #require(feed.rows[Int(top / 30)])
+                #expect(view.renderedLayer(for: row) != nil)
+            }
+        }
+
+        #expect(!view.host.needsFrames)
+        #expect(between > 1)
+        #expect(feed.scroll.contentOffset.y == 15_000)
+        #expect(view.renderedLayer(for: try #require(feed.rows[500]))?.frame.origin.y == 15_000)
+        view.host.detach()
+    }
+
+    @Test @MainActor
     func onATVTheFocusScrollsNotTheTouchSurface() {
         let screen = Screen()
         let view = view(of: screen)
