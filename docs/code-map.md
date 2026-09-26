@@ -203,6 +203,7 @@
 | `LayerRenderer.sync`/`enter`/`attach`, `Level` | сверка слоёв явным стеком, в порядке рекурсии | дефект #141 |
 | `LayerDrawing`, `LayerRenderer.draw` | содержимое ноды — bitmap в `contents`, всегда прямо | дефект #129 |
 | `Text`, `TextMeasurer`, `TextLayout` | одна `TextLayout` для замера и рисования | правило Trellis: измерение и рисование — одна строка (дефект #37 Trellis) |
+| `ImageLoadFailure`, `ImageLoadPhase.failed(_:)`/`failure`, `ImageCacheError.status` | причина ошибки загрузки для приложения | [11](11-image.md) |
 | `Image`, `ImagePipeline`, `ImagePlaceholder`, `ImageLoadPhase` | статичная картинка как нода; placeholder и состояние загрузки; превью, декодирование под рамку × масштаб, общий ограниченный кэш bitmap и защита от запоздавшего результата | [11](11-image.md) |
 | `DecodeGate`, `ImagePipeline.load` (очередь декодирования) | декодирования pipeline идут по одному вне актора; отменённый в очереди запрос уходит без работы; дефект #155 | [11](11-image.md), [defects](defects.md) |
 | `HTTPValidators` (`read`/`write` — расширенный атрибут, `freshUntil`, `forbidsStoring`); `ImageCache.freshData`, условный запрос в `fetch`, 304 в `download`, свежесть в `stamp` | HTTP-кэширование: `Cache-Control`, `Expires`, `Age`, `ETag`/`Last-Modified` | [11](11-image.md#http-кэширование); RFC 9111 |

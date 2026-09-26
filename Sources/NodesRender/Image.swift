@@ -50,10 +50,78 @@
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public enum ImageLoadPhase: Sendable, Equatable {
+        /// No source.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         case empty
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         case loading
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         case ready
-        case failed
+        /// The first load failed, for `ImageLoadFailure`'s reason.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case failed(ImageLoadFailure)
+
+        /// Why the first load failed, or `nil` when it has not.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public var failure: ImageLoadFailure? {
+            if case let .failed(reason) = self { return reason }
+            return nil
+        }
+    }
+
+    /// Why an image could not be shown — for choosing what to tell the user and whether to
+    /// offer `retry()`.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public enum ImageLoadFailure: Sendable, Equatable {
+        /// The server could not be reached or stopped answering: no connection, a timeout, a
+        /// name that does not resolve. Worth retrying later.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case network(URLError.Code)
+        /// The server answered with this status instead of the image: 404, 500.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case status(Int)
+        /// The response was larger than the cache's `maximumDownloadBytes`.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case tooLarge
+        /// The bytes are not an image that can be decoded.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case invalidImage
+        /// A file source could not be read: missing, or not permitted.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case file
+        /// Anything else, such as an answer that is not HTTP.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case other
+
+        /// The reason `error`, thrown by a load, stands for.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public init(_ error: any Error) {
+            switch error {
+            case let error as URLError:
+                self = .network(error.code)
+            case ImageCacheError.status(let code):
+                self = .status(code)
+            case ImageCacheError.responseTooLarge:
+                self = .tooLarge
+            case ImageCacheError.invalidImage, ImageCacheError.processingFailed:
+                self = .invalidImage
+            case is CocoaError:
+                self = .file
+            default:
+                self = .other
+            }
+        }
     }
 
     /// Loads and decodes static images. The disk cache holds encoded bytes; decoding happens
@@ -535,7 +603,7 @@
     /// An old result is discarded when the source, frame, or display scale changes.
     ///
     /// Ownership: the creator owns the node; the node owns its load task. Isolation:
-    /// MainActor. Errors: a failed first load sets `phase` to `.failed` and keeps the
+    /// MainActor. Errors: a failed first load sets `phase` to `.failed` with its reason and keeps the
     /// placeholder visible. Cancellation: replacing the source, requested pixel size, or
     /// releasing the node cancels the old load.
     @MainActor
@@ -901,7 +969,7 @@
                     guard !Task.isCancelled, let self, self.sourceGeneration == request else {
                         return
                     }
-                    self.phaseState.value = .failed
+                    self.phaseState.value = .failed(ImageLoadFailure(error))
                     self.revision &+= 1
                     self.host?.setNeedsRender()
                 }

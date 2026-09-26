@@ -384,6 +384,10 @@
                 answerWithCacheHeaders(url)
                 return
             }
+            if url.path.contains("offline") {
+                client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+                return
+            }
             let body = url.path.contains("large") ? Data(count: 100_000) : webP
             guard
                 let response = HTTPURLResponse(
@@ -630,7 +634,7 @@
         defer { try? FileManager.default.removeItem(at: directory) }
         let cache = stubCache(directory)
         let url = URL(string: "https://image-cache.test/missing.webp")!
-        await #expect(throws: ImageCacheError.invalidResponse) { try await cache.load(url) }
+        await #expect(throws: ImageCacheError.status(404)) { try await cache.load(url) }
         #expect(try await cache.cachedData(for: url) == nil)
     }
 
@@ -1579,6 +1583,54 @@
         #expect(pixelAtCorner(after).red > 200)
     }
 
+    /// Where an image fails to load, and the reason its phase gives.
+    enum FailingSource: CaseIterable, Sendable {
+        case missingFile, notAnImage, notFound, offline, tooLarge
+
+        var expected: ImageLoadFailure {
+            switch self {
+            case .missingFile: .file
+            case .notAnImage: .invalidImage
+            case .notFound: .status(404)
+            case .offline: .network(.notConnectedToInternet)
+            case .tooLarge: .tooLarge
+            }
+        }
+    }
+
+    @Test(arguments: FailingSource.allCases) @MainActor
+    func aFailedImageSaysWhy(_ failing: FailingSource) async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pipeline = ImagePipeline(cache: stubCache(directory, maximumDownloadBytes: 10_000))
+        let source: ImageSource
+        switch failing {
+        case .missingFile:
+            source = .url(directory.appendingPathComponent("nothing-here.png"))
+        case .notAnImage:
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+            let file = directory.appendingPathComponent("garbage.png")
+            try Data([0, 1, 2]).write(to: file)
+            source = .url(file)
+        case .notFound:
+            source = .url(URL(string: "https://image-cache.test/missing-reason.webp")!)
+        case .offline:
+            source = .url(URL(string: "https://image-cache.test/offline.webp")!)
+        case .tooLarge:
+            source = .url(URL(string: "https://image-cache.test/large-reason.webp")!)
+        }
+        let image = Image(source: source, pipeline: pipeline)
+
+        for _ in 0..<1000 where image.phase.failure == nil {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+
+        #expect(image.phase == .failed(failing.expected))
+    }
+
     @Test @MainActor
     func failedImageKeepsPlaceholderAndCanRetry() async throws {
         let file = temporaryCache().appendingPathExtension("png")
@@ -1589,10 +1641,10 @@
             size: LayoutSize(width: 16, height: 16)
         )
         let image = Image(source: .url(file), placeholder: placeholder)
-        for _ in 0..<100 where image.phase != .failed {
+        for _ in 0..<100 where image.phase.failure == nil {
             try await Task.sleep(for: .milliseconds(5))
         }
-        #expect(image.phase == .failed)
+        #expect(image.phase == .failed(.invalidImage))
         let host = NodeHost(root: image, size: LayoutSize(width: 16, height: 16))
         defer { host.detach() }
         let renderer = LayerRenderer()

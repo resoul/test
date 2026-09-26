@@ -405,7 +405,7 @@
                 return cached
             }
             guard (200...299).contains(response.statusCode) else {
-                throw ImageCacheError.invalidResponse
+                throw ImageCacheError.status(response.statusCode)
             }
 
             // After a removal of all entries, such as at sign-out, nothing fetched before it
@@ -778,11 +778,26 @@
     /// Failure to read or store a usable image.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public enum ImageCacheError: Error, Sendable {
+    public enum ImageCacheError: Error, Sendable, Equatable {
         /// The response body was larger than `maximumDownloadBytes`.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         case responseTooLarge
+        /// The server answered with a status other than success (or 304 to a check).
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case status(Int)
+        /// The answer was not an HTTP response.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         case invalidResponse
+        /// The bytes are not an image Image I/O reads.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         case invalidImage
+        /// The metadata or compression policy could not be applied to the image's format.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         case processingFailed
     }
 #endif
