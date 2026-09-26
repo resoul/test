@@ -50,10 +50,17 @@ extension ContentMeasurer {
 /// Ownership: value type; a measurer is shared, never mutated. Isolation: none. Errors: none.
 /// Cancellation: not applicable.
 public enum LeafContent: Sendable {
-    /// A fixed size, like an image.
+    /// A fixed size.
     case size(LayoutSize)
     /// Content sized by a measurer, like text.
     case measured(any ContentMeasurer)
+    /// Content with a natural size that keeps its proportions, like a picture: its natural
+    /// size when nothing sets it, and the other side through its proportions when a width or
+    /// height is set or stretched. Unlike a box with an aspect ratio, a side that follows from
+    /// the proportions is not held open by the content (CSS Sizing 4 §5.2.1 applies that only
+    /// to non-replaced boxes), so a picture in a row 40 points high is 40 high and as wide as
+    /// its proportions make it. An aspect ratio in the style replaces the natural one.
+    case proportional(LayoutSize)
 
     /// A fixed size.
     ///
@@ -70,6 +77,8 @@ public enum LeafContent: Sendable {
             return size.height
         case let .measured(measurer):
             return measurer.firstBaseline(forWidth: width) ?? measurer.height(forWidth: width)
+        case let .proportional(size):
+            return size.width > 0 ? width * size.height / size.width : size.height
         }
     }
 
@@ -78,6 +87,7 @@ public enum LeafContent: Sendable {
         switch self {
         case let .size(size): size.width
         case let .measured(measurer): measurer.minContentWidth()
+        case let .proportional(size): size.width
         }
     }
 
@@ -87,6 +97,12 @@ public enum LeafContent: Sendable {
         switch self {
         case let .size(size):
             return size
+        case let .proportional(size):
+            // A picture does not shrink to the space it is offered: without a width of its own
+            // it is its natural size.
+            guard let knownWidth, size.width > 0 else { return size }
+
+            return LayoutSize(width: knownWidth, height: knownWidth * size.height / size.width)
         case let .measured(measurer):
             let width: Double
             if let knownWidth {
@@ -104,5 +120,21 @@ public enum LeafContent: Sendable {
 
             return LayoutSize(width: width, height: measurer.height(forWidth: width))
         }
+    }
+}
+
+extension LeafContent {
+    /// Width divided by height of proportional content, or `nil` for other content.
+    var naturalRatio: Double? {
+        guard case let .proportional(size) = self, size.width > 0, size.height > 0 else {
+            return nil
+        }
+
+        return size.width / size.height
+    }
+
+    var isProportional: Bool {
+        if case .proportional = self { return true }
+        return false
     }
 }

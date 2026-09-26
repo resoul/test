@@ -13,6 +13,7 @@ fixtures/random.json    400 случайных деревьев (seed 2026) из
 fixtures/text.json      ручные кейсы с «текстом» и выравниванием по базовой линии
 fixtures/random-text.json  200 случайных деревьев с текстовыми листьями (seed 7)
 fixtures/random-baseline.json  150 случайных деревьев с текстом и `align-items: baseline` (seed 11)
+fixtures/image.json     картинки: `<img>` с собственным размером и пропорцией среди коробок и текста
 cases/reduced.json      уменьшенные деревья из разбора падений (дефект #118): исходник группы `reduced`
 fixtures/reduced.json   они же с эталоном
 expectations/*.json     известный итог каждого кейса для конкретного движка (baseline)
@@ -99,7 +100,16 @@ CSS_CONFORMANCE_LAB=/путь/к/кейсам.json swift test --filter cssFlexbo
 
 Не покрыто и должно быть добавлено следующими наборами: проценты от неопределённого
 размера, `flex-basis: content`, `display: none`. Текст и базовая линия — в `text.json`,
-`random-text.json`, `random-baseline.json`.
+`random-text.json`, `random-baseline.json`. Картинки (заменяемые элементы) — в `image.json`:
+лист `image: [w, h]` — это `<img>` с SVG такого собственного размера; в движке —
+`LeafContent.proportional`.
+
+Перегенерировать только часть файлов — имена без `.json` аргументами, остальные эталоны
+не трогаются (у Chromium могла смениться версия):
+
+```sh
+NODE_PATH="$(npm root -g)" node Conformance/CSSFlexbox/generate.cjs image
+```
 
 `reduced` — 81 дерево из 2–5 нод: каждое — наименьшее дерево, которое ещё расходилось с
 Chromium, найденное уменьшением падающего случайного кейса (убирались ноды и свойства, пока
