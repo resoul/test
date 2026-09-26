@@ -28,7 +28,8 @@
 - `StateCore` (синхронное состояние с отслеживанием чтений) и `StateAsyncRay` (мост к
   [AsyncRay](https://github.com/resoul/AsyncRay) 1.0.0) — тесты `StateCoreTests`, `StateAsyncRayTests`.
 - `Nodes`, `NodesRender`, `NodesUIKit`, `NodesAppKit` — дерево нод, отрисовка в
-  `CALayer`, текст на CoreText, `view.addSubnode(node)`.
+  `CALayer`, текст на CoreText, картинки (`Image`: `Data`/URL, дисковый кэш, декодирование
+  под рамку — [11-image.md](docs/11-image.md)), `view.addSubnode(node)`.
 - `Demo/` — экран на нодах (`DemoScreens`) и окно для Mac: `cd Demo && swift run`.
 - `DemoiOS.swiftpm` — тот же экран на iPhone/iPad: открыть папку в Xcode, запустить на
   симуляторе.

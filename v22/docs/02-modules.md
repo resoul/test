@@ -19,7 +19,9 @@ LayoutAppKit    та же раскладка для NSView (в layout())
 Nodes           дерево нод: Node, NodeHost; раскладка всего дерева одним проходом,
                 подписка по чтению в layoutSpec()/update(); расчёт в фоне
                 (NodeHost.solvesInBackground). Использует LayoutCore, StateCore.
-NodesRender     дерево нод → дерево CALayer (QuartzCore), общий для UIKit и AppKit.
+NodesRender     дерево нод → дерево CALayer (QuartzCore), общий для UIKit и AppKit;
+                Text (CoreText), Button, Image с ImagePipeline/ImageCache (ImageIO,
+                сеть через URLSession; см. 11).
 NodesUIKit      встраивание нод в UIKit: view.addSubnode(node)
 NodesAppKit     встраивание нод в AppKit
 Theme           (ещё не создан) тема: шкала отступов, цвета, типографика; тема по
