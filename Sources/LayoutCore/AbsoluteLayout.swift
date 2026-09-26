@@ -49,9 +49,12 @@ extension Solver {
                     && style.alignSelf != .auto && style.alignSelf != .stretch
                 ? style.alignSelf : nil
 
-            // Size: specified, else stretched between two insets, else shrink-to-fit.
+            // Size: specified, else stretched between two insets, else shrink-to-fit. Content
+            // with a ratio of its own, as a picture, is not stretched: it keeps its natural
+            // size and the insets only place it (CSS Position 3 §4, replaced elements).
+            let stretches = !(nodes[child].content?.isProportional ?? false)
             var width = childOwn.width
-            if width == nil, let left = insets.left, let right = insets.right {
+            if width == nil, stretches, let left = insets.left, let right = insets.right {
                 width = clamp(
                     size.width - left - right - margins.left - margins.right,
                     childOwn.minWidth,
@@ -61,7 +64,7 @@ extension Solver {
             }
 
             var height = childOwn.height
-            if height == nil, verticalAlignment == nil, let top = insets.top,
+            if height == nil, stretches, verticalAlignment == nil, let top = insets.top,
                 let bottom = insets.bottom
             {
                 height = clamp(

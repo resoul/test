@@ -248,6 +248,9 @@ public struct FlexStyle: Sendable, Hashable {
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public var aspectRatio: Double?
+    /// The ratio is the content box's rather than the border box's: set for the ratio that
+    /// content brings of its own, as a picture's is.
+    var aspectRatioIsContentBox = false
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public var padding = Edges<Double>(all: 0)
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.

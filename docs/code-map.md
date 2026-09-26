@@ -51,7 +51,9 @@
 | `LeafContent.size(knownWidth:available:)` | ширина по ограничению, высота при ней | [10](10-layout-engine.md#статус-e2-текст) |
 | `LeafContent.minContentWidth` | автоминимум ширины листа с пропорцией | дефект #144 |
 | `LeafContent.proportional`, `naturalRatio`, `isProportional` | содержимое с собственным размером и пропорцией, как картинка (заменяемый элемент CSS) | дефект #157; [11](11-image.md) |
-| `FlexboxEngine.style(_:parentWidth:)` (собственная пропорция), `leafSize` (`automaticMinimum`) | пропорция содержимого как `aspect-ratio: auto`; сторона по пропорции без минимума по содержимому (CSS Sizing 4 §5.2.1 — только незаменяемые) | дефект #157; расхождение с отступами — #169 |
+| `FlexboxEngine.style(_:parentWidth:)` (собственная пропорция), `leafSize` (`automaticMinimum`) | пропорция содержимого как `aspect-ratio: auto`; сторона по пропорции без минимума по содержимому (CSS Sizing 4 §5.2.1 — только незаменяемые) | дефект #157 |
+| `BoxRatio`, `FlexboxEngine.boxRatio`, `FlexStyle.aspectRatioIsContentBox`; все переносы через пропорцию (`leafSize`, `ownSize`, `ratioLayout`, `ratioContent`, flex-база `FlexItem.ratio`) | собственная пропорция — по области содержимого, из стиля — по рамке | дефект #169; CSS Sizing 4 §5 (`aspect-ratio: auto`) |
+| `AbsoluteLayout` — `stretches` | пропорциональное содержимое не растягивается между отступами | дефект #171; CSS Position 3 §4 |
 | `ContentMeasurer.firstBaseline(forWidth:)`, `LeafContent.baseline(width:)` | первая базовая линия листа; без неё — низ содержимого | [10](10-layout-engine.md#статус-e2-текст) |
 
 ## `Sources/LayoutCore/DSL`, `Sources/LayoutUIKit`, `Sources/LayoutAppKit`

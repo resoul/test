@@ -105,3 +105,22 @@ public enum AvailableSpace: Sendable, Hashable {
         return self
     }
 }
+
+/// A width-to-height ratio that ties a box's two sides: through the border box, or — for
+/// content that brings its own ratio, as a picture does — through the content box, with the
+/// padding added to each side.
+struct BoxRatio: Sendable {
+    /// Width divided by height.
+    let value: Double
+    /// Padding outside the box the ratio holds for; zero when it holds for the border box.
+    let paddingWidth: Double
+    let paddingHeight: Double
+
+    func height(forWidth width: Double) -> Double {
+        max(0, width - paddingWidth) / value + paddingHeight
+    }
+
+    func width(forHeight height: Double) -> Double {
+        max(0, height - paddingHeight) * value + paddingWidth
+    }
+}
