@@ -30,7 +30,12 @@
         public var directory: URL
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         public var maximumBytes: Int
-        /// Time since insertion after which an entry expires.
+        /// Time since insertion after which an entry expires and is deleted, whatever the
+        /// server said. Within it, an entry the server gave a shorter freshness
+        /// (`Cache-Control: max-age`, `no-cache`, `Expires`) is checked with the server once
+        /// that passes — with its `ETag` or `Last-Modified`, so an unchanged image is not
+        /// downloaded again; an entry without them is downloaded again. An entry the server
+        /// said nothing about stays fresh for all of it.
         ///
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         public var maximumAge: TimeInterval
@@ -132,12 +137,23 @@
             try await load(url, urgency: nil)
         }
 
+        /// The entry's bytes when the server's freshness for them has not run out; `nil` for
+        /// a missing, expired, or stale entry. A stale entry stays for a check with the
+        /// server.
+        private func freshData(for url: URL) throws -> Data? {
+            let file = fileURL(for: url)
+            if let freshUntil = HTTPValidators.read(at: file)?.freshUntil, Date() >= freshUntil {
+                return nil
+            }
+            return try cachedData(for: url)
+        }
+
         /// `load(_:)` for a caller whose `urgency` sets the priority of the download while it
         /// runs: high while the caller's node is on screen, low otherwise. A shared download
         /// is as urgent as the most urgent of its callers.
         func load(_ url: URL, urgency: LoadUrgency?) async throws -> Data {
             if url.isFileURL { return try Data(contentsOf: url) }
-            if let cached = try cachedData(for: url) { return cached }
+            if let cached = try freshData(for: url) { return cached }
 
             nextID &+= 1
             let waiter = nextID
@@ -201,6 +217,10 @@
                 let created = attributes[.creationDate] as? Date,
                 Date().timeIntervalSince(created) <= max(configuration.maximumAge, 0)
             else { return nil }
+            // A stale entry is to be checked with the server before its bytes are used again.
+            if let freshUntil = HTTPValidators.read(at: file)?.freshUntil, Date() >= freshUntil {
+                return nil
+            }
 
             // Reading an entry marks it as recently used for eviction; so does finding it here.
             // Its modification date is that mark, so only the creation date, renewed when the
@@ -359,15 +379,42 @@
             // Later loads find the file on disk, or start over after a failure.
             defer { if downloads[url]?.id == id { downloads[url] = nil } }
 
-            let (data, response) = try await fetch(url, urgency: urgency)
+            let file = fileURL(for: url)
+            // A stale entry with validators is checked with the server rather than fetched.
+            let stored = HTTPValidators.read(at: file).flatMap { $0.canRevalidate ? $0 : nil }
+            let (data, response) = try await fetch(url, urgency: urgency, validators: stored)
             try Task.checkCancellation()
-            guard let response = response as? HTTPURLResponse,
-                (200...299).contains(response.statusCode)
-            else { throw ImageCacheError.invalidResponse }
+            guard let response = response as? HTTPURLResponse else {
+                throw ImageCacheError.invalidResponse
+            }
+
+            let now = Date()
+            if response.statusCode == 304, let stored {
+                // Unchanged: the entry is fresh again for as long as the new answer says.
+                guard let cached = try cachedData(for: url) else {
+                    // The entry went meanwhile (another cache sharing the directory, its age):
+                    // there is nothing to keep, so the image is fetched whole.
+                    return try await download(
+                        url,
+                        id: id,
+                        urgency: urgency,
+                        removalsAtStart: removalsAtStart
+                    )
+                }
+                HTTPValidators(response: response, now: now, keeping: stored).write(at: file)
+                return cached
+            }
+            guard (200...299).contains(response.statusCode) else {
+                throw ImageCacheError.invalidResponse
+            }
 
             // After a removal of all entries, such as at sign-out, nothing fetched before it
-            // is written back.
+            // is written back; nor is what the server asks not to store, whose older copy goes.
             guard removals == removalsAtStart else { return data }
+            if HTTPValidators.forbidsStoring(response) {
+                try? remove(for: url)
+                return data
+            }
 
             do {
                 try store(data, for: url)
@@ -377,15 +424,30 @@
                 // the policy removes, so the image is shown but not cached.
                 return data
             }
+            HTTPValidators(response: response, now: now, keeping: nil).write(at: file)
             return try cachedData(for: url) ?? data
         }
 
-        private func fetch(_ url: URL, urgency: SharedUrgency) async throws -> (Data, URLResponse) {
+        private func fetch(
+            _ url: URL,
+            urgency: SharedUrgency,
+            validators: HTTPValidators?
+        ) async throws -> (Data, URLResponse) {
             let limit = configuration.maximumDownloadBytes.map { max(0, $0) }
             let watch = DownloadWatch(bytes: limit, urgency: urgency)
+            // The disk entries are the cache: the session's own is neither asked nor needed.
+            var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
+            if let validators {
+                if let etag = validators.etag {
+                    request.setValue(etag, forHTTPHeaderField: "If-None-Match")
+                }
+                if let lastModified = validators.lastModified {
+                    request.setValue(lastModified, forHTTPHeaderField: "If-Modified-Since")
+                }
+            }
             let result: (Data, URLResponse)
             do {
-                result = try await session.data(from: url, delegate: watch)
+                result = try await session.data(for: request, delegate: watch)
             } catch {
                 if watch.exceeded { throw ImageCacheError.responseTooLarge }
                 throw error
@@ -600,6 +662,109 @@
                 task.cancel()
             }
             state.withLock { $0.observation = observation }
+        }
+    }
+
+    /// What the server said about a stored response: its validators, and until when it may be
+    /// used without asking again. Kept in an extended attribute of the entry's file, so the
+    /// directory holds nothing but entries; a rewritten file starts without one.
+    struct HTTPValidators: Codable, Sendable, Equatable {
+        var etag: String?
+        var lastModified: String?
+        /// `nil`: fresh for as long as the cache keeps the entry.
+        var freshUntil: Date?
+
+        /// The attribute's name; like the entries' names, it says what it holds.
+        private static let attribute = "image-cache.http"
+
+        var canRevalidate: Bool { etag != nil || lastModified != nil }
+
+        /// From a response received at `now`; a 304 answer keeps the validators it does not
+        /// repeat.
+        init(response: HTTPURLResponse, now: Date, keeping stored: HTTPValidators?) {
+            etag = response.value(forHTTPHeaderField: "ETag") ?? stored?.etag
+            lastModified =
+                response.value(forHTTPHeaderField: "Last-Modified") ?? stored?.lastModified
+            freshUntil = HTTPValidators.freshUntil(response, now: now)
+        }
+
+        /// `Cache-Control: no-store`: the response must not be written anywhere.
+        static func forbidsStoring(_ response: HTTPURLResponse) -> Bool {
+            directives(response).keys.contains("no-store")
+        }
+
+        /// RFC 9111 §4.2.1: `no-cache` is stale at once; `max-age` counts from the response
+        /// minus its `Age`; else `Expires`. Without any of them, `nil`.
+        private static func freshUntil(_ response: HTTPURLResponse, now: Date) -> Date? {
+            let directives = directives(response)
+            if directives.keys.contains("no-cache") { return now }
+            if let value = directives["max-age"], let seconds = value.flatMap(Double.init) {
+                let age = response.value(forHTTPHeaderField: "Age").flatMap(Double.init) ?? 0
+                return now.addingTimeInterval(max(0, seconds - max(0, age)))
+            }
+            if let expires = response.value(forHTTPHeaderField: "Expires") {
+                // An invalid date means already expired (RFC 9111 §5.3).
+                return httpDate(expires) ?? now
+            }
+            return nil
+        }
+
+        /// `Cache-Control` directives by lowercased name, with their values.
+        private static func directives(_ response: HTTPURLResponse) -> [String: String?] {
+            guard let header = response.value(forHTTPHeaderField: "Cache-Control") else {
+                return [:]
+            }
+
+            var directives: [String: String?] = [:]
+            for part in header.split(separator: ",") {
+                let pair = part.split(separator: "=", maxSplits: 1)
+                guard let name = pair.first?.trimmingCharacters(in: .whitespaces).lowercased(),
+                    !name.isEmpty
+                else { continue }
+
+                directives[name] =
+                    pair.count > 1
+                    ? pair[1].trimmingCharacters(in: .whitespaces)
+                        .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                    : String?.none
+            }
+            return directives
+        }
+
+        /// An HTTP date in its preferred form, `Sun, 06 Nov 1994 08:49:37 GMT`.
+        private static func httpDate(_ text: String) -> Date? {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(identifier: "GMT")
+            formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+            return formatter.date(from: text)
+        }
+
+        static func read(at file: URL) -> HTTPValidators? {
+            let size = getxattr(file.path, attribute, nil, 0, 0, 0)
+            guard size > 0 else { return nil }
+
+            var data = Data(count: size)
+            let read = data.withUnsafeMutableBytes {
+                getxattr(file.path, attribute, $0.baseAddress, size, 0, 0)
+            }
+            guard read == size else { return nil }
+
+            return try? JSONDecoder().decode(HTTPValidators.self, from: data)
+        }
+
+        /// Writes the attribute, or removes it when there is nothing to keep.
+        func write(at file: URL) {
+            guard etag != nil || lastModified != nil || freshUntil != nil,
+                let data = try? JSONEncoder().encode(self)
+            else {
+                removexattr(file.path, HTTPValidators.attribute, 0)
+                return
+            }
+
+            _ = data.withUnsafeBytes {
+                setxattr(file.path, HTTPValidators.attribute, $0.baseAddress, data.count, 0, 0)
+            }
         }
     }
 
