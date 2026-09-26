@@ -340,6 +340,78 @@
         }
     }
 
+    /// A button for each kind of transition: it takes the card out that way, or brings it
+    /// back.
+    @MainActor
+    final class Transitions: Node {
+        private static let kinds: [(name: String, transition: Transition)] = [
+            ("Fade", .opacity),
+            ("Scale", .scale),
+            ("Slide", .slide),
+            ("Move up", .move(edge: .bottom)),
+            ("Push", .push(from: .trailing)),
+            ("Turn", .rotation(degrees: 90)),
+            ("Flip", .flip()),
+            ("Pop", .pop),
+            ("Shrink and fade", .scale(0.5, anchor: .topLeading).combined(with: .opacity)),
+        ]
+
+        let card = Card()
+        let showsCard = State(true)
+        private(set) var buttons: [Button] = []
+
+        override init() {
+            super.init()
+            buttons = Transitions.kinds.map { kind in
+                Button(kind.name) { [weak self] in
+                    guard let self else { return }
+
+                    card.transition = kind.transition
+                    withAnimation(.easeInOut(duration: 0.5)) {
+                        showsCard.value.toggle()
+                    }
+                }
+            }
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                FlexContainer(.row) {
+                    for button in buttons { button }
+                }
+                .gap(8)
+                .wrap()
+                FlexContainer(.row) {
+                    if showsCard.value { card }
+                }
+                .height(.points(96))
+            }
+            .gap(16)
+        }
+
+        /// The card the transitions take out and bring back.
+        @MainActor
+        final class Card: Node {
+            let label = Text(
+                "Tap a transition",
+                style: TextStyle(size: 17, weight: .semibold, color: .white)
+            )
+
+            override init() {
+                super.init()
+                appearance.background = Color(red: 0.55, green: 0.36, blue: 0.85)
+                appearance.cornerRadius = 16
+            }
+
+            override func layoutSpec() -> LayoutSpec? {
+                FlexContainer(.column) { label }
+                    .justifyContent(.center)
+                    .alignItems(.center)
+                    .size(width: 220, height: 96)
+            }
+        }
+    }
+
     /// A section title on the screen's gray, so what scrolls under it does not show through.
     @MainActor
     final class SectionTitle: Node {
@@ -425,6 +497,8 @@
         let gallery = Gallery()
         let cards: [ProfileCard]
         let actions: Actions
+        let transitionsTitle = SectionTitle("Transitions")
+        let transitions = Transitions()
         let gridTitle = SectionTitle("600 squares, four in a line")
         private let swatches = NodeCache<Int, Swatch> { _ in Swatch() }
         private(set) lazy var grid = LazyStack(
@@ -465,6 +539,8 @@
                 // with nothing to focus to the focus section under it.
                 images.margin(top: 0, leading: -24, bottom: -8, trailing: -24)
                 gallery
+                transitionsTitle.margin(top: 0, leading: -24, bottom: -8, trailing: -24)
+                transitions
                 actions
                 gridTitle
                     .margin(top: 0, leading: -24, bottom: -8, trailing: -24)
