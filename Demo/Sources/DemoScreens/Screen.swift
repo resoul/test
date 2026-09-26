@@ -370,8 +370,41 @@
         }
     }
 
+    /// A numbered square of the grid, as wide as its share of the line.
+    @MainActor
+    final class Swatch: Node {
+        struct Item: Identifiable {
+            let id: Int
+        }
+
+        let label = Text("", style: TextStyle(size: 15, weight: .semibold, color: .white))
+
+        override init() {
+            super.init()
+            appearance.cornerRadius = 10
+        }
+
+        func showing(_ item: Item) -> Swatch {
+            label.text = "\(item.id)"
+            appearance.background = Color(
+                red: 0.25 + 0.05 * Double(item.id % 10),
+                green: 0.45 + 0.04 * Double(item.id % 7),
+                blue: 0.85 - 0.06 * Double(item.id % 5)
+            )
+            return self
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { label }
+                .aspectRatio(1)
+                .justifyContent(.center)
+                .alignItems(.center)
+        }
+    }
+
     /// What scrolls: the row of tiles, a title that sticks to the top, the cards, the
-    /// actions, the images and ten thousand lines laid out as they come near.
+    /// actions, the images, a grid and ten thousand lines — those two laid out as they come
+    /// near.
     @MainActor
     final class Feed: Node {
         let tiles = Scroll(.horizontal, content: Tiles())
@@ -380,6 +413,16 @@
         let gallery = Gallery()
         let cards: [ProfileCard]
         let actions: Actions
+        let gridTitle = SectionTitle("600 squares, four in a line")
+        private let swatches = NodeCache<Int, Swatch> { _ in Swatch() }
+        private(set) lazy var grid = LazyStack(
+            items: (1...600).map(Swatch.Item.init),
+            lanes: 4,
+            estimatedLength: 80,
+            spacing: 8
+        ) { [swatches] item in
+            swatches[item.id].showing(item)
+        }
         let linesTitle = SectionTitle("10,000 lines")
         private let lineNodes = NodeCache<Int, Line> { _ in Line() }
         private(set) lazy var lines = LazyStack(
@@ -407,6 +450,10 @@
                 // section keeps the remote from reaching it while it is off the screen.
                 images.margin(top: 0, leading: -24, bottom: -8, trailing: -24)
                 gallery
+                gridTitle
+                    .margin(top: 0, leading: -24, bottom: -8, trailing: -24)
+                    .sticky(top: 0)
+                grid
                 linesTitle
                     .margin(top: 0, leading: -24, bottom: -8, trailing: -24)
                     .sticky(top: 0)
@@ -428,8 +475,8 @@
         let hint = Text(
             "Resize the window: under 460 points a card turns into a column. "
                 + "Tap a Follow badge, or rename Ada: the changes animate. "
-                + "The list scrolls, and so does the row of tiles; images and ten thousand "
-                + "lines are at its end.",
+                + "The list scrolls, and so does the row of tiles; images, a grid and ten "
+                + "thousand lines are at its end.",
             style: TextStyle(size: 14, color: muted)
         )
         let cards: [ProfileCard]
