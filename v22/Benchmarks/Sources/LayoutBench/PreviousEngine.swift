@@ -1,4 +1,4 @@
-import TrellisCore
+import PreviousLayoutEngine
 
 // The previous engine, for comparison. Its input is the snapshot of a `Node` tree, taken
 // before timing starts; `run` is only the solve, as for the engine under test.
