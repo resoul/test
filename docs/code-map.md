@@ -265,6 +265,12 @@
 | `NodeNSView.WheelPhase`, `pulled`, `stretch`, `springBack`, `glideIsSpent` | отскок трекпада: сопротивление `(1 − 1/(x·0.55/d + 1))·d`, возврат пружиной, инерция отскакивает раз | как `NSScrollView` |
 | `NodeNSView.accessibilityByNode`, `NodeAccessibilityElement.update` (AppKit) | элемент живёт, пока нода | как в UIKit |
 | `Scroll.contentOffset` — запись того же значения ничего не делает | не сбрасывает `overscroll` при вытягивании | — |
+| `LazyStack`, `laidOutItems`, `layoutSpec` — отступы до и после окна | раскладываются только элементы у окна; остальное — место по измеренным или оценочным длинам | [03](03-layout-api.md) (десятый срез) |
+| `LazyStack.visibleSpan`, `reach`, `viewportMoved`, `covered` | окно — пересечение обрезающих предков и хоста; запас — экран, новый проход при выходе за пол-экрана | [03](03-layout-api.md) (десятый срез) |
+| `LazyStack.rememberAnchor`, `layoutApplied`; `Scroll.shiftOffset` | якорь: видимое не прыгает при изменении длин до окна; у начала — не держит | как якорь прокрутки в браузерах |
+| `untracked` в `LazyStack.layoutSpec` | смещение прокрутки не зависимость раскладки стека | иначе проход на каждом кадре; тест `scrollingWithinWhatIsLaidOutDoesNotLayOutAgain` |
+| `ViewportDependent`, `NodeHost.viewportDependents`, `viewportMoved`, `settlingPasses`, `preparing`; `layOut()` | хост сообщает о проходах и движении; до 4 проходов подряд в `layoutIfNeeded` | [03](03-layout-api.md) (десятый срез) |
+| `ScrollDriver.synced`, `catchUp` (UIKit) | сдвиг прокрутки кодом под пальцем и в инерции переносится на `UIScrollView` | [05](05-platform-adapters.md#прокрутка); тест `aMoveByCodeIsNotLostToTheFingersNextMove` |
 | `ScrollDriver` (UIKit), `NodeView.hitTest`, `gestureRecognizerShouldBegin` | пустой `UIScrollView` — только физика; его пан на `NodeView` | [05](05-platform-adapters.md#прокрутка) |
 | `NodeNSView.scrollWheel`, `scroll(by:at:)`, `latched` | колесо/трекпад: внутренняя прокрутка, остаток — внешней; жест держится за начальные | [05](05-platform-adapters.md#прокрутка) |
 | `NodeView` на iPad: `usesFocus`, `selects` | система фокуса iPadOS с клавиатурой; групп фокуса нет — свойство недоступно на tvOS | дефект #135 |

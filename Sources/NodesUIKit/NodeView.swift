@@ -676,6 +676,8 @@
         /// Set while the driver moves the scroll view itself, so it does not hear itself.
         private var isFollowing = false
         private var factor = 1.0
+        /// The scroll's offset when the scroll view and it last agreed.
+        private var synced: LayoutPoint?
 
         var pan: UIPanGestureRecognizer { physics.panGestureRecognizer }
 
@@ -723,15 +725,29 @@
         }
 
         /// Moves the scroll view to the scroll's offset, when code moved the scroll rather
-        /// than a finger.
+        /// than a finger. Under a finger, or gliding after one, the scroll view moves by as
+        /// much as code moved the scroll since they last agreed — to keep what shows in place
+        /// when content before it changed length — and the pan or the glide goes on from there.
         func follow(factor: Double) {
-            guard let scroll, !physics.isTracking, !physics.isDecelerating else { return }
+            guard let scroll else { return }
 
             isFollowing = true
             defer { isFollowing = false }
 
             let offset = scroll.shownOffset
-            physics.contentOffset = CGPoint(x: offset.x * factor, y: offset.y * factor)
+            if physics.isTracking || physics.isDecelerating {
+                catchUp(to: offset, factor: factor)
+            } else {
+                physics.contentOffset = CGPoint(x: offset.x * factor, y: offset.y * factor)
+            }
+            synced = offset
+        }
+
+        private func catchUp(to offset: LayoutPoint, factor: Double) {
+            guard let synced, offset != synced else { return }
+
+            physics.contentOffset.x += CGFloat((offset.x - synced.x) * factor)
+            physics.contentOffset.y += CGFloat((offset.y - synced.y) * factor)
         }
 
         func owns(_ view: UIView) -> Bool {
@@ -752,12 +768,17 @@
         }
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
-            guard !isFollowing else { return }
+            guard !isFollowing, let scroll else { return }
 
+            // A move code made since the last drawing is not lost to the finger's.
+            isFollowing = true
+            catchUp(to: scroll.shownOffset, factor: factor)
+            isFollowing = false
             let offset = scrollView.contentOffset
-            scroll?.platformDidScroll(
+            scroll.platformDidScroll(
                 to: LayoutPoint(x: Double(offset.x) / factor, y: Double(offset.y) / factor)
             )
+            synced = scroll.shownOffset
         }
     }
 
