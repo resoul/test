@@ -34,9 +34,11 @@
         return output as Data
     }
 
-    /// Encodes pixels whose left half is red and right half blue, tagged with an EXIF
-    /// orientation, as a camera writes a JPEG it did not rotate.
-    private func halvesJPEG(width: Int, height: Int, orientation: Int) throws -> Data {
+    /// Encodes pixels in four quarters — red at the top left, blue at the top right, green at
+    /// the bottom left, white at the bottom right — tagged with an EXIF orientation, as a
+    /// camera writes a JPEG it did not rotate. Where the red and blue corners show tells every
+    /// orientation apart, mirrored and transposed ones too.
+    private func quartersJPEG(width: Int, height: Int, orientation: Int) throws -> Data {
         let context = try #require(
             CGContext(
                 data: nil,
@@ -48,10 +50,36 @@
                 bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
             )
         )
-        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
-        context.fill(CGRect(x: 0, y: 0, width: width / 2, height: height))
-        context.setFillColor(CGColor(red: 0, green: 0, blue: 1, alpha: 1))
-        context.fill(CGRect(x: width / 2, y: 0, width: width - width / 2, height: height))
+        let halfWidth = width / 2
+        let halfHeight = height / 2
+        // Core Graphics counts y upward: the top quarters are the upper half.
+        let quarters: [(CGRect, CGColor)] = [
+            (
+                CGRect(x: 0, y: halfHeight, width: halfWidth, height: height - halfHeight),
+                CGColor(red: 1, green: 0, blue: 0, alpha: 1)
+            ),
+            (
+                CGRect(
+                    x: halfWidth,
+                    y: halfHeight,
+                    width: width - halfWidth,
+                    height: height - halfHeight
+                ),
+                CGColor(red: 0, green: 0, blue: 1, alpha: 1)
+            ),
+            (
+                CGRect(x: 0, y: 0, width: halfWidth, height: halfHeight),
+                CGColor(red: 0, green: 1, blue: 0, alpha: 1)
+            ),
+            (
+                CGRect(x: halfWidth, y: 0, width: width - halfWidth, height: halfHeight),
+                CGColor(red: 1, green: 1, blue: 1, alpha: 1)
+            ),
+        ]
+        for (rect, color) in quarters {
+            context.setFillColor(color)
+            context.fill(rect)
+        }
         let bitmap = try #require(context.makeImage())
         let output = NSMutableData()
         let destination = try #require(
@@ -994,29 +1022,37 @@
         #expect(image.frame.size == LayoutSize(width: 100, height: 50))
     }
 
-    /// Where the red (left) half of the stored pixels shows after each EXIF orientation.
-    enum RedSide: Sendable {
-        case left, right, top, bottom
+    /// A corner of the shown image.
+    enum Corner: Sendable {
+        case topLeft, topRight, bottomLeft, bottomRight
     }
 
+    /// Every EXIF orientation: where the stored top left (red) and top right (blue) corners
+    /// show. The stored picture is 40 × 20; orientations 5–8 swap its sides.
     @Test(
         arguments: [
-            (1, LayoutSize(width: 40, height: 20), RedSide.left),
-            (2, LayoutSize(width: 40, height: 20), RedSide.right),
-            (3, LayoutSize(width: 40, height: 20), RedSide.right),
-            (6, LayoutSize(width: 20, height: 40), RedSide.top),
-            (8, LayoutSize(width: 20, height: 40), RedSide.bottom),
+            (1, Corner.topLeft, Corner.topRight),
+            (2, .topRight, .topLeft),
+            (3, .bottomRight, .bottomLeft),
+            (4, .bottomLeft, .bottomRight),
+            (5, .topLeft, .bottomLeft),
+            (6, .topRight, .bottomRight),
+            (7, .bottomRight, .topRight),
+            (8, .bottomLeft, .topLeft),
         ]
     )
     @MainActor
     func exifOrientationIsAppliedToSizeLayoutAndPixels(
         orientation: Int,
-        size: LayoutSize,
-        red: RedSide
+        red: Corner,
+        blue: Corner
     ) async throws {
-        let data = try halvesJPEG(width: 40, height: 20, orientation: orientation)
+        let data = try quartersJPEG(width: 40, height: 20, orientation: orientation)
         let image = Image(source: .data(data))
         try await loaded(image)
+        let size =
+            orientation >= 5
+            ? LayoutSize(width: 20, height: 40) : LayoutSize(width: 40, height: 20)
         #expect(image.pixelSize == size)
 
         let host = NodeHost(root: Column(image), size: LayoutSize(width: 200, height: 200))
@@ -1028,17 +1064,17 @@
         let shown = try #require(image.layerImage?.image)
         #expect(shown.width == Int(size.width))
         #expect(shown.height == Int(size.height))
-        let width = shown.width
-        let height = shown.height
-        let (near, far) =
-            switch red {
-            case .left, .right: ((2, height / 2), (width - 3, height / 2))
-            case .top, .bottom: ((width / 2, 2), (width / 2, height - 3))
-            }
-        let redNear = red == .left || red == .top
-        let first = pixel(of: shown, x: near.0, y: near.1)
-        let second = pixel(of: shown, x: far.0, y: far.1)
-        let (redPixel, bluePixel) = redNear ? (first, second) : (second, first)
+        func color(at corner: Corner) -> (red: UInt8, blue: UInt8) {
+            let right = corner == .topRight || corner == .bottomRight
+            let bottom = corner == .bottomLeft || corner == .bottomRight
+            return pixel(
+                of: shown,
+                x: right ? shown.width - 3 : 2,
+                y: bottom ? shown.height - 3 : 2
+            )
+        }
+        let redPixel = color(at: red)
+        let bluePixel = color(at: blue)
         #expect(redPixel.red > 200 && redPixel.blue < 60, "orientation \(orientation)")
         #expect(bluePixel.blue > 200 && bluePixel.red < 60, "orientation \(orientation)")
     }
