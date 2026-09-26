@@ -1,4 +1,6 @@
 #if canImport(CoreText)
+    import Foundation
+    import ImageIO
     import LayoutCore
     import Nodes
     import NodesRender
@@ -202,6 +204,130 @@
         }
     }
 
+    /// A generated landscape — sky, a sun at the top right, ground — encoded as an app would
+    /// receive it. Nothing in it is symmetric, so a wrong rotation or mirror shows at once.
+    enum Landscape {
+        /// Upright pixels, `width` × `height`, as PNG.
+        static func png(width: Int, height: Int) -> Data {
+            encode(width: width, height: height, type: "public.png", orientation: 1) { _ in }
+        }
+
+        /// The same picture as a JPEG whose pixels are stored turned a quarter to the left,
+        /// with EXIF orientation 6 saying to turn them back: it must show upright.
+        static func rotatedJPEG(width: Int, height: Int) -> Data {
+            encode(width: height, height: width, type: "public.jpeg", orientation: 6) { context in
+                context.translateBy(x: CGFloat(height), y: 0)
+                context.rotate(by: .pi / 2)
+            }
+        }
+
+        private static func encode(
+            width: Int,
+            height: Int,
+            type: String,
+            orientation: Int,
+            turn: (CGContext) -> Void
+        ) -> Data {
+            guard
+                let context = CGContext(
+                    data: nil,
+                    width: width,
+                    height: height,
+                    bitsPerComponent: 8,
+                    bytesPerRow: 0,
+                    space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+                )
+            else { return Data() }
+
+            turn(context)
+            let w = CGFloat(orientation == 6 ? height : width)
+            let h = CGFloat(orientation == 6 ? width : height)
+            // Core Graphics counts y upward: the sky is the upper part.
+            context.setFillColor(CGColor(red: 0.45, green: 0.7, blue: 0.95, alpha: 1))
+            context.fill(CGRect(x: 0, y: h * 0.35, width: w, height: h * 0.65))
+            context.setFillColor(CGColor(red: 0.35, green: 0.62, blue: 0.3, alpha: 1))
+            context.fill(CGRect(x: 0, y: 0, width: w, height: h * 0.35))
+            context.setFillColor(CGColor(red: 1, green: 0.82, blue: 0.25, alpha: 1))
+            context.fillEllipse(
+                in: CGRect(x: w * 0.72, y: h * 0.6, width: h * 0.28, height: h * 0.28)
+            )
+            context.setFillColor(CGColor(red: 0.55, green: 0.38, blue: 0.25, alpha: 1))
+            context.fill(CGRect(x: w * 0.12, y: h * 0.35, width: w * 0.05, height: h * 0.25))
+
+            guard let image = context.makeImage() else { return Data() }
+
+            let output = NSMutableData()
+            guard
+                let destination = CGImageDestinationCreateWithData(
+                    output,
+                    type as CFString,
+                    1,
+                    nil
+                )
+            else { return Data() }
+
+            let properties: [String: Any] = [kCGImagePropertyOrientation as String: orientation]
+            CGImageDestinationAddImage(destination, image, properties as CFDictionary)
+            CGImageDestinationFinalize(destination)
+            return output as Data
+        }
+    }
+
+    /// An image in a fixed box with a caption saying how it is placed.
+    @MainActor
+    final class Framed: Node {
+        let image: Image
+        let caption: Text
+
+        init(_ image: Image, caption: String) {
+            self.image = image
+            self.caption = Text(caption, style: TextStyle(size: 12, color: muted))
+            super.init()
+            image.appearance.background = Color(red: 0.88, green: 0.89, blue: 0.91)
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                image.size(width: 96, height: 72)
+                caption
+            }
+            .gap(6)
+        }
+    }
+
+    /// One picture, twice as wide as tall, placed each way an image can be; the same picture
+    /// stored turned with an EXIF orientation; and a placeholder with nothing to load.
+    @MainActor
+    final class Gallery: Node {
+        let items: [Framed]
+
+        override init() {
+            let picture = Landscape.png(width: 400, height: 200)
+            let rotated = Image(source: .data(Landscape.rotatedJPEG(width: 400, height: 200)))
+            rotated.accessibility.label = "Landscape stored rotated, shown upright"
+            let waiting = Image(
+                placeholder: ImagePlaceholder(color: Color(red: 0.8, green: 0.84, blue: 0.9))
+            )
+            items = [
+                Framed(Image(source: .data(picture), contentMode: .fit), caption: "fit"),
+                Framed(Image(source: .data(picture), contentMode: .fill), caption: "fill"),
+                Framed(Image(source: .data(picture), contentMode: .stretch), caption: "stretch"),
+                Framed(rotated, caption: "EXIF 6, upright"),
+                Framed(waiting, caption: "placeholder"),
+            ]
+            super.init()
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.row) {
+                for item in items { item }
+            }
+            .gap(12)
+            .wrap()
+        }
+    }
+
     /// A section title on the screen's gray, so what scrolls under it does not show through.
     @MainActor
     final class SectionTitle: Node {
@@ -225,6 +351,8 @@
     final class Feed: Node {
         let tiles = Scroll(.horizontal, content: Tiles())
         let people = SectionTitle("People")
+        let images = SectionTitle("Images")
+        let gallery = Gallery()
         let cards: [ProfileCard]
         let actions: Actions
 
@@ -241,6 +369,10 @@
                     .sticky(top: 0)
                 for card in cards { card }
                 actions
+                // After the button: on Apple TV a block with nothing to focus above a focus
+                // section keeps the remote from reaching it while it is off the screen.
+                images.margin(top: 0, leading: -24, bottom: -8, trailing: -24)
+                gallery
             }
             .gap(16)
             .padding(top: 0, leading: 24, bottom: 24, trailing: 24)
@@ -258,7 +390,7 @@
         let hint = Text(
             "Resize the window: under 460 points a card turns into a column. "
                 + "Tap a Follow badge, or rename Ada: the changes animate. "
-                + "The list scrolls, and so does the row of tiles.",
+                + "The list scrolls, and so does the row of tiles; images are at its end.",
             style: TextStyle(size: 14, color: muted)
         )
         let cards: [ProfileCard]

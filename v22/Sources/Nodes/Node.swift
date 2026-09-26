@@ -313,6 +313,14 @@ open class Node: LayoutElement {
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
     open func pressChanged(_ isPressed: Bool) {}
 
+    /// The node joined a host's tree or left it — to start or stop work that only matters
+    /// while it can be shown. Called on each change, not on every layout pass. A node that
+    /// left can come back while its owner keeps it. The default does nothing.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: an override
+    /// cancels work it no longer needs when the node leaves.
+    open func mountedChanged(_ isMounted: Bool) {}
+
     /// The deepest visible node under `point`, given in this node's coordinates, or `nil`.
     /// Later subnodes are on top. Subnodes outside the node's box are found too, unless the
     /// node clips its content.
@@ -487,13 +495,16 @@ open class Node: LayoutElement {
     }
 
     func mount(in supernode: Node?, subnodes: [Node]) {
+        let wasMounted = isMounted
         isMounted = true
         self.supernode = supernode
         self.subnodes = subnodes
         prepare()
+        if !wasMounted { mountedChanged(true) }
     }
 
     func unmount() {
+        let wasMounted = isMounted
         isMounted = false
         supernode = nil
         subnodes = []
@@ -501,5 +512,6 @@ open class Node: LayoutElement {
         updateObserver = nil
         layoutObserver?.cancel()
         layoutObserver = nil
+        if wasMounted { mountedChanged(false) }
     }
 }

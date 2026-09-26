@@ -18,7 +18,7 @@ AGENTS.md Trellis).
 |---|---|---|
 | `Node` | `Node` | базовый класс |
 | `TextNode` | `Text` | совпадает со SwiftUI — допустимо |
-| `ImageNode` (планируемый) | `Image` | совпадает со SwiftUI — допустимо |
+| `ImageNode` | `Image` | реализовано в `NodesRender`; совпадает со SwiftUI — допустимо |
 | `ControlNode` | `Control` | |
 | кнопка | `Button` | совпадает со SwiftUI — допустимо |
 | `ScrollNode` | `Scroll` | `ScrollView` занят в SwiftUI; `Scroll` свободно. Реализовано (2026-09-25); `ScrollAxis`, `ScrollRange`, `ScrollItem`, `contentOffset`, `overscroll`, `platformDidScroll(to:)`, `scrollToReveal` — предложено |

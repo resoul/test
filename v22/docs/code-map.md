@@ -160,13 +160,13 @@
 | `StateUpdates.flush`, `scheduler`, `roundLimit` | слияние записей до flush; flush «перед кадром» подставит слой нод | как D14 Trellis: burst → одна доставка |
 | `StateTransaction` | «как выполнить запись» — чтобы адаптер писал с анимацией, не зная про `Nodes` | [08](08-open-questions.md#состояние-и-реактивность); реализует `Animation` в `Nodes` |
 
-## `Sources/StateFlux`
+## `Sources/StateAsyncRay`
 
 | Код | Что | Основание |
 |---|---|---|
-| `Flux.bind(to:)` | значения потока → `State` на MainActor, состояние держится слабо | [08](08-open-questions.md#состояние-и-реактивность): Flux — адаптер на границе |
-| `Flux.bind(to:animation:)` | то же, каждое значение — в своей `StateTransaction` (анимации) | аналог `bindFlux(animation:)` Trellis |
-| `State.flux` | текущее значение, затем значения после flush; `bufferingNewest(1)` | состояние — последнее значение, не события |
+| `AsyncRay.bind(to:)` | значения потока → `State` на MainActor, состояние держится слабо | [08](08-open-questions.md#состояние-и-реактивность): AsyncRay — адаптер на границе |
+| `AsyncRay.bind(to:animation:)` | то же, каждое значение — в своей `StateTransaction` (анимации) | аналог `bindFlux(animation:)` Trellis |
+| `State.asyncRay` | текущее значение, затем значения после flush; `bufferingNewest(1)` | состояние — последнее значение, не события |
 | `Watch` | остановка, пришедшая раньше старта, побеждает | порядок двух задач MainActor не обещан |
 
 ## Встраивание раскладки (`LayoutCore/DSL`)
@@ -199,6 +199,21 @@
 | `LayerRenderer.sync`/`enter`/`attach`, `Level` | сверка слоёв явным стеком, в порядке рекурсии | дефект #141 |
 | `LayerDrawing`, `LayerRenderer.draw` | содержимое ноды — bitmap в `contents`, всегда прямо | дефект #129 |
 | `Text`, `TextMeasurer`, `TextLayout` | одна `TextLayout` для замера и рисования | правило Trellis: измерение и рисование — одна строка (дефект #37 Trellis) |
+| `Image`, `ImagePipeline`, `ImagePlaceholder`, `ImageLoadPhase` | статичная картинка как нода; placeholder и состояние загрузки; превью, декодирование под рамку × масштаб, общий ограниченный кэш bitmap и защита от запоздавшего результата | [11](11-image.md) |
+| `DecodeGate`, `ImagePipeline.load` (очередь декодирования) | декодирования pipeline идут по одному вне актора; отменённый в очереди запрос уходит без работы; дефект #155 | [11](11-image.md), [defects](defects.md) |
+| `Image.layoutContent`, `Image.scale`, `NaturalSizeMeasurer` | размер в точках (`пиксели / scale`), высота по ширине — как `<img>` в Chromium 152; ширина по высоте открыта; дефект #157 | [11](11-image.md), [defects](defects.md) |
+| `ImagePipeline.load` (`digests`, `reuse`), `ImageCache.stamp`, `ImageFileStamp` | попадание в кэш памяти без чтения файла: отпечаток по штампу (размер, даты, свежие атрибуты — не `resourceValues`); дефект #160 | [11](11-image.md), [defects](defects.md) |
+| `LayerDrawing.layerImage`, `LayerImage`, `LayerRenderer.show`, `fillCrop`, `Image.solidImage` | картинка в `contents` без копии под рамку; вписывание — gravity и `contentsRect`; placeholder — один пиксель | [11](11-image.md) |
+| `LayerDrawing.prepareDrawing`, `LayerRenderer.draw` | рендерер сообщает размер и масштаб до рисования, чтобы нода могла обновить детализацию | [11](11-image.md) |
+| `ImageCache`, `ImageCacheConfiguration` | дисковый кэш URL, предел/возраст, отдельные настройки метаданных и PNG-оптимизации | [11](11-image.md) |
+| `ImageCache.load`, `ImageCache.download`, `leave` | одна загрузка на URL для одновременных запросов; последний ушедший отменяет её до записи; дефект #158 | [11](11-image.md), [defects](defects.md) |
+| `ImageCache.session`, `maximumDownloadBytes`, `DownloadLimit` | сеть через переданную сессию; предел тела ответа по счётчикам байтов задачи (асинхронный `URLSession` не отдаёт делегату задачи колбэки данных); дефект #159 | [11](11-image.md), [defects](defects.md) |
+| `ImageCache.removeAll`, `remove(for:)`, `removeExpired`, `entries`, `storedBytes` | только свои записи (имя — 64 hex); очистка; счётчик размера с пересчётом при лимите и раз в 64 записи; загрузка после `removeAll` не пишется; дефект #161 | [11](11-image.md), [defects](defects.md) |
+| `ImageCache.policyTag`, `fileURL`, `Naming` | имя записи — метка политик и отпечаток URL; лимит и срок — по записям своих политик в общей папке; прежние имена удаляются; дефект #162 | [11](11-image.md), [defects](defects.md) |
+| `Image.mountedChanged`, `isSuspended`, `startFirstLoad` | уход из дерева отменяет загрузки и отпускает bitmap, возвращение возобновляет; дефект #163 | [11](11-image.md), [defects](defects.md) |
+| `ImageCache.download(removalsAtStart:)` | счётчик `removeAll()` берётся при создании загрузки, не при старте её задачи; дефект #164 | [defects](defects.md) |
+| `ImageCache.prepare` (метаданные), `exifAndTIFF` | метаданные источника передаются в copy-source (иначе Image I/O пишет пустые и теряет ориентацию); для XMP-политики — только EXIF/TIFF; дефект #166 | [11](11-image.md), [defects](defects.md) |
+| `ImageCache.load` (`processingFailed`) | формат, к которому политика метаданных неприменима, показывается без записи на диск; дефект #156 | [11](11-image.md), [defects](defects.md) |
 | `TextLayout(rightToLeft:)`, `Text.drawingRevision` с направлением хоста | `leading` у правого края в RTL; смена направления перерисовывает | [03](03-layout-api.md) |
 | `Node.hitTest` (явный стек), `Node.walkVisible`, `frame(from:)`; `NodeHost.collect`/`collectFocus`/`collectSections`/`spokenText` через `walkVisible` | обходы без рекурсии | дефект #142 |
 | `Node.hitTest`, `Node.onTap`, `pressChanged` | нажатия: ближайшая нода с действием, засчитывается над той же нодой | как `UIButton` (touch up inside) |
@@ -218,6 +233,7 @@
 | `LayerRenderer.draw` — анимация `contents` | новое содержимое проявляется поверх прежнего при анимированном проходе | [03](03-layout-api.md) |
 | `Pass.shownOrigins`, `formerSuperlayers`, `shownOrigin(of:)` | нода, перешедшая к другому родителю, начинает анимацию там, где была показана | [03](03-layout-api.md) |
 | `LayerRenderer.settle`, `leaving` | ушедшая нода гаснет на месте; слой отпускается на первой отрисовке после конца анимации; вернувшаяся — тот же слой | без колбэков завершения CA |
+| `Node.mountedChanged`, `mount`, `unmount` | событие входа в дерево и выхода — только на переходах: `mount` зовётся на каждом проходе | дефект #163 |
 | `Node.isFocusable`, `isFocused`, `focusChanged` | фокусируема нода с `onTap` (или по флагу), целиком — без вложенных | как `UIButton` на tvOS |
 | `NodeHost.focusItems`, `focus`, `focusedNode`, `focusAnimation` | куда идёт фокус, решает система платформы; хост только узнаёт и сообщает ноде в анимации | правило Trellis: платформенный фокус на tvOS — единственный владелец |
 | `NodeHost.selectBegan/Ended` | кнопка Select пульта нажимает сфокусированную ноду | как `pointerDown/Up` |

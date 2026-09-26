@@ -19,14 +19,16 @@ LayoutAppKit    та же раскладка для NSView (в layout())
 Nodes           дерево нод: Node, NodeHost; раскладка всего дерева одним проходом,
                 подписка по чтению в layoutSpec()/update(); расчёт в фоне
                 (NodeHost.solvesInBackground). Использует LayoutCore, StateCore.
-NodesRender     дерево нод → дерево CALayer (QuartzCore), общий для UIKit и AppKit.
+NodesRender     дерево нод → дерево CALayer (QuartzCore), общий для UIKit и AppKit;
+                Text (CoreText), Button, Image с ImagePipeline/ImageCache (ImageIO,
+                сеть через URLSession; см. 11).
 NodesUIKit      встраивание нод в UIKit: view.addSubnode(node)
 NodesAppKit     встраивание нод в AppKit
 Theme           (ещё не создан) тема: шкала отступов, цвета, типографика; тема по
                 умолчанию (см. 09). Шкала отступов пока живёт в LayoutCore.
 StateCore       синхронное состояние на MainActor с отслеживанием чтений: State, Computed,
                 Observer, Effect, StateTransaction (см. 08). Только стандартная библиотека.
-StateFlux       адаптер Flux ↔ StateCore (Flux ≥ 1.2.1)
+StateAsyncRay   адаптер AsyncRay ↔ StateCore (AsyncRay 1.0.0)
 ```
 
 Зависимости направлены только вниз:
@@ -34,7 +36,7 @@ StateFlux       адаптер Flux ↔ StateCore (Flux ≥ 1.2.1)
 ```
 NodesUIKit ──► NodesRender ──► Nodes ──► LayoutCore ◄── LayoutUIKit
 NodesAppKit ─┘                                      ◄── LayoutAppKit
-StateFlux ──► StateCore ◄── Nodes   (Nodes отслеживает чтения в layoutSpec()/update())
+StateAsyncRay ──► StateCore ◄── Nodes   (Nodes отслеживает чтения в layoutSpec()/update())
 Nodes ──► Theme ──► LayoutCore      (план: модуля Theme ещё нет, см. 09)
 ```
 
@@ -51,7 +53,7 @@ Nodes ──► Theme ──► LayoutCore      (план: модуля Theme е
    - Ноды измеряются через `Sendable`-измеритель (CoreText), поэтому их раскладка
      по-прежнему считается в фоне по снимку, с отменой (D09 Trellis).
    Движок — одна и та же чистая функция в обоих случаях.
-4. **Flux не протекает в `LayoutCore` и `Nodes`.** Как и в Trellis, внешняя зависимость
+4. **AsyncRay не протекает в `LayoutCore` и `Nodes`.** Как и в Trellis, внешняя зависимость
    живёт только в своём адаптерном модуле.
 5. **Платформенные импорты** — только в `*UIKit`/`*AppKit`, под `#if canImport(...)` в
    файлах адаптеров. `#if os(...)` запрещён (как в Trellis).
@@ -63,5 +65,5 @@ Nodes ──► Theme ──► LayoutCore      (план: модуля Theme е
 | Flex-раскладка обычных UIView без нод | `LayoutCore` + `LayoutUIKit` |
 | То же на macOS | `LayoutCore` + `LayoutAppKit` |
 | Экран на нодах в UIKit-приложении | `Nodes` + `NodesUIKit` |
-| Ноды + реактивные данные из Flux | `Nodes` + `NodesUIKit` + `StateCore` + `StateFlux` |
+| Ноды + реактивные данные из AsyncRay | `Nodes` + `NodesUIKit` + `StateCore` + `StateAsyncRay` |
 | Тесты математики раскладки без платформы | `LayoutCore` |
