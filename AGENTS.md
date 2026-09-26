@@ -62,6 +62,7 @@ swift build
 swift test                                                   # включая CSS conformance
 CSS_CONFORMANCE_RECORD=1 swift test --filter cssFlexboxConformance   # записать новый baseline
 cd Benchmarks && swift run -c release LayoutBench            # скорость: новый движок против старого
+cd Benchmarks && swift run -c release ScrollBench            # проход раскладки при прокрутке демо
 ```
 
 Эталоны CSS — `Conformance/CSSFlexbox/` (генерация — `generate.cjs` через Chromium,

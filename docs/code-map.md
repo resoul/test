@@ -281,6 +281,8 @@
 | `LazyStack.anchorMoved`, `Anchor` (`start`, `index`) | окно берётся там, куда сдвинулся якорный элемент | дефект #172 |
 | `Scroll.move`, `OffsetMove`, `advanceMove(to:)`, `stopMove`, `targetOffset`; `NodeHost.needsFrames`, `onNeedsFrames`, `advanceFrames(to:)`, `movingScrolls` | анимированный переход дальше запаса ленивого стека — покадрово | [03](03-layout-api.md) (десятый срез, переход) |
 | `ViewportDependent.needsFrames(toMove:by:)`, `NodeHost.movesFrameByFrame` | покадрово — только переход длиннее экрана хоста; короче — анимация слоя | [03](03-layout-api.md) (десятый срез, переход) |
+| `TextMeasurements`, `TextMeasurer.measurements`, `Text.measurements`; `TextLayout.font(for:)` с `FontCache` по потоку | измерения текста хранятся до смены текста или стиля; шрифты — по потоку | дефект #188; [03](03-layout-api.md) (третий срез) |
+| `Benchmarks/Sources/ScrollBench` (`DemoScreen.swift` — ссылка на экран демо) | проход раскладки при прокрутке: движок, остальное, отрисовка | [10](10-layout-engine.md) |
 | `NodeHost.laysOutNow` в `layOut()`, `setNeedsLayoutNow`; `LazyStack.mountedCover` в `viewportMoved` | проход кадра и проход для окна, ушедшего за смонтированное, — на главном потоке и при `solvesInBackground` | дефект #185; [03](03-layout-api.md) (десятый срез) |
 | `OffsetMove.followsEnd`, `settled` в `advanceMove`; `shiftOffset(by:movesTarget:)`, `OffsetMove.progress` | к концу — до конца, как бы ни вырос список; якорь сдвигает цель за окном, перед окном — пересчитывает начало пути | [03](03-layout-api.md) (десятый срез, переход) |
 | `Animation.progress(at:)`, `bezier`, `spring` | кривые покадрового движения — как у Core Animation | [03](03-layout-api.md) (десятый срез, переход); CSS Easing (cubic-bezier) |

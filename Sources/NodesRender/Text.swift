@@ -1,6 +1,7 @@
 #if canImport(CoreText)
     import CoreText
     import Foundation
+    import os
     import LayoutCore
     import Nodes
     import QuartzCore
@@ -107,6 +108,10 @@
 
         private var revision: UInt64 = 0
 
+        /// What the text measured at, kept across layouts until the text or its style
+        /// changes: the engine asks the same questions on every pass.
+        private var measurements = TextMeasurements()
+
         private var isRightToLeft: Bool { host?.direction == .rightToLeft }
 
         /// Ownership: the caller owns the node. Isolation: MainActor. Errors: none.
@@ -119,7 +124,7 @@
 
         /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
         public override var layoutContent: LeafContent? {
-            .measured(TextMeasurer(text: text, style: style))
+            .measured(TextMeasurer(text: text, style: style, measurements: measurements))
         }
 
         /// Ownership: draws into `context`. Isolation: MainActor. Errors: none.
@@ -137,35 +142,89 @@
 
         private func contentChanged() {
             revision &+= 1
+            measurements = TextMeasurements()
             setNeedsLayout()
         }
     }
 
-    /// Measures text for the layout engine. It keeps only values, so it can measure on any
-    /// thread; fonts and strings are built for each measurement by `TextLayout`, the same
-    /// code that draws, so what is measured is what is drawn.
+    /// Measures text for the layout engine, on any thread. Strings are built by
+    /// `TextLayout`, the same code that draws, so what is measured is what is drawn; what it
+    /// measured goes to `measurements`, which the node keeps for its text and style.
     struct TextMeasurer: ContentMeasurer {
         let text: String
         let style: TextStyle
+        let measurements: TextMeasurements
 
         func minContentWidth() -> Double {
-            let layout = TextLayout(text: text, style: style)
-            let words = text.split(whereSeparator: { $0.isWhitespace || $0.isNewline })
-            return words.map { layout.lineWidth(String($0)) }.max() ?? 0
+            measurements.value(\.minContentWidth) {
+                let layout = TextLayout(text: text, style: style)
+                let words = text.split(whereSeparator: { $0.isWhitespace || $0.isNewline })
+                return words.map { layout.lineWidth(String($0)) }.max() ?? 0
+            }
         }
 
         func maxContentWidth() -> Double {
-            let layout = TextLayout(text: text, style: style)
-            let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
-            return lines.map { layout.lineWidth(String($0)) }.max() ?? 0
+            measurements.value(\.maxContentWidth) {
+                let layout = TextLayout(text: text, style: style)
+                let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+                return lines.map { layout.lineWidth(String($0)) }.max() ?? 0
+            }
         }
 
         func height(forWidth width: Double) -> Double {
-            TextLayout(text: text, style: style).height(forWidth: width)
+            measurements.height(forWidth: width) {
+                TextLayout(text: text, style: style).height(forWidth: width)
+            }
         }
 
         func firstBaseline(forWidth width: Double) -> Double? {
-            text.isEmpty ? nil : TextLayout(text: text, style: style).ascent
+            guard !text.isEmpty else { return nil }
+
+            return measurements.value(\.ascent) {
+                Double(CTFontGetAscent(TextLayout.font(for: style)))
+            }
+        }
+    }
+
+    /// The sizes one text in one style measured at — shared by the measurers of a node's
+    /// layouts, which may run on the solver's thread while the main thread prepares the next.
+    final class TextMeasurements: Sendable {
+        struct Values: Sendable {
+            var minContentWidth: Double?
+            var maxContentWidth: Double?
+            var ascent: Double?
+            var heights: [Double: Double] = [:]
+        }
+
+        /// Widths a height is kept for; a window resized by dragging asks for a new one on
+        /// every frame.
+        private static let keptHeights = 32
+
+        private let values = OSAllocatedUnfairLock(initialState: Values())
+
+        /// The value at `key`, measured by `measure` the first time.
+        func value(
+            _ key: WritableKeyPath<Values, Double?> & Sendable,
+            measure: () -> Double
+        ) -> Double {
+            if let known = values.withLock({ $0[keyPath: key] }) { return known }
+
+            let measured = measure()
+            values.withLock { $0[keyPath: key] = measured }
+            return measured
+        }
+
+        func height(forWidth width: Double, measure: () -> Double) -> Double {
+            if let known = values.withLock({ $0.heights[width] }) { return known }
+
+            let measured = measure()
+            values.withLock { values in
+                if values.heights.count >= TextMeasurements.keptHeights {
+                    values.heights = [:]
+                }
+                values.heights[width] = measured
+            }
+            return measured
         }
     }
 
@@ -224,8 +283,40 @@
             string = CFAttributedStringCreate(nil, text as CFString, dictionary)
         }
 
+        /// Fonts made for styles on one thread: making one — a weight above all, matched by a
+        /// descriptor — costs more than setting a line in it. Each thread keeps its own, so no
+        /// font crosses threads.
+        private final class FontCache {
+            var fonts: [FontKey: CTFont] = [:]
+        }
+
+        private struct FontKey: Hashable {
+            let name: String?
+            let size: Double
+            let weight: TextStyle.Weight
+        }
+
+        private static let fontCacheKey = "TextLayout.fonts"
+
         /// The named font, or the system font in the style's weight.
-        private static func font(for style: TextStyle) -> CTFont {
+        static func font(for style: TextStyle) -> CTFont {
+            let storage = Thread.current.threadDictionary
+            let cache: FontCache
+            if let existing = storage[fontCacheKey] as? FontCache {
+                cache = existing
+            } else {
+                cache = FontCache()
+                storage[fontCacheKey] = cache
+            }
+            let key = FontKey(name: style.fontName, size: style.size, weight: style.weight)
+            if let font = cache.fonts[key] { return font }
+
+            let font = makeFont(for: style)
+            cache.fonts[key] = font
+            return font
+        }
+
+        private static func makeFont(for style: TextStyle) -> CTFont {
             let size = CGFloat(style.size)
             if let name = style.fontName {
                 return CTFontCreateWithName(name as CFString, size, nil)
