@@ -49,7 +49,7 @@ AGENTS.md Trellis).
 | `from:` — единое слово порога в `Breakpoint` и модификаторах | согласовано (2026-09-25) |
 | Имена токенов отступов — номера шагов `.s1` … `.s9` | согласовано, [09](09-theme.md#имена-отступов--вариант-b) |
 | `NodeCache` | согласовано (2026-09-25) |
-| `LazyStack` (`items`, `estimatedLength`, `spacing`, `laidOutItems`) — колонка или строка, раскладывающая только элементы у окна; имя по `LazyVStack`/`LazyHStack` SwiftUI, ось — `ScrollAxis`, как у `Scroll` | реализовано (2026-09-26); имена — предложено |
+| `LazyStack` (`items`, `lanes`, `estimatedLength`, `spacing`, `laidOutItems`) — колонка или строка, раскладывающая только элементы у окна; имя по `LazyVStack`/`LazyHStack` SwiftUI, ось — `ScrollAxis`, как у `Scroll` | реализовано (2026-09-26); имена — предложено |
 | `Node.tracksScreen`, `isOnScreen`, `screenChanged(_:)` — видна ли нода; по образцу `isMounted`/`mountedChanged` | реализовано (2026-09-26); имена — предложено |
 | `.hidden(_:)` — убирает из раскладки (CSS `display: none`, `isHidden` в `UIStackView`) / `.invisible(_:)` — оставляет место. В SwiftUI `.hidden()` место оставляет — смысл обратный; это сказано в doc-комментарии | согласовано (2026-09-25) |
 | `.collapsesWhenEmpty()` | реализовано |

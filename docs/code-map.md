@@ -271,6 +271,7 @@
 | `NodeNSView.accessibilityByNode`, `NodeAccessibilityElement.update` (AppKit) | элемент живёт, пока нода | как в UIKit |
 | `Scroll.contentOffset` — запись того же значения ничего не делает | не сбрасывает `overscroll` при вытягивании | — |
 | `LazyStack`, `laidOutItems`, `layoutSpec` — отступы до и после окна | раскладываются только элементы у окна; остальное — место по измеренным или оценочным длинам | [03](03-layout-api.md) (десятый срез) |
+| `LazyStack.lanes`, `line(_:)`, `lines(from:to:)`, `updateStarts` по рядам | сетка: ряды по `lanes`, равные доли и пустые доли в неполном ряду, длина ряда — наибольшая | [03](03-layout-api.md) (десятый срез, сетка) |
 | `LazyStack.visibleSpan`, `reach`, `viewportMoved`, `covered` | окно — пересечение обрезающих предков и хоста; запас — экран, новый проход при выходе за пол-экрана | [03](03-layout-api.md) (десятый срез) |
 | `LazyStack.rememberAnchor`, `layoutApplied`; `Scroll.shiftOffset` | якорь: видимое не прыгает при изменении длин до окна; у начала — не держит | как якорь прокрутки в браузерах |
 | `untracked` в `LazyStack.layoutSpec` | смещение прокрутки не зависимость раскладки стека | иначе проход на каждом кадре; тест `scrollingWithinWhatIsLaidOutDoesNotLayOutAgain` |

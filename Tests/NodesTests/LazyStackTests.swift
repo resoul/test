@@ -317,3 +317,118 @@ func aRowRightToLeftStartsAtTheRight() {
     #expect(strip.stack.laidOutItems == 48..<54)
     host.detach()
 }
+
+/// A vertical scroll of a lazy grid of `count` entries, `lanes` side by side.
+@MainActor
+private final class Grid: Node {
+    let cells = NodeCache<Int, Cell> { _ in Cell() }
+    lazy var stack = LazyStack<Entry>(lanes: 3, estimatedLength: 30) { [cells] entry in
+        cells[entry.id].showing(entry)
+    }
+    lazy var scroll = Scroll(.vertical, content: stack)
+
+    init(_ entries: [Entry]) {
+        super.init()
+        stack.items = entries
+    }
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.column) { scroll }
+    }
+}
+
+@Test @MainActor
+func aGridLaysOutWholeLinesNearTheWindow() {
+    let grid = Grid((0..<1000).map { Entry(id: $0) })
+    let host = host(grid, width: 210, height: 150)
+
+    // Ten lines of three: five show, five more after them.
+    #expect(grid.stack.laidOutItems == 0..<30)
+    #expect(grid.stack.frame.size.height == 334 * 30)
+    let fifth = grid.cells[4]
+    #expect(fifth.frame == LayoutRect(x: 70, y: 30, width: 70, height: 30))
+
+    grid.scroll.contentOffset = LayoutPoint(x: 0, y: 9000)
+    host.layoutIfNeeded()
+    // Line 300 is at the top.
+    #expect(grid.stack.laidOutItems == 885..<930)
+    #expect(shown(grid.cells[900], in: grid.scroll) == 0)
+    host.detach()
+}
+
+@Test @MainActor
+func theLastLineOfAGridKeepsItsItemsAsWideAsTheOthers() {
+    let grid = Grid((0..<4).map { Entry(id: $0) })
+    grid.stack.spacing = 6
+    let host = host(grid, width: 210, height: 150)
+
+    // Three shares of 210 less two gaps of 6.
+    #expect(grid.cells[0].frame == LayoutRect(x: 0, y: 0, width: 66, height: 30))
+    #expect(grid.cells[2].frame.origin.x == 144)
+    #expect(grid.cells[3].frame == LayoutRect(x: 0, y: 36, width: 66, height: 30))
+    host.detach()
+}
+
+@Test @MainActor
+func aGridLineIsAsLongAsItsLongestItem() {
+    let grid = Grid([
+        Entry(id: 0), Entry(id: 1, length: 60), Entry(id: 2),
+        Entry(id: 3), Entry(id: 4), Entry(id: 5),
+    ])
+    let host = host(grid, width: 210, height: 150)
+
+    #expect(grid.cells[0].frame.size.height == 60)
+    #expect(grid.cells[3].frame.origin.y == 60)
+    #expect(grid.cells[5].frame.size.height == 30)
+    host.detach()
+}
+
+@Test @MainActor
+func linesLongerThanTheirEstimateDoNotMoveWhatShows() {
+    let grid = Grid((0..<3000).map { Entry(id: $0, length: 60) })
+    let host = host(grid, width: 210, height: 150)
+    grid.scroll.contentOffset = LayoutPoint(x: 0, y: 15000)
+    host.layoutIfNeeded()
+    let top = grid.stack.subnodes.first {
+        shown($0, in: grid.scroll).map { $0 >= 0 } ?? false
+    }!
+    let before = shown(top, in: grid.scroll)!
+
+    grid.scroll.contentOffset = LayoutPoint(x: 0, y: grid.scroll.contentOffset.y - 100)
+    host.layoutIfNeeded()
+
+    #expect(shown(top, in: grid.scroll) == before + 100)
+    host.detach()
+}
+
+@Test @MainActor
+func changingTheLanesLaysTheGridOutAgain() {
+    let grid = Grid((0..<10).map { Entry(id: $0) })
+    let host = host(grid, width: 210, height: 150)
+
+    grid.stack.lanes = 2
+    host.layoutIfNeeded()
+
+    #expect(grid.cells[1].frame == LayoutRect(x: 105, y: 0, width: 105, height: 30))
+    #expect(grid.cells[2].frame.origin.y == 30)
+    #expect(grid.cells[9].frame.origin.y == 120)
+    host.detach()
+}
+
+@Test @MainActor
+func aLineOfItemsMeasuredApartTakesTheLongestOfThem() {
+    // Item 1 is 60 long, so the first line is; the rest are 30.
+    let grid = Grid((0..<3000).map { Entry(id: $0, length: $0 == 1 ? 60 : 30) })
+    let host = host(grid, width: 210, height: 150)
+    grid.scroll.contentOffset = LayoutPoint(x: 0, y: 9000)
+    host.layoutIfNeeded()
+
+    // Two items added at the start move item 0 — measured 60 in its old line — into the
+    // first line with them, far from the window.
+    grid.stack.items.insert(contentsOf: [Entry(id: 5000), Entry(id: 5001)], at: 0)
+    host.layoutIfNeeded()
+
+    // Lines of 60 for [5000, 5001, 0] and [1, 2, 3]; 999 more of 30.
+    #expect(grid.stack.frame.size.height == 2 * 60 + 999 * 30)
+    host.detach()
+}

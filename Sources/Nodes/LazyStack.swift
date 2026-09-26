@@ -61,7 +61,22 @@ public final class LazyStack<Item: Identifiable>: Node {
         }
     }
 
-    /// The space between neighboring items.
+    /// How many items stand side by side across `axis` — the columns of a vertical stack,
+    /// the rows of a horizontal one. With more than one the stack is a grid: items take equal
+    /// shares of the width (or height) in order, and a line is as long as its longest item.
+    /// Values below 1 count as 1.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var lanes: Int {
+        didSet {
+            guard lanes != oldValue else { return }
+
+            startsAreStale = true
+            setNeedsLayout()
+        }
+    }
+
+    /// The space between neighboring items, along `axis` and across it.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public var spacing: Double {
@@ -83,8 +98,8 @@ public final class LazyStack<Item: Identifiable>: Node {
     /// Lengths along the axis of items laid out at `measuredAcross`.
     private var measured: [Item.ID: Double] = [:]
     private var measuredAcross: Double?
-    /// Where each item starts from the stack's start, with one more entry past the last:
-    /// `starts[i + 1] - spacing` is where item `i` ends.
+    /// Where each line of `lanes` items starts from the stack's start, with one more entry
+    /// past the last: `starts[i + 1] - spacing` is where line `i` ends.
     private var starts: [Double] = [0]
     private var startsAreStale = true
     /// The items and nodes the last `layoutSpec()` placed, in order.
@@ -103,12 +118,14 @@ public final class LazyStack<Item: Identifiable>: Node {
     public init(
         _ axis: ScrollAxis = .vertical,
         items: [Item] = [],
+        lanes: Int = 1,
         estimatedLength: Double,
         spacing: Double = 0,
         content: @escaping @MainActor (Item) -> Node
     ) {
         self.axis = axis
         self.items = items
+        self.lanes = lanes
         self.estimatedLength = estimatedLength
         self.spacing = spacing
         self.content = content
@@ -128,29 +145,42 @@ public final class LazyStack<Item: Identifiable>: Node {
         // Before the first layout its place is unknown: the start of the list, one screen of
         // it, and the reach after.
         let span = untracked { visibleSpan() } ?? (start: 0, end: reach)
-        let range = indices(from: span.start - reach, to: span.end + reach)
+        let lines = self.lines(from: span.start - reach, to: span.end + reach)
+        let range =
+            lines.isEmpty
+            ? 0..<0 : lines.lowerBound * perLine..<min(items.count, lines.upperBound * perLine)
 
         untracked { rememberAnchor() }
         placed = range.map { index in (items[index].id, content(items[index])) }
         laidOutItems = range
         let total = length
-        let before = range.isEmpty ? total : starts[range.lowerBound]
-        let after = range.isEmpty ? 0 : total - end(of: range.upperBound - 1)
+        let before = lines.isEmpty ? total : starts[lines.lowerBound]
+        let after = lines.isEmpty ? 0 : total - end(of: lines.upperBound - 1)
         covered =
-            range.isEmpty
+            lines.isEmpty
             ? (.infinity, -.infinity)
             : (
-                range.lowerBound == 0 ? -.infinity : before,
-                range.upperBound == items.count ? .infinity : total - after
+                lines.lowerBound == 0 ? -.infinity : before,
+                lines.upperBound == lineCount ? .infinity : total - after
             )
 
         let nodes = placed.map(\.node)
-        let stack = FlexContainer(axis == .vertical ? .column : .row) {
-            for node in nodes {
-                node.flex(shrink: 0)
+        let stack: LayoutSpec
+        if perLine == 1 {
+            stack = FlexContainer(axis == .vertical ? .column : .row) {
+                for node in nodes {
+                    node.flex(shrink: 0)
+                }
             }
+            .gap(spacing)
+        } else {
+            stack = FlexContainer(axis == .vertical ? .column : .row) {
+                for start in stride(from: 0, to: nodes.count, by: perLine) {
+                    line(Array(nodes[start..<min(start + perLine, nodes.count)]))
+                }
+            }
+            .gap(spacing)
         }
-        .gap(spacing)
         switch axis {
         case .vertical:
             return stack.padding(top: before, bottom: after)
@@ -159,39 +189,71 @@ public final class LazyStack<Item: Identifiable>: Node {
         }
     }
 
-    // MARK: - Lengths
-
-    /// The length of all items with the spaces between them.
-    private var length: Double {
-        items.isEmpty ? 0 : starts[items.count] - spacing
+    /// One line of a grid: its items side by side in equal shares, and empty shares after
+    /// the last items of a line that is not full, so they are as wide as the others.
+    private func line(_ nodes: [Node]) -> LayoutSpec {
+        let share = { (spec: LayoutSpec) -> LayoutSpec in
+            switch self.axis {
+            case .vertical:
+                spec.flex(grow: 1, shrink: 1, basis: .points(0)).limits(minWidth: .points(0))
+            case .horizontal:
+                spec.flex(grow: 1, shrink: 1, basis: .points(0)).limits(minHeight: .points(0))
+            }
+        }
+        let empty = perLine - nodes.count
+        return FlexContainer(axis == .vertical ? .row : .column) {
+            for node in nodes {
+                share(node.asLayoutSpec)
+            }
+            for _ in 0..<empty {
+                share(FlexContainer {})
+            }
+        }
+        .gap(spacing)
+        .flex(shrink: 0)
     }
 
-    private func end(of index: Int) -> Double {
-        starts[index + 1] - spacing
+    // MARK: - Lengths
+
+    /// Items side by side in a line.
+    private var perLine: Int { max(1, lanes) }
+
+    private var lineCount: Int { (items.count + perLine - 1) / perLine }
+
+    /// The length of all lines with the spaces between them.
+    private var length: Double {
+        items.isEmpty ? 0 : starts[lineCount] - spacing
+    }
+
+    private func end(of line: Int) -> Double {
+        starts[line + 1] - spacing
     }
 
     private func updateStarts() {
-        guard startsAreStale || starts.count != items.count + 1 else { return }
+        guard startsAreStale || starts.count != lineCount + 1 else { return }
 
         startsAreStale = false
         var starts: [Double] = []
-        starts.reserveCapacity(items.count + 1)
+        starts.reserveCapacity(lineCount + 1)
         var position = 0.0
-        for item in items {
+        for first in stride(from: 0, to: items.count, by: perLine) {
             starts.append(position)
-            position += measured[item.id] ?? estimatedLength
-            position += spacing
+            var longest = 0.0
+            for item in items[first..<min(first + perLine, items.count)] {
+                longest = max(longest, measured[item.id] ?? estimatedLength)
+            }
+            position += longest + spacing
         }
         starts.append(position)
         self.starts = starts
     }
 
-    /// The items that take any of the part of the stack from `lower` to `upper`.
-    private func indices(from lower: Double, to upper: Double) -> Range<Int> {
-        let count = items.count
+    /// The lines that take any of the part of the stack from `lower` to `upper`.
+    private func lines(from lower: Double, to upper: Double) -> Range<Int> {
+        let count = lineCount
         guard count > 0, upper > lower else { return 0..<0 }
 
-        // The first item ending after `lower`, and the first starting at or after `upper`.
+        // The first line ending after `lower`, and the first starting at or after `upper`.
         let first = partition(count) { end(of: $0) > lower }
         let last = partition(count) { starts[$0] >= upper }
         return first < last ? first..<last : 0..<0
