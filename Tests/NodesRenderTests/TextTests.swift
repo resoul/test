@@ -1,9 +1,12 @@
 #if canImport(CoreText)
+    import CoreText
+    import Foundation
     import LayoutCore
     import Nodes
-    import NodesRender
     import QuartzCore
     import Testing
+
+    @testable import NodesRender
 
     @MainActor
     private final class Column: Node {
@@ -251,6 +254,93 @@
         #expect(!inkRows(image).isEmpty)
         host.detach()
     }
+
+    // MARK: - Measuring once
+
+    /// The measurements a text gives the engine in its layouts.
+    @MainActor
+    private func measurements(of text: Text) -> TextMeasurements? {
+        guard case .measured(let measurer)? = text.layoutContent else { return nil }
+
+        return (measurer as? TextMeasurer)?.measurements
+    }
+
+    @Test @MainActor
+    func aTextKeepsItsMeasurementsUntilItsTextOrStyleChanges() throws {
+        let text = Text("Hello world")
+        let first = try #require(measurements(of: text))
+
+        #expect(measurements(of: text) === first)
+        text.text = "Hello there"
+        let second = try #require(measurements(of: text))
+        #expect(second !== first)
+        text.style = TextStyle(size: 30)
+        #expect(measurements(of: text) !== second)
+    }
+
+    @Test @MainActor
+    func aTextWhoseStyleChangedIsMeasuredInTheNewStyle() {
+        let column = Column(Text("Hello world"))
+        let host = NodeHost(root: column, size: LayoutSize(width: 1000, height: 500))
+        host.layoutIfNeeded()
+        let before = column.text.frame.size
+
+        column.text.style = TextStyle(size: 34)
+        host.layoutIfNeeded()
+
+        #expect(column.text.frame.size.width > before.width * 1.5)
+        #expect(column.text.frame.size.height > before.height * 1.5)
+        host.detach()
+    }
+
+    @Test
+    func measurementsMeasureEachValueOnce() {
+        let measurements = TextMeasurements()
+        var measured = 0
+        let measure = { () -> Double in
+            measured += 1
+            return 42
+        }
+
+        #expect(measurements.value(\.maxContentWidth, measure: measure) == 42)
+        #expect(measurements.value(\.maxContentWidth, measure: measure) == 42)
+        #expect(measured == 1)
+        #expect(measurements.value(\.minContentWidth, measure: measure) == 42)
+        #expect(measured == 2)
+
+        #expect(measurements.height(forWidth: 100, measure: measure) == 42)
+        #expect(measurements.height(forWidth: 100, measure: measure) == 42)
+        #expect(measurements.height(forWidth: 120, measure: measure) == 42)
+        #expect(measured == 4)
+        // Heights for many widths are kept only for the latest ones.
+        for width in 0..<40 {
+            _ = measurements.height(forWidth: Double(1000 + width), measure: measure)
+        }
+        #expect(measured == 44)
+        #expect(measurements.height(forWidth: 1039, measure: measure) == 42)
+        #expect(measured == 44)
+        // The first widths are no longer kept.
+        #expect(measurements.height(forWidth: 100, measure: measure) == 42)
+        #expect(measured == 45)
+    }
+
+    @Test
+    func aThreadMakesTheFontOfAStyleOnce() async {
+        let regular = TextLayout.font(for: TextStyle(size: 15))
+        let bold = TextLayout.font(for: TextStyle(size: 15, weight: .bold))
+
+        #expect(TextLayout.font(for: TextStyle(size: 15)) === regular)
+        #expect(TextLayout.font(for: TextStyle(size: 15, weight: .bold)) === bold)
+        #expect(bold !== regular)
+        #expect(TextLayout.font(for: TextStyle(size: 16)) !== regular)
+        // Another thread makes its own, the same font.
+        let name = await Task.detached {
+            CTFontCopyPostScriptName(TextLayout.font(for: TextStyle(size: 15, weight: .bold)))
+                as String
+        }.value
+        #expect(name == CTFontCopyPostScriptName(bold) as String)
+    }
+
 #endif
 
 #if canImport(AppKit) && !canImport(UIKit)
