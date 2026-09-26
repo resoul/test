@@ -340,6 +340,63 @@
         }
     }
 
+    /// Four pages in a window of their width: a swipe turns one page, as a pager does.
+    @MainActor
+    final class Pages: Node {
+        private static let colors = [
+            Color(red: 0.93, green: 0.45, blue: 0.35),
+            Color(red: 0.36, green: 0.62, blue: 0.95),
+            Color(red: 0.40, green: 0.75, blue: 0.50),
+            Color(red: 0.55, green: 0.36, blue: 0.85),
+        ]
+
+        let scroll = Scroll(.horizontal)
+
+        override init() {
+            super.init()
+            scroll.content = Row()
+            scroll.isPaging = true
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.row) {
+                scroll.size(width: 300, height: 140)
+            }
+        }
+
+        final class Row: Node {
+            let pages = Pages.colors.enumerated().map { index, color in
+                Page(number: index + 1, color: color)
+            }
+
+            override func layoutSpec() -> LayoutSpec? {
+                FlexContainer(.row) {
+                    for page in pages { page }
+                }
+            }
+        }
+
+        final class Page: Node {
+            let label: Text
+
+            init(number: Int, color: Color) {
+                label = Text(
+                    "Page \(number) of 4",
+                    style: TextStyle(size: 20, weight: .bold, color: .white)
+                )
+                super.init()
+                appearance.background = color
+            }
+
+            override func layoutSpec() -> LayoutSpec? {
+                FlexContainer(.column) { label }
+                    .justifyContent(.center)
+                    .alignItems(.center)
+                    .size(width: 300, height: 140)
+            }
+        }
+    }
+
     /// A button for each kind of transition: it takes the card out that way, or brings it
     /// back.
     @MainActor
@@ -497,6 +554,8 @@
         let gallery = Gallery()
         let cards: [ProfileCard]
         let actions: Actions
+        let pagesTitle = SectionTitle("Pages")
+        let pages = Pages()
         let transitionsTitle = SectionTitle("Transitions")
         let transitions = Transitions()
         let gridTitle = SectionTitle("600 squares, four in a line")
@@ -539,6 +598,8 @@
                 // with nothing to focus to the focus section under it.
                 images.margin(top: 0, leading: -24, bottom: -8, trailing: -24)
                 gallery
+                pagesTitle.margin(top: 0, leading: -24, bottom: -8, trailing: -24)
+                pages
                 transitionsTitle.margin(top: 0, leading: -24, bottom: -8, trailing: -24)
                 transitions
                 actions

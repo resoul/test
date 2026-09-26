@@ -498,7 +498,7 @@
                 // A mouse wheel counts lines.
                 delta = LayoutPoint(x: delta.x * NodeNSView.line, y: delta.y * NodeNSView.line)
             }
-            if !scroll(by: delta, at: point(of: event), phase: phase) {
+            if !scroll(by: delta, at: point(of: event), phase: phase, time: event.timestamp) {
                 super.scrollWheel(with: event)
             }
         }
@@ -527,19 +527,34 @@
         private var pulled: (scroll: Scroll, by: Double)?
         /// The glide reached an end and bounced: the rest of it is spent.
         private var glideIsSpent = false
+        /// Where the paging scrolls of the gesture were when it began.
+        private var pageStarts: [(scroll: Scroll, offset: LayoutPoint)] = []
+        /// How fast the fingers moved the content, in points a second, and when last.
+        private var fingerSpeed = LayoutPoint.zero
+        private var lastTouch: Double?
+        /// When a mouse wheel last turned a page: the wheel keeps turning for a while, and
+        /// one turn is one page.
+        private var lastWheelPage: Double?
 
         /// Moves the scrolls under `point` by `delta`, in the view's points, and returns
         /// whether it took the event.
         @discardableResult
-        func scroll(by delta: LayoutPoint, at point: LayoutPoint, phase: WheelPhase = .wheel)
-            -> Bool
-        {
+        func scroll(
+            by delta: LayoutPoint,
+            at point: LayoutPoint,
+            phase: WheelPhase = .wheel,
+            time: Double = 0
+        ) -> Bool {
             switch phase {
             case .wheel, .began:
                 latched = nil
                 glideIsSpent = false
                 springBack()
-            case .released, .glideEnded:
+            case .released:
+                springBack()
+                turnPages()
+                return latched.map { !$0.isEmpty } ?? false
+            case .glideEnded:
                 springBack()
                 return latched.map { !$0.isEmpty } ?? false
             case .gliding where glideIsSpent:
@@ -550,6 +565,31 @@
             let scrolls = latched ?? host.scrolls(at: point)
             latched = scrolls
             var left = LayoutPoint(x: delta.x / factor, y: delta.y / factor)
+            if phase == .began {
+                pageStarts = scrolls.filter(\.isPaging).map { ($0, $0.contentOffset) }
+                fingerSpeed = .zero
+                lastTouch = time
+            } else if phase == .touching, let last = lastTouch, time > last {
+                // The speed of the last moves, the older ones counting less.
+                let speed = LayoutPoint(x: left.x / (time - last), y: left.y / (time - last))
+                fingerSpeed = LayoutPoint(
+                    x: fingerSpeed.x * 0.4 + speed.x * 0.6,
+                    y: fingerSpeed.y * 0.4 + speed.y * 0.6
+                )
+                lastTouch = time
+            }
+            if phase == .wheel,
+                let pager = scrolls.first(where: { $0.isPaging && along($0.axis, left) != 0 })
+            {
+                // A mouse wheel turns a pager a page at a time.
+                if lastWheelPage.map({ time - $0 > NodeNSView.wheelPageInterval }) ?? true {
+                    lastWheelPage = time
+                    withAnimation(NodeNSView.pageTurn) {
+                        pager.scroll(toPage: pager.page + (along(pager.axis, left) > 0 ? 1 : -1))
+                    }
+                }
+                return true
+            }
             var moved = false
             // Moving back, a scroll pulled past its end first takes the pull back.
             if let pull = pulled {
@@ -562,6 +602,12 @@
                 }
             }
             for scroll in scrolls where along(scroll.axis, left) != 0 {
+                if phase == .gliding && scroll.isPaging {
+                    // The pager came to rest on its page when the fingers left: it takes the
+                    // glide along its axis without moving.
+                    left = setting(scroll.axis, of: left, to: 0)
+                    continue
+                }
                 let before = scroll.contentOffset
                 var offset = before
                 switch scroll.axis {
@@ -588,6 +634,29 @@
                 }
             }
             return moved
+        }
+
+        /// How long a mouse wheel's turn goes on turning one page, in seconds.
+        private static let wheelPageInterval = 0.35
+        /// How a pager comes to rest on its page.
+        private static let pageTurn = Animation.spring(response: 0.35, dampingRatio: 1)
+
+        /// Fingers left a gesture that moved pagers: each comes to rest on the page the
+        /// gesture's end picks.
+        private func turnPages() {
+            let starts = pageStarts
+            pageStarts = []
+            lastTouch = nil
+            for (scroll, start) in starts {
+                let target = scroll.pagingTarget(
+                    from: start,
+                    at: scroll.contentOffset,
+                    velocity: fingerSpeed
+                )
+                withAnimation(NodeNSView.pageTurn) {
+                    scroll.contentOffset = target
+                }
+            }
         }
 
         /// Shows `scroll` pulled `amount` points past its end, with resistance: the further

@@ -420,6 +420,117 @@ public final class Scroll: Node {
         return covered
     }
 
+    // MARK: - Paging
+
+    /// Whether the scroll comes to rest only where a page starts: a page is the window's
+    /// length along `axis`, counted from the content's start — its leading edge in a row laid
+    /// out from the right — and the last one ends at the content's end. A swipe goes one page
+    /// at most, as a pager does; a slow drag goes to the page nearest where it is let go.
+    /// Code still sets any offset.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var isPaging = false {
+        didSet { if isPaging != oldValue { host?.setNeedsRender() } }
+    }
+
+    /// The page that shows, from 0: the one whose start is nearest the offset.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var page: Int {
+        let length = pageLength
+        guard length > 0 else { return 0 }
+
+        return min(
+            max(0, Int((distanceFromStart(of: contentOffset) / length).rounded())),
+            pageCount - 1
+        )
+    }
+
+    /// How many pages the content takes: the last one may be shorter than the window.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var pageCount: Int {
+        let length = pageLength
+        guard length > 0 else { return 1 }
+
+        let travel = along(offsetRange.highest) - along(offsetRange.lowest)
+        return Int((travel / length - 0.001).rounded(.up)) + 1
+    }
+
+    /// Scrolls to where page `page` starts — at once, or with the animation of
+    /// `withAnimation` — the last page ending at the content's end.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: another move of
+    /// the scroll, or the platform moving it, stops the move.
+    public func scroll(toPage page: Int) {
+        contentOffset = offset(ofPage: page)
+    }
+
+    /// For platform adapters: where a drag that started at `start` and is let go at
+    /// `current`, moving at `velocity` points a second, comes to rest when the scroll pages.
+    /// A swipe goes one page on from the page it started on, in its direction; a slow drag
+    /// goes to the page nearest where it is let go, but not beyond the next.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func pagingTarget(
+        from start: LayoutPoint,
+        at current: LayoutPoint,
+        velocity: LayoutPoint
+    ) -> LayoutPoint {
+        let length = pageLength
+        guard length > 0 else { return offsetRange.clamp(current) }
+
+        let first = (distanceFromStart(of: start) / length).rounded()
+        let now = distanceFromStart(of: current) / length
+        // Toward the content's end is forward, whichever way the offset goes for it.
+        let speed = along(velocity) * (startsAtHighest ? -1 : 1)
+        var target: Double
+        if abs(speed) > Scroll.swipeSpeed {
+            target = speed > 0 ? now.rounded(.up) : now.rounded(.down)
+        } else {
+            target = now.rounded()
+        }
+        target = min(max(target, first - 1), first + 1)
+        return offset(ofPage: Int(target))
+    }
+
+    /// Points a second a finger must move for its lift to go on to the next page.
+    private static let swipeSpeed = 300.0
+
+    private var pageLength: Double {
+        axis == .vertical ? frame.size.height : frame.size.width
+    }
+
+    /// A row laid out from the right starts at its right: at the highest offset.
+    private var startsAtHighest: Bool {
+        axis == .horizontal && host?.direction == .rightToLeft
+    }
+
+    private func along(_ point: LayoutPoint) -> Double {
+        axis == .vertical ? point.y : point.x
+    }
+
+    /// How far `offset` is from the content's start, along `axis`.
+    private func distanceFromStart(of offset: LayoutPoint) -> Double {
+        let range = offsetRange
+        return startsAtHighest
+            ? along(range.highest) - along(offset) : along(offset) - along(range.lowest)
+    }
+
+    /// The offset where page `page` starts, kept within the content.
+    private func offset(ofPage page: Int) -> LayoutPoint {
+        let range = offsetRange
+        let distance = Double(max(0, page)) * pageLength
+        let value =
+            startsAtHighest ? along(range.highest) - distance : along(range.lowest) + distance
+        var offset = contentOffset
+        switch axis {
+        case .vertical: offset.y = value
+        case .horizontal: offset.x = value
+        }
+        return range.clamp(offset)
+    }
+
     /// Scrolls by one window toward the content's end, or its start, and returns the page
     /// shown then — `nil`, not moving, when already at that end.
     ///

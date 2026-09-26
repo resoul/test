@@ -229,6 +229,11 @@
             frameLink = nil
         }
 
+        /// The driver of `scroll`, while it shows.
+        func scrollDriver(for scroll: Scroll) -> ScrollDriver? {
+            scrollDrivers[scroll.id]
+        }
+
         /// Brings the scroll drivers in line with the tree's scrolls after a drawing: one per
         /// visible scroll, over its frame. On a TV the focus scrolls, not the touch surface.
         private func updateScrollDrivers() {
@@ -826,6 +831,9 @@
 
         var pan: UIPanGestureRecognizer { physics.panGestureRecognizer }
 
+        /// How fast the glide after a finger slows down.
+        var decelerationRate: UIScrollView.DecelerationRate { physics.decelerationRate }
+
         /// Moving with the finger, or on its own after it: a touch then stops it.
         var isGliding: Bool { physics.isDecelerating && !isPastTheEnds }
 
@@ -853,6 +861,8 @@
 
             self.factor = factor
             physics.frame = frame
+            // A pager comes to rest quickly, on the page the drag's end picks.
+            physics.decelerationRate = scroll.isPaging ? .fast : .normal
             let content = scroll.contentBounds
             // The content may start before the scroll's origin (a row laid out from the
             // right); the insets let the offset go there.
@@ -910,6 +920,32 @@
 
         private var isPastTheEnds: Bool {
             scroll.map { $0.overscroll != .zero } ?? false
+        }
+
+        /// Where the drag started, for a pager to go a page on from.
+        private var dragStart: LayoutPoint?
+
+        func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+            dragStart = scroll?.contentOffset
+        }
+
+        func scrollViewWillEndDragging(
+            _ scrollView: UIScrollView,
+            withVelocity velocity: CGPoint,
+            targetContentOffset: UnsafeMutablePointer<CGPoint>
+        ) {
+            guard let scroll, scroll.isPaging else { return }
+
+            // The velocity comes in points a millisecond.
+            let target = scroll.pagingTarget(
+                from: dragStart ?? scroll.contentOffset,
+                at: scroll.shownOffset,
+                velocity: LayoutPoint(
+                    x: Double(velocity.x) * 1000 / factor,
+                    y: Double(velocity.y) * 1000 / factor
+                )
+            )
+            targetContentOffset.pointee = CGPoint(x: target.x * factor, y: target.y * factor)
         }
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
