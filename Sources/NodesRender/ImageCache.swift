@@ -90,6 +90,7 @@
         private struct Download {
             let id: UInt64
             let task: Task<Data, Error>
+            let urgency: SharedUrgency
             var waiters: Set<UInt64>
         }
 
@@ -128,6 +129,13 @@
         /// Cancellation: a caller leaves a shared download; the last departing caller cancels
         /// it before a disk write.
         public func load(_ url: URL) async throws -> Data {
+            try await load(url, urgency: nil)
+        }
+
+        /// `load(_:)` for a caller whose `urgency` sets the priority of the download while it
+        /// runs: high while the caller's node is on screen, low otherwise. A shared download
+        /// is as urgent as the most urgent of its callers.
+        func load(_ url: URL, urgency: LoadUrgency?) async throws -> Data {
             if url.isFileURL { return try Data(contentsOf: url) }
             if let cached = try cachedData(for: url) { return cached }
 
@@ -136,15 +144,24 @@
             let download: Download
             if var existing = downloads[url] {
                 existing.waiters.insert(waiter)
+                existing.urgency.add(urgency, for: waiter)
                 downloads[url] = existing
                 download = existing
             } else {
                 let id = waiter
+                let shared = SharedUrgency()
+                shared.add(urgency, for: waiter)
                 download = Download(
                     id: id,
                     task: Task { [removals] in
-                        try await self.download(url, id: id, removalsAtStart: removals)
+                        try await self.download(
+                            url,
+                            id: id,
+                            urgency: shared,
+                            removalsAtStart: removals
+                        )
                     },
+                    urgency: shared,
                     waiters: [waiter]
                 )
                 downloads[url] = download
@@ -336,12 +353,13 @@
         private func download(
             _ url: URL,
             id: UInt64,
+            urgency: SharedUrgency,
             removalsAtStart: UInt64
         ) async throws -> Data {
             // Later loads find the file on disk, or start over after a failure.
             defer { if downloads[url]?.id == id { downloads[url] = nil } }
 
-            let (data, response) = try await fetch(url)
+            let (data, response) = try await fetch(url, urgency: urgency)
             try Task.checkCancellation()
             guard let response = response as? HTTPURLResponse,
                 (200...299).contains(response.statusCode)
@@ -362,12 +380,9 @@
             return try cachedData(for: url) ?? data
         }
 
-        private func fetch(_ url: URL) async throws -> (Data, URLResponse) {
-            guard let limit = configuration.maximumDownloadBytes else {
-                return try await session.data(from: url)
-            }
-
-            let watch = DownloadLimit(bytes: max(0, limit))
+        private func fetch(_ url: URL, urgency: SharedUrgency) async throws -> (Data, URLResponse) {
+            let limit = configuration.maximumDownloadBytes.map { max(0, $0) }
+            let watch = DownloadWatch(bytes: limit, urgency: urgency)
             let result: (Data, URLResponse)
             do {
                 result = try await session.data(from: url, delegate: watch)
@@ -375,13 +390,14 @@
                 if watch.exceeded { throw ImageCacheError.responseTooLarge }
                 throw error
             }
-            guard result.0.count <= limit else { throw ImageCacheError.responseTooLarge }
+            if let limit, result.0.count > limit { throw ImageCacheError.responseTooLarge }
             return result
         }
 
         private func leave(_ waiter: UInt64, from url: URL, id: UInt64) {
             guard var download = downloads[url], download.id == id else { return }
             download.waiters.remove(waiter)
+            download.urgency.remove(waiter)
             if download.waiters.isEmpty {
                 download.task.cancel()
                 downloads[url] = nil
@@ -544,24 +560,36 @@
         }
     }
 
-    /// Cancels a download once its announced or received size passes the limit, so at most
-    /// the limit and one network chunk are held in memory. The async `URLSession` calls do not
-    /// forward data callbacks to a task delegate; only the task's creation, so the delegate
-    /// watches the task's byte counters.
-    private final class DownloadLimit: NSObject, URLSessionTaskDelegate {
-        private let bytes: Int64
+    /// Watches one download's task: gives it the priority of its callers' urgency, again at
+    /// each change, and — with a limit — cancels it once its announced or received size passes
+    /// the limit, so at most the limit and one network chunk are held in memory. The async
+    /// `URLSession` calls do not forward data callbacks to a task delegate; only the task's
+    /// creation, so the delegate watches the task's byte counters.
+    private final class DownloadWatch: NSObject, URLSessionTaskDelegate {
+        private let bytes: Int64?
+        private let urgency: SharedUrgency
         private let state = OSAllocatedUnfairLock(
             initialState: (exceeded: false, observation: NSKeyValueObservation?.none)
         )
 
-        init(bytes: Int) {
-            self.bytes = Int64(bytes)
+        init(bytes: Int?, urgency: SharedUrgency) {
+            self.bytes = bytes.map(Int64.init)
+            self.urgency = urgency
         }
 
         var exceeded: Bool { state.withLock { $0.exceeded } }
 
         func urlSession(_ session: URLSession, didCreateTask task: URLSessionTask) {
-            let limit = bytes
+            let urgency = urgency
+            let prioritize: @Sendable () -> Void = { [weak task] in
+                task?.priority =
+                    urgency.isUrgent ? URLSessionTask.highPriority : URLSessionTask.lowPriority
+            }
+            prioritize()
+            urgency.watch(prioritize)
+
+            guard let limit = bytes else { return }
+
             let observation = task.observe(\.countOfBytesReceived, options: [.initial, .new]) {
                 [weak self] task, _ in
                 guard
