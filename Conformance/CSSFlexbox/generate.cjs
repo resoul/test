@@ -414,8 +414,25 @@ const imageCases = [];
     add('grow', n({ width: 600, height: 300, alignItems: 'flex-start' }, img(40, 20, { flexGrow: 1 })));
     add('two-in-stretched-row', n({ width: 600, height: 40 }, img(400, 200), img(20, 20)));
     add('padding', n({ width: 120, height: 300, flexDirection: 'column' }, img(400, 200, { padding: 10 })));
+    // The natural ratio holds for the content box: padding is added to both sides.
+    add('padding-row-height', n({ width: 600, height: 300, alignItems: 'flex-start' }, img(400, 200, { height: 60, padding: 10 })));
+    add('padding-row-natural', n({ width: 600, height: 300, alignItems: 'flex-start' }, img(40, 20, { padding: [5, 10, 15, 20] })));
+    add('padding-row-stretched', n({ width: 600, height: 80 }, img(400, 200, { padding: 10 })));
+    add('padding-column-width', n({ width: 600, height: 300, flexDirection: 'column', alignItems: 'flex-start' }, img(400, 200, { width: 120, padding: [4, 10, 16, 10] })));
+    add('padding-max-width', n({ width: 600, height: 300, alignItems: 'flex-start' }, img(400, 200, { maxWidth: 120, padding: 10 })));
+    add('padding-max-height', n({ width: 600, height: 300, alignItems: 'flex-start' }, img(400, 200, { maxHeight: 70, padding: 10 })));
+    add('padding-min-height', n({ width: 600, height: 300, alignItems: 'flex-start' }, img(40, 20, { minHeight: 100, padding: 10 })));
+    add('padding-grow', n({ width: 300, height: 300, flexDirection: 'column', alignItems: 'flex-start' }, img(40, 20, { flexGrow: 1, padding: 10 }), box(30, 100)));
+    add('padding-absolute-height', n({ width: 600, height: 300 }, img(400, 200, { position: 'absolute', top: 0, left: 0, height: 60, padding: 10 })));
+    add('padding-absolute-insets', n({ width: 600, height: 300 }, img(400, 200, { position: 'absolute', top: 10, bottom: 10, left: 0, padding: 10 })));
+    add('padding-wrap', n({ width: 250, height: 300, flexWrap: 'wrap', alignItems: 'flex-start' }, img(100, 50, { padding: 5 }), img(100, 50, { padding: 5 }), img(100, 50, { padding: 5 })));
+    // A ratio in the style holds for the border box, as `box-sizing: border-box` says.
+    add('padding-aspect-ratio-overrides', n({ width: 600, height: 300, alignItems: 'flex-start' }, img(400, 200, { width: 100, aspectRatio: 1, padding: 10 })));
     add('wrap', n({ width: 250, height: 300, flexWrap: 'wrap', alignItems: 'flex-start' }, img(100, 50), img(100, 50), img(100, 50)));
     add('absolute-height', n({ width: 600, height: 300 }, img(400, 200, { position: 'absolute', top: 0, left: 0, height: 40 })));
+    // Between two insets a picture keeps its natural size: it is not stretched.
+    add('absolute-insets', n({ width: 600, height: 300 }, img(400, 200, { position: 'absolute', top: 10, bottom: 10, left: 0 })));
+    add('absolute-horizontal-insets', n({ width: 600, height: 300 }, img(40, 20, { position: 'absolute', top: 0, left: 10, right: 10 })));
     add('aspect-ratio-overrides', n({ width: 600, height: 300, alignItems: 'flex-start' }, img(400, 200, { width: 100, aspectRatio: 1 })));
     add('column-of-images', n({ width: 200, flexDirection: 'column' }, img(400, 200), img(100, 100)));
     add('row-with-box', n({ width: 300, height: 60 }, img(400, 200), box(50, 20)));

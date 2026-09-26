@@ -383,8 +383,24 @@ struct Solver {
         // its natural one; a ratio in the style wins.
         if chosen.aspectRatio == nil, let ratio = nodes[index].content?.naturalRatio {
             chosen.aspectRatio = ratio
+            chosen.aspectRatioIsContentBox = true
         }
         return chosen
+    }
+
+    /// The aspect ratio of node `index` with `style`, or `nil`.
+    func boxRatio(_ index: Int, style: FlexStyle) -> BoxRatio? {
+        guard let value = style.aspectRatio, value > 0 else { return nil }
+        guard style.aspectRatioIsContentBox else {
+            return BoxRatio(value: value, paddingWidth: 0, paddingHeight: 0)
+        }
+
+        let padding = style.padding.physical(nodes[index].direction)
+        return BoxRatio(
+            value: value,
+            paddingWidth: max(0, padding.left) + max(0, padding.right),
+            paddingHeight: max(0, padding.top) + max(0, padding.bottom)
+        )
     }
 
     /// The border-box size of node `index`. `known` sizes are final and used as-is; `parent`
@@ -534,7 +550,7 @@ struct Solver {
         var width = own.width
         var height = own.height
 
-        if let ratio = style.aspectRatio, ratio > 0 {
+        if let ratio = boxRatio(index, style: style) {
             if width == nil && height == nil {
                 // Min/max heights limit the width too, through the ratio (CSS Sizing 4 §5.2); so
                 // does the vertical padding, below which the height cannot go.
@@ -542,8 +558,8 @@ struct Solver {
                 let maxHeight = style.maxHeight.resolve(parent.height) ?? .infinity
                 width = clamp(
                     max(
-                        max(minHeight, own.paddingHeight) * ratio,
-                        min(maxHeight * ratio, contentWidth)
+                        ratio.width(forHeight: max(minHeight, own.paddingHeight)),
+                        min(ratio.width(forHeight: maxHeight), contentWidth)
                     ),
                     own.minWidth,
                     own.maxWidth,
@@ -553,7 +569,7 @@ struct Solver {
 
             if let base = width, height == nil {
                 height = ratioDependent(
-                    base / ratio,
+                    ratio.height(forWidth: base),
                     content: contentHeight,
                     minimum: own.minHeight,
                     maximum: own.maxHeight,
@@ -566,7 +582,7 @@ struct Solver {
                 let minContentWidth =
                     (nodes[index].content?.minContentWidth ?? 0) + own.paddingWidth
                 width = ratioDependent(
-                    base * ratio,
+                    ratio.width(forHeight: base),
                     content: minContentWidth,
                     minimum: own.minWidth,
                     maximum: own.maxWidth,
@@ -669,24 +685,34 @@ struct Solver {
         // containing block. Only a height can be known without being definite.
         var definiteWidth = known.width ?? specifiedWidth
         var definiteHeight = known.height.map { definite.height ? $0 : nil } ?? specifiedHeight
-        if ratio != .none, let aspectRatio = style.aspectRatio, aspectRatio > 0 {
+        if ratio != .none, let aspectRatio = boxRatio(index, style: style) {
             if let base = width, height == nil {
                 if ratio == .size {
-                    height = clamp(base / aspectRatio, minHeight, maxHeight, paddingHeight)
+                    height = clamp(
+                        aspectRatio.height(forWidth: base),
+                        minHeight,
+                        maxHeight,
+                        paddingHeight
+                    )
                 }
                 definiteHeight = definiteWidth.map {
-                    clamp($0 / aspectRatio, minHeight, maxHeight, paddingHeight)
+                    clamp(aspectRatio.height(forWidth: $0), minHeight, maxHeight, paddingHeight)
                 }
             } else if let base = height, width == nil {
                 if ratio == .size {
-                    width = clamp(base * aspectRatio, minWidth, maxWidth, paddingWidth)
+                    width = clamp(
+                        aspectRatio.width(forHeight: base),
+                        minWidth,
+                        maxWidth,
+                        paddingWidth
+                    )
                 }
                 // A content width is an intrinsic width: percentages of the width stay cyclic
                 // while it is measured. A content height is a layout at a known width, where
                 // the height the ratio gives is definite.
                 if !ignoreWidth {
                     definiteWidth = definiteHeight.map {
-                        clamp($0 * aspectRatio, minWidth, maxWidth, paddingWidth)
+                        clamp(aspectRatio.width(forHeight: $0), minWidth, maxWidth, paddingWidth)
                     }
                 }
             }

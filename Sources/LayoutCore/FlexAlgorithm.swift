@@ -41,8 +41,8 @@ struct FlexItem {
     /// `align-self: stretch` takes effect: the cross size property is `auto` (a percentage
     /// is not, even when it cannot be resolved) and neither cross margin is `auto`.
     let stretches: Bool
-    /// Main size per point of cross size, from `aspect-ratio`.
-    let ratio: Double?
+    /// The aspect ratio, which gives the main size from the cross size.
+    let ratio: BoxRatio?
     /// Cross size already known while the flex base size is determined (§9.2 step 3, §9.8).
     let crossForBasis: Double?
     /// `flex-basis` is a length or a resolved percentage, not `auto` or an unresolvable
@@ -437,7 +437,7 @@ extension Solver {
             ratio: .none,
             definite: definite
         )
-        guard let ratio = style.aspectRatio, ratio > 0 else { return nil }
+        guard let ratio = boxRatio(index, style: style) else { return nil }
 
         if let axis = contentOnly {
             return try ratioContent(
@@ -469,7 +469,7 @@ extension Solver {
                 definite: definite
             )
             let width = ratioDependent(
-                height * ratio,
+                ratio.width(forHeight: height),
                 content: minContent.width,
                 minimum: own.minWidth,
                 maximum: own.maxWidth,
@@ -506,8 +506,8 @@ extension Solver {
             // does the vertical padding, below which the height cannot go.
             width = clamp(
                 max(
-                    max(own.minHeight, own.paddingHeight) * ratio,
-                    min(own.maxHeight * ratio, content.width)
+                    ratio.width(forHeight: max(own.minHeight, own.paddingHeight)),
+                    min(ratio.width(forHeight: own.maxHeight), content.width)
                 ),
                 own.minWidth,
                 own.maxWidth,
@@ -527,7 +527,7 @@ extension Solver {
                 ratio: .definiteSize
             )
             height = ratioDependent(
-                width / ratio,
+                ratio.height(forWidth: width),
                 content: content.height,
                 minimum: own.minHeight,
                 maximum: own.maxHeight,
@@ -539,7 +539,7 @@ extension Solver {
         // Raised to the content, the box keeps the ratio's height as the base for its
         // children's percentages (Chromium).
         let ratioHeight = width.map {
-            clamp($0 / ratio, own.minHeight, own.maxHeight, own.paddingHeight)
+            clamp(ratio.height(forWidth: $0), own.minHeight, own.maxHeight, own.paddingHeight)
         }
         wantsBaseline = reportsBaseline
         return try flexLayout(
@@ -564,7 +564,7 @@ extension Solver {
     private mutating func ratioContent(
         _ index: Int,
         axis: Axis,
-        ratio: Double,
+        ratio: BoxRatio,
         own: OwnSize,
         known: OptionalSize,
         parent: OptionalSize,
@@ -582,11 +582,11 @@ extension Solver {
         case .horizontal:
             if let height = own.height {
                 // The width is the ratio's; the content only sets its minimum: min-content.
-                transferred = max(own.paddingWidth, height * ratio)
+                transferred = max(own.paddingWidth, ratio.width(forHeight: height))
                 measuredAvailable.width = .minContent
             } else {
-                transferred = max(own.minHeight, own.paddingHeight) * ratio
-                limit = max(transferred, own.maxHeight * ratio)
+                transferred = ratio.width(forHeight: max(own.minHeight, own.paddingHeight))
+                limit = max(transferred, ratio.width(forHeight: own.maxHeight))
             }
         case .vertical:
             var width = own.width
@@ -602,7 +602,7 @@ extension Solver {
                 )
                 width = clamp(content.width, own.minWidth, own.maxWidth, own.paddingWidth)
             }
-            transferred = max(own.paddingHeight, (width ?? 0) / ratio)
+            transferred = max(own.paddingHeight, ratio.height(forWidth: width ?? 0))
             // The width is settled, so the height it transfers is the one stretched children
             // take while the content is measured.
             measuredKnown.width = width
@@ -1125,7 +1125,7 @@ extension Solver {
             crossForBasis = clamp(innerCross - marginsCross, minCross, maxCross, paddingCross)
         }
 
-        let ratio = style.aspectRatio.flatMap { $0 > 0 ? (isRow ? $0 : 1 / $0) : nil }
+        let ratio = boxRatio(child, style: style)
         let basisIsDefinite =
             style.basis.resolve(isRow ? itemParent.width : itemParent.height) != nil
         var item = FlexItem(
@@ -1176,7 +1176,8 @@ extension Solver {
             item.basis = size
             basisCoversMinimum = true
         } else if let ratio, let cross = crossForBasis {
-            item.basis = cross * ratio  // B: aspect ratio with a definite cross size
+            // B: aspect ratio with a definite cross size
+            item.basis = isRow ? ratio.width(forHeight: cross) : ratio.height(forWidth: cross)
         } else {
             // C–E: size the item as max-content (min-content under a min-content constraint).
             basisCoversMinimum = true
