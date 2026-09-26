@@ -580,3 +580,62 @@ protocol ViewportDependent: AnyObject {
 }
 
 extension LazyStack: ViewportDependent {}
+
+/// A list laid out by where it shows, as assistive technologies reach all its items: by
+/// index, laid out or not.
+@MainActor
+protocol AccessibleList: AnyObject {
+    var itemCount: Int { get }
+    var laidOutItems: Range<Int> { get }
+    /// The index of the item `node`, placed by the list, stands for.
+    func index(ofPlaced node: Node) -> Int?
+    /// Where the item at `index` is expected to be, in the list's coordinates: where it is,
+    /// once laid out.
+    func expectedFrame(ofItem index: Int) -> LayoutRect
+    /// Scrolls the list's scroll so that the item at `index` shows; returns whether it could.
+    func reveal(itemAt index: Int) -> Bool
+}
+
+extension LazyStack: AccessibleList {
+    var itemCount: Int { items.count }
+
+    func index(ofPlaced node: Node) -> Int? {
+        guard placedAreMounted, let offset = placed.firstIndex(where: { $0.node === node })
+        else { return nil }
+
+        return laidOutItems.lowerBound + offset
+    }
+
+    func expectedFrame(ofItem index: Int) -> LayoutRect {
+        updateStarts()
+        let line = min(max(0, index / perLine), max(0, lineCount - 1))
+        let start = lineCount == 0 ? 0 : starts[line]
+        let length = lineCount == 0 ? estimatedLength : end(of: line) - start
+        let breadth = across(frame.size)
+        let share = (breadth - spacing * Double(perLine - 1)) / Double(perLine)
+        let lane = Double(index % perLine) * (share + spacing)
+        let rightToLeft = (host ?? NodeHost.preparing)?.direction == .rightToLeft
+        switch axis {
+        case .vertical:
+            return LayoutRect(
+                x: rightToLeft ? breadth - lane - share : lane,
+                y: start,
+                width: share,
+                height: length
+            )
+        case .horizontal:
+            return LayoutRect(
+                x: isReversed ? frame.size.width - start - length : start,
+                y: lane,
+                width: length,
+                height: share
+            )
+        }
+    }
+
+    func reveal(itemAt index: Int) -> Bool {
+        guard items.indices.contains(index) else { return false }
+
+        return scroll(to: items[index].id)
+    }
+}

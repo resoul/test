@@ -7,38 +7,46 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		AA00000000000000000010 /* LayoutCore in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000F /* LayoutCore */; };
-		AA00000000000000000012 /* StateCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000011 /* StateCore */; };
-		AA00000000000000000014 /* Nodes in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000013 /* Nodes */; };
-		AA00000000000000000016 /* NodesRender in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000015 /* NodesRender */; };
-		AA00000000000000000018 /* NodesAppKit in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000017 /* NodesAppKit */; };
-		AA00000000000000000021 /* LayoutCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000020 /* LayoutCore */; };
-		AA00000000000000000023 /* StateCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000022 /* StateCore */; };
-		AA00000000000000000025 /* Nodes in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000024 /* Nodes */; };
-		AA00000000000000000027 /* NodesRender in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000026 /* NodesRender */; };
-		AA00000000000000000029 /* NodesUIKit in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000028 /* NodesUIKit */; };
-		AA00000000000000000032 /* LayoutCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000031 /* LayoutCore */; };
-		AA00000000000000000034 /* StateCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000033 /* StateCore */; };
-		AA00000000000000000036 /* Nodes in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000035 /* Nodes */; };
-		AA00000000000000000038 /* NodesRender in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000037 /* NodesRender */; };
-		AA0000000000000000003A /* NodesUIKit in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000039 /* NodesUIKit */; };
+		AA00000000000000000011 /* LayoutCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000010 /* LayoutCore */; };
+		AA00000000000000000013 /* StateCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000012 /* StateCore */; };
+		AA00000000000000000015 /* Nodes in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000014 /* Nodes */; };
+		AA00000000000000000017 /* NodesRender in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000016 /* NodesRender */; };
+		AA00000000000000000019 /* NodesAppKit in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000018 /* NodesAppKit */; };
+		AA00000000000000000022 /* LayoutCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000021 /* LayoutCore */; };
+		AA00000000000000000024 /* StateCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000023 /* StateCore */; };
+		AA00000000000000000026 /* Nodes in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000025 /* Nodes */; };
+		AA00000000000000000028 /* NodesRender in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000027 /* NodesRender */; };
+		AA0000000000000000002A /* NodesUIKit in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000029 /* NodesUIKit */; };
+		AA00000000000000000033 /* LayoutCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000032 /* LayoutCore */; };
+		AA00000000000000000035 /* StateCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000034 /* StateCore */; };
+		AA00000000000000000037 /* Nodes in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000036 /* Nodes */; };
+		AA00000000000000000039 /* NodesRender in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000038 /* NodesRender */; };
+		AA0000000000000000003B /* NodesUIKit in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000003A /* NodesUIKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		AB00000000000000000042 /* PBXContainerItemProxy */ = {
+		AB0000000000000000004A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = A000000000000000000001 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = A30000000000000000002A;
+			remoteGlobalIDString = A30000000000000000002B;
 			remoteInfo = LayoutDemoTV;
+		};
+		AB0000000000000000004C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A30000000000000000001A;
+			remoteInfo = LayoutDemoiOS;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		A400000000000000000009 /* LayoutDemoMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LayoutDemoMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A40000000000000000001A /* LayoutDemoiOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LayoutDemoiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A40000000000000000002B /* LayoutDemoTV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LayoutDemoTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A40000000000000000003C /* LayoutDemoTVUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LayoutDemoTVUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A40000000000000000000A /* LayoutDemoMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LayoutDemoMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A40000000000000000001B /* LayoutDemoiOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LayoutDemoiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A40000000000000000002C /* LayoutDemoTV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LayoutDemoTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A40000000000000000003D /* LayoutDemoTVUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LayoutDemoTVUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A400000000000000000044 /* LayoutDemoiOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LayoutDemoiOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -47,46 +55,54 @@
 		A200000000000000000005 /* iOS */ = {isa = PBXFileSystemSynchronizedRootGroup; path = iOS; sourceTree = "<group>"; };
 		A200000000000000000006 /* TV */ = {isa = PBXFileSystemSynchronizedRootGroup; path = TV; sourceTree = "<group>"; };
 		A200000000000000000007 /* TVUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; path = TVUITests; sourceTree = "<group>"; };
+		A200000000000000000008 /* iOSUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; path = iOSUITests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		A60000000000000000000B /* Frameworks */ = {
+		A60000000000000000000C /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA00000000000000000010 /* LayoutCore in Frameworks */,
-				AA00000000000000000012 /* StateCore in Frameworks */,
-				AA00000000000000000014 /* Nodes in Frameworks */,
-				AA00000000000000000016 /* NodesRender in Frameworks */,
-				AA00000000000000000018 /* NodesAppKit in Frameworks */,
+				AA00000000000000000011 /* LayoutCore in Frameworks */,
+				AA00000000000000000013 /* StateCore in Frameworks */,
+				AA00000000000000000015 /* Nodes in Frameworks */,
+				AA00000000000000000017 /* NodesRender in Frameworks */,
+				AA00000000000000000019 /* NodesAppKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		A60000000000000000001C /* Frameworks */ = {
+		A60000000000000000001D /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA00000000000000000021 /* LayoutCore in Frameworks */,
-				AA00000000000000000023 /* StateCore in Frameworks */,
-				AA00000000000000000025 /* Nodes in Frameworks */,
-				AA00000000000000000027 /* NodesRender in Frameworks */,
-				AA00000000000000000029 /* NodesUIKit in Frameworks */,
+				AA00000000000000000022 /* LayoutCore in Frameworks */,
+				AA00000000000000000024 /* StateCore in Frameworks */,
+				AA00000000000000000026 /* Nodes in Frameworks */,
+				AA00000000000000000028 /* NodesRender in Frameworks */,
+				AA0000000000000000002A /* NodesUIKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		A60000000000000000002D /* Frameworks */ = {
+		A60000000000000000002E /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA00000000000000000032 /* LayoutCore in Frameworks */,
-				AA00000000000000000034 /* StateCore in Frameworks */,
-				AA00000000000000000036 /* Nodes in Frameworks */,
-				AA00000000000000000038 /* NodesRender in Frameworks */,
-				AA0000000000000000003A /* NodesUIKit in Frameworks */,
+				AA00000000000000000033 /* LayoutCore in Frameworks */,
+				AA00000000000000000035 /* StateCore in Frameworks */,
+				AA00000000000000000037 /* Nodes in Frameworks */,
+				AA00000000000000000039 /* NodesRender in Frameworks */,
+				AA0000000000000000003B /* NodesUIKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		A60000000000000000003E /* Frameworks */ = {
+		A60000000000000000003F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A600000000000000000046 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -96,7 +112,7 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		A200000000000000000047 = {
+		A200000000000000000051 = {
 			isa = PBXGroup;
 			children = (
 				A200000000000000000003 /* Shared */,
@@ -104,17 +120,19 @@
 				A200000000000000000005 /* iOS */,
 				A200000000000000000006 /* TV */,
 				A200000000000000000007 /* TVUITests */,
-				A200000000000000000048 /* Products */,
+				A200000000000000000008 /* iOSUITests */,
+				A200000000000000000052 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		A200000000000000000048 /* Products */ = {
+		A200000000000000000052 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A400000000000000000009 /* LayoutDemoMac.app */,
-				A40000000000000000001A /* LayoutDemoiOS.app */,
-				A40000000000000000002B /* LayoutDemoTV.app */,
-				A40000000000000000003C /* LayoutDemoTVUITests.xctest */,
+				A40000000000000000000A /* LayoutDemoMac.app */,
+				A40000000000000000001B /* LayoutDemoiOS.app */,
+				A40000000000000000002C /* LayoutDemoTV.app */,
+				A40000000000000000003D /* LayoutDemoTVUITests.xctest */,
+				A400000000000000000044 /* LayoutDemoiOSUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -122,12 +140,12 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		A300000000000000000008 /* LayoutDemoMac */ = {
+		A300000000000000000009 /* LayoutDemoMac */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A70000000000000000000C /* Build configuration list for PBXNativeTarget "LayoutDemoMac" */;
+			buildConfigurationList = A70000000000000000000D /* Build configuration list for PBXNativeTarget "LayoutDemoMac" */;
 			buildPhases = (
-				A50000000000000000000A /* Sources */,
-				A60000000000000000000B /* Frameworks */,
+				A50000000000000000000B /* Sources */,
+				A60000000000000000000C /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -139,22 +157,22 @@
 			);
 			name = LayoutDemoMac;
 			packageProductDependencies = (
-				A90000000000000000000F /* LayoutCore */,
-				A900000000000000000011 /* StateCore */,
-				A900000000000000000013 /* Nodes */,
-				A900000000000000000015 /* NodesRender */,
-				A900000000000000000017 /* NodesAppKit */,
+				A900000000000000000010 /* LayoutCore */,
+				A900000000000000000012 /* StateCore */,
+				A900000000000000000014 /* Nodes */,
+				A900000000000000000016 /* NodesRender */,
+				A900000000000000000018 /* NodesAppKit */,
 			);
 			productName = LayoutDemoMac;
-			productReference = A400000000000000000009 /* LayoutDemoMac.app */;
+			productReference = A40000000000000000000A /* LayoutDemoMac.app */;
 			productType = "com.apple.product-type.application";
 		};
-		A300000000000000000019 /* LayoutDemoiOS */ = {
+		A30000000000000000001A /* LayoutDemoiOS */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A70000000000000000001D /* Build configuration list for PBXNativeTarget "LayoutDemoiOS" */;
+			buildConfigurationList = A70000000000000000001E /* Build configuration list for PBXNativeTarget "LayoutDemoiOS" */;
 			buildPhases = (
-				A50000000000000000001B /* Sources */,
-				A60000000000000000001C /* Frameworks */,
+				A50000000000000000001C /* Sources */,
+				A60000000000000000001D /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -166,22 +184,22 @@
 			);
 			name = LayoutDemoiOS;
 			packageProductDependencies = (
-				A900000000000000000020 /* LayoutCore */,
-				A900000000000000000022 /* StateCore */,
-				A900000000000000000024 /* Nodes */,
-				A900000000000000000026 /* NodesRender */,
-				A900000000000000000028 /* NodesUIKit */,
+				A900000000000000000021 /* LayoutCore */,
+				A900000000000000000023 /* StateCore */,
+				A900000000000000000025 /* Nodes */,
+				A900000000000000000027 /* NodesRender */,
+				A900000000000000000029 /* NodesUIKit */,
 			);
 			productName = LayoutDemoiOS;
-			productReference = A40000000000000000001A /* LayoutDemoiOS.app */;
+			productReference = A40000000000000000001B /* LayoutDemoiOS.app */;
 			productType = "com.apple.product-type.application";
 		};
-		A30000000000000000002A /* LayoutDemoTV */ = {
+		A30000000000000000002B /* LayoutDemoTV */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A70000000000000000002E /* Build configuration list for PBXNativeTarget "LayoutDemoTV" */;
+			buildConfigurationList = A70000000000000000002F /* Build configuration list for PBXNativeTarget "LayoutDemoTV" */;
 			buildPhases = (
-				A50000000000000000002C /* Sources */,
-				A60000000000000000002D /* Frameworks */,
+				A50000000000000000002D /* Sources */,
+				A60000000000000000002E /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -193,27 +211,27 @@
 			);
 			name = LayoutDemoTV;
 			packageProductDependencies = (
-				A900000000000000000031 /* LayoutCore */,
-				A900000000000000000033 /* StateCore */,
-				A900000000000000000035 /* Nodes */,
-				A900000000000000000037 /* NodesRender */,
-				A900000000000000000039 /* NodesUIKit */,
+				A900000000000000000032 /* LayoutCore */,
+				A900000000000000000034 /* StateCore */,
+				A900000000000000000036 /* Nodes */,
+				A900000000000000000038 /* NodesRender */,
+				A90000000000000000003A /* NodesUIKit */,
 			);
 			productName = LayoutDemoTV;
-			productReference = A40000000000000000002B /* LayoutDemoTV.app */;
+			productReference = A40000000000000000002C /* LayoutDemoTV.app */;
 			productType = "com.apple.product-type.application";
 		};
-		A30000000000000000003B /* LayoutDemoTVUITests */ = {
+		A30000000000000000003C /* LayoutDemoTVUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A70000000000000000003F /* Build configuration list for PBXNativeTarget "LayoutDemoTVUITests" */;
+			buildConfigurationList = A700000000000000000040 /* Build configuration list for PBXNativeTarget "LayoutDemoTVUITests" */;
 			buildPhases = (
-				A50000000000000000003D /* Sources */,
-				A60000000000000000003E /* Frameworks */,
+				A50000000000000000003E /* Sources */,
+				A60000000000000000003F /* Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				AC00000000000000000043 /* PBXTargetDependency */,
+				AC0000000000000000004B /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				A200000000000000000007 /* TVUITests */,
@@ -222,7 +240,29 @@
 			packageProductDependencies = (
 			);
 			productName = LayoutDemoTVUITests;
-			productReference = A40000000000000000003C /* LayoutDemoTVUITests.xctest */;
+			productReference = A40000000000000000003D /* LayoutDemoTVUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		A300000000000000000043 /* LayoutDemoiOSUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A700000000000000000047 /* Build configuration list for PBXNativeTarget "LayoutDemoiOSUITests" */;
+			buildPhases = (
+				A500000000000000000045 /* Sources */,
+				A600000000000000000046 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AC0000000000000000004D /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A200000000000000000008 /* iOSUITests */,
+			);
+			name = LayoutDemoiOSUITests;
+			packageProductDependencies = (
+			);
+			productName = LayoutDemoiOSUITests;
+			productReference = A400000000000000000044 /* LayoutDemoiOSUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
@@ -235,69 +275,81 @@
 				LastSwiftUpdateCheck = 2700;
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
-					A300000000000000000008 = {
+					A300000000000000000009 = {
 						CreatedOnToolsVersion = 27.0;
 					};
-					A300000000000000000019 = {
+					A30000000000000000001A = {
 						CreatedOnToolsVersion = 27.0;
 					};
-					A30000000000000000002A = {
+					A30000000000000000002B = {
 						CreatedOnToolsVersion = 27.0;
 					};
-					A30000000000000000003B = {
+					A30000000000000000003C = {
 						CreatedOnToolsVersion = 27.0;
-						TestTargetID = A30000000000000000002A;
+						TestTargetID = A30000000000000000002B;
+					};
+					A300000000000000000043 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = A30000000000000000001A;
 					};
 				};
 			};
-			buildConfigurationList = A700000000000000000044 /* Build configuration list for PBXProject "Demo" */;
+			buildConfigurationList = A70000000000000000004E /* Build configuration list for PBXProject "Demo" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
 			);
-			mainGroup = A200000000000000000047;
+			mainGroup = A200000000000000000051;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				A100000000000000000002 /* XCLocalSwiftPackageReference ".." */,
 			);
 			preferredProjectObjectVersion = 77;
-			productRefGroup = A200000000000000000048 /* Products */;
+			productRefGroup = A200000000000000000052 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				A300000000000000000008 /* LayoutDemoMac */,
-				A300000000000000000019 /* LayoutDemoiOS */,
-				A30000000000000000002A /* LayoutDemoTV */,
-				A30000000000000000003B /* LayoutDemoTVUITests */,
+				A300000000000000000009 /* LayoutDemoMac */,
+				A30000000000000000001A /* LayoutDemoiOS */,
+				A30000000000000000002B /* LayoutDemoTV */,
+				A30000000000000000003C /* LayoutDemoTVUITests */,
+				A300000000000000000043 /* LayoutDemoiOSUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXSourcesBuildPhase section */
-		A50000000000000000000A /* Sources */ = {
+		A50000000000000000000B /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		A50000000000000000001B /* Sources */ = {
+		A50000000000000000001C /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		A50000000000000000002C /* Sources */ = {
+		A50000000000000000002D /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		A50000000000000000003D /* Sources */ = {
+		A50000000000000000003E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A500000000000000000045 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -307,15 +359,20 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		AC00000000000000000043 /* PBXTargetDependency */ = {
+		AC0000000000000000004B /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = A30000000000000000002A /* LayoutDemoTV */;
-			targetProxy = AB00000000000000000042 /* PBXContainerItemProxy */;
+			target = A30000000000000000002B /* LayoutDemoTV */;
+			targetProxy = AB0000000000000000004A /* PBXContainerItemProxy */;
+		};
+		AC0000000000000000004D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A30000000000000000001A /* LayoutDemoiOS */;
+			targetProxy = AB0000000000000000004C /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		A80000000000000000000D /* Debug */ = {
+		A80000000000000000000E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "";
@@ -336,7 +393,7 @@
 			};
 			name = Debug;
 		};
-		A80000000000000000000E /* Release */ = {
+		A80000000000000000000F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "";
@@ -357,7 +414,7 @@
 			};
 			name = Release;
 		};
-		A80000000000000000001E /* Debug */ = {
+		A80000000000000000001F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
@@ -384,7 +441,7 @@
 			};
 			name = Debug;
 		};
-		A80000000000000000001F /* Release */ = {
+		A800000000000000000020 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
@@ -411,7 +468,7 @@
 			};
 			name = Release;
 		};
-		A80000000000000000002F /* Debug */ = {
+		A800000000000000000030 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "";
@@ -432,7 +489,7 @@
 			};
 			name = Debug;
 		};
-		A800000000000000000030 /* Release */ = {
+		A800000000000000000031 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "";
@@ -453,7 +510,7 @@
 			};
 			name = Release;
 		};
-		A800000000000000000040 /* Debug */ = {
+		A800000000000000000041 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGNING_ALLOWED = NO;
@@ -471,7 +528,7 @@
 			};
 			name = Debug;
 		};
-		A800000000000000000041 /* Release */ = {
+		A800000000000000000042 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGNING_ALLOWED = NO;
@@ -489,7 +546,43 @@
 			};
 			name = Release;
 		};
-		A800000000000000000045 /* Debug */ = {
+		A800000000000000000048 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.layout.demo.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = LayoutDemoiOS;
+			};
+			name = Debug;
+		};
+		A800000000000000000049 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.layout.demo.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = LayoutDemoiOS;
+			};
+			name = Release;
+		};
+		A80000000000000000004F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
@@ -503,7 +596,7 @@
 			};
 			name = Debug;
 		};
-		A800000000000000000046 /* Release */ = {
+		A800000000000000000050 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
@@ -516,47 +609,56 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A70000000000000000000C /* Build configuration list for PBXNativeTarget "LayoutDemoMac" */ = {
+		A70000000000000000000D /* Build configuration list for PBXNativeTarget "LayoutDemoMac" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				A80000000000000000000D /* Debug */,
-				A80000000000000000000E /* Release */,
+				A80000000000000000000E /* Debug */,
+				A80000000000000000000F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A70000000000000000001D /* Build configuration list for PBXNativeTarget "LayoutDemoiOS" */ = {
+		A70000000000000000001E /* Build configuration list for PBXNativeTarget "LayoutDemoiOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				A80000000000000000001E /* Debug */,
-				A80000000000000000001F /* Release */,
+				A80000000000000000001F /* Debug */,
+				A800000000000000000020 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A70000000000000000002E /* Build configuration list for PBXNativeTarget "LayoutDemoTV" */ = {
+		A70000000000000000002F /* Build configuration list for PBXNativeTarget "LayoutDemoTV" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				A80000000000000000002F /* Debug */,
-				A800000000000000000030 /* Release */,
+				A800000000000000000030 /* Debug */,
+				A800000000000000000031 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A70000000000000000003F /* Build configuration list for PBXNativeTarget "LayoutDemoTVUITests" */ = {
+		A700000000000000000040 /* Build configuration list for PBXNativeTarget "LayoutDemoTVUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				A800000000000000000040 /* Debug */,
-				A800000000000000000041 /* Release */,
+				A800000000000000000041 /* Debug */,
+				A800000000000000000042 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A700000000000000000044 /* Build configuration list for PBXProject "Demo" */ = {
+		A700000000000000000047 /* Build configuration list for PBXNativeTarget "LayoutDemoiOSUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				A800000000000000000045 /* Debug */,
-				A800000000000000000046 /* Release */,
+				A800000000000000000048 /* Debug */,
+				A800000000000000000049 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A70000000000000000004E /* Build configuration list for PBXProject "Demo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A80000000000000000004F /* Debug */,
+				A800000000000000000050 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -571,77 +673,77 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		A90000000000000000000F /* LayoutCore */ = {
+		A900000000000000000010 /* LayoutCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = LayoutCore;
 		};
-		A900000000000000000011 /* StateCore */ = {
+		A900000000000000000012 /* StateCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = StateCore;
 		};
-		A900000000000000000013 /* Nodes */ = {
+		A900000000000000000014 /* Nodes */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = Nodes;
 		};
-		A900000000000000000015 /* NodesRender */ = {
+		A900000000000000000016 /* NodesRender */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = NodesRender;
 		};
-		A900000000000000000017 /* NodesAppKit */ = {
+		A900000000000000000018 /* NodesAppKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = NodesAppKit;
 		};
-		A900000000000000000020 /* LayoutCore */ = {
+		A900000000000000000021 /* LayoutCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = LayoutCore;
 		};
-		A900000000000000000022 /* StateCore */ = {
+		A900000000000000000023 /* StateCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = StateCore;
 		};
-		A900000000000000000024 /* Nodes */ = {
+		A900000000000000000025 /* Nodes */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = Nodes;
 		};
-		A900000000000000000026 /* NodesRender */ = {
+		A900000000000000000027 /* NodesRender */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = NodesRender;
 		};
-		A900000000000000000028 /* NodesUIKit */ = {
+		A900000000000000000029 /* NodesUIKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = NodesUIKit;
 		};
-		A900000000000000000031 /* LayoutCore */ = {
+		A900000000000000000032 /* LayoutCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = LayoutCore;
 		};
-		A900000000000000000033 /* StateCore */ = {
+		A900000000000000000034 /* StateCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = StateCore;
 		};
-		A900000000000000000035 /* Nodes */ = {
+		A900000000000000000036 /* Nodes */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = Nodes;
 		};
-		A900000000000000000037 /* NodesRender */ = {
+		A900000000000000000038 /* NodesRender */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = NodesRender;
 		};
-		A900000000000000000039 /* NodesUIKit */ = {
+		A90000000000000000003A /* NodesUIKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = NodesUIKit;

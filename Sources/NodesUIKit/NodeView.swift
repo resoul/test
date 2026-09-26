@@ -29,7 +29,9 @@
         /// second.
         private var accessibilityByNode: [NodeID: NodeAccessibilityElement] = [:]
         /// The elements in reading order; `nil` after a drawing, until asked for.
-        private var accessibilityOrder: [NodeAccessibilityElement]?
+        private var accessibilityOrder: [UIAccessibilityElement]?
+        /// A container for each list laid out by where it shows, kept while the list is.
+        private var accessibilityLists: [NodeID: ListAccessibilityContainer] = [:]
         /// The focus items of the tree, one per focusable node, kept while the node is: the
         /// focus system recognizes the focused item by identity.
         private var focusItemsByNode: [NodeID: NodeFocusItem] = [:]
@@ -624,18 +626,71 @@
             set {}
         }
 
-        private func updateAccessibilityElements() -> [NodeAccessibilityElement] {
+        private func updateAccessibilityElements() -> [UIAccessibilityElement] {
             var kept: [NodeID: NodeAccessibilityElement] = [:]
-            let order = host.accessibilityItems().map { item in
+            var keptLists: [NodeID: ListAccessibilityContainer] = [:]
+            func element(
+                _ item: AccessibilityItem,
+                in container: AnyObject,
+                origin: CGPoint = .zero
+            ) -> NodeAccessibilityElement {
                 let element =
                     accessibilityByNode[item.node] ?? NodeAccessibilityElement(container: self)
-                element.update(item, frame: zoomed(item.frame))
+                element.accessibilityContainer = container
+                let frame = zoomed(item.frame)
+                element.update(item, frame: frame.offsetBy(dx: -origin.x, dy: -origin.y))
                 kept[item.node] = element
                 return element
             }
+            var order: [UIAccessibilityElement] = []
+            for entry in host.accessibilityEntries() {
+                switch entry {
+                case .element(let item):
+                    order.append(element(item, in: self))
+                case .list(let list, let items):
+                    let container =
+                        accessibilityLists[list.node]
+                        ?? ListAccessibilityContainer(view: self, list: list.node)
+                    let frame = zoomed(list.frame)
+                    container.accessibilityFrameInContainerSpace = frame
+                    container.update(
+                        list,
+                        elements: items.map { item in
+                            (
+                                item.listItem?.index ?? list.laidOut.lowerBound,
+                                element(item, in: container, origin: frame.origin)
+                            )
+                        }
+                    )
+                    keptLists[list.node] = container
+                    order.append(container)
+                }
+            }
             accessibilityByNode = kept
+            accessibilityLists = keptLists
             accessibilityOrder = order
             return order
+        }
+
+        /// Where the item at `index` of `list` is expected, in the view's points.
+        fileprivate func accessibilityFrame(ofItem index: Int, in list: NodeID) -> CGRect? {
+            host.accessibilityFrame(ofItem: index, in: list).map(zoomed)
+        }
+
+        /// VoiceOver moved to an item of `list` not laid out: the list scrolls to it and lays
+        /// it out, and VoiceOver moves on to the item's first element.
+        fileprivate func accessibilityFocused(item index: Int, in list: NodeID) {
+            guard host.revealItem(index, in: list) else { return }
+
+            layoutIfNeeded()
+            _ = updateAccessibilityElements()
+            let first = host.accessibilityItems().first {
+                $0.listItem == AccessibilityListItem(list: list, index: index)
+            }
+            UIAccessibility.post(
+                notification: .layoutChanged,
+                argument: first.flatMap { accessibilityByNode[$0.node] }
+            )
         }
 
         /// What VoiceOver says after a three-finger swipe turned a scroll's page. English by
@@ -1110,6 +1165,117 @@
             in context: UIFocusUpdateContext,
             with coordinator: UIFocusAnimationCoordinator
         ) {}
+    }
+
+    /// The elements of a list laid out by where it shows, as VoiceOver goes through a list: one
+    /// for each of all its items. The items laid out give their own elements; each of the
+    /// others stands in with the frame it is expected to take, and VoiceOver moving to it lays
+    /// the item out and moves on to its element — so VoiceOver reads the whole list and knows
+    /// where it starts and ends.
+    @MainActor
+    final class ListAccessibilityContainer: UIAccessibilityElement {
+        let list: NodeID
+        private weak var view: NodeView?
+        private var count = 0
+        private var laidOut: Range<Int> = 0..<0
+        /// The elements of the items laid out, in order, with their items' indices.
+        private var elements: [(item: Int, element: NodeAccessibilityElement)] = []
+        private var standIns: [Int: ListItemStandIn] = [:]
+
+        init(view: NodeView, list: NodeID) {
+            self.view = view
+            self.list = list
+            super.init(accessibilityContainer: view)
+            isAccessibilityElement = false
+            accessibilityContainerType = .list
+        }
+
+        func update(
+            _ list: AccessibilityList,
+            elements: [(item: Int, element: NodeAccessibilityElement)]
+        ) {
+            count = list.count
+            laidOut = list.laidOut
+            self.elements = elements
+            // Items laid out now have elements of their own.
+            standIns = standIns.filter { !laidOut.contains($0.key) && $0.key < count }
+            for standIn in standIns.values {
+                standIn.accessibilityFrameInContainerSpace = frame(ofItem: standIn.item)
+            }
+        }
+
+        /// Items before the ones laid out, the elements of those, and items after them.
+        override func accessibilityElementCount() -> Int {
+            laidOut.lowerBound + elements.count + max(0, count - laidOut.upperBound)
+        }
+
+        override func accessibilityElement(at index: Int) -> Any? {
+            guard index >= 0, index < accessibilityElementCount() else { return nil }
+
+            if index < laidOut.lowerBound {
+                return standIn(for: index)
+            }
+            let inside = index - laidOut.lowerBound
+            if inside < elements.count {
+                return elements[inside].element
+            }
+            return standIn(for: laidOut.upperBound + inside - elements.count)
+        }
+
+        override func index(ofAccessibilityElement element: Any) -> Int {
+            if let standIn = element as? ListItemStandIn, standIn.list === self {
+                let item = standIn.item
+                if item < laidOut.lowerBound { return item }
+                if item >= laidOut.upperBound {
+                    return item - laidOut.upperBound + laidOut.lowerBound + elements.count
+                }
+                return NSNotFound
+            }
+            guard let position = elements.firstIndex(where: { $0.element === element as AnyObject })
+            else { return NSNotFound }
+
+            return laidOut.lowerBound + position
+        }
+
+        private func standIn(for item: Int) -> ListItemStandIn {
+            if let standIn = standIns[item] { return standIn }
+
+            let standIn = ListItemStandIn(list: self, item: item)
+            standIn.accessibilityFrameInContainerSpace = frame(ofItem: item)
+            standIns[item] = standIn
+            return standIn
+        }
+
+        /// The frame the item is expected to take, in the container's coordinates.
+        private func frame(ofItem item: Int) -> CGRect {
+            guard let frame = view?.accessibilityFrame(ofItem: item, in: list) else { return .zero }
+
+            let origin = accessibilityFrameInContainerSpace.origin
+            return frame.offsetBy(dx: -origin.x, dy: -origin.y)
+        }
+
+        fileprivate func focused(_ standIn: ListItemStandIn) {
+            view?.accessibilityFocused(item: standIn.item, in: list)
+        }
+    }
+
+    /// An item of a list not laid out, as VoiceOver meets it: VoiceOver moving to it lays the
+    /// item out and moves on to its element.
+    @MainActor
+    final class ListItemStandIn: UIAccessibilityElement {
+        fileprivate unowned let list: ListAccessibilityContainer
+        let item: Int
+
+        init(list: ListAccessibilityContainer, item: Int) {
+            self.list = list
+            self.item = item
+            super.init(accessibilityContainer: list)
+            isAccessibilityElement = true
+        }
+
+        override func accessibilityElementDidBecomeFocused() {
+            list.focused(self)
+        }
     }
 
     /// One accessibility element of a node tree. It keeps the node's identity and asks the

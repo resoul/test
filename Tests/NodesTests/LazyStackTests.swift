@@ -26,6 +26,7 @@ private final class Cell: Node {
     func showing(_ entry: Entry) -> Cell {
         if entry.length != self.entry.length || entry.id != self.entry.id {
             self.entry = entry
+            accessibility.label = "Row \(entry.id)"
         }
         return self
     }
@@ -1097,4 +1098,118 @@ func anItemOfARowScrolledToShowsAfterATitleStuckToTheLeadingEdge() {
         }
         host.detach()
     }
+}
+
+// MARK: - Assistive technologies
+
+@Test @MainActor
+func theElementsOfAListKnowTheirItems() throws {
+    let feed = Feed(count: 1000)
+    let host = host(feed)
+    feed.scroll.contentOffset = LayoutPoint(x: 0, y: 15000)
+    host.layoutIfNeeded()
+
+    let items = host.accessibilityItems().filter { $0.listItem != nil }
+    #expect(items.map(\.listItem?.index) == Array(495..<510))
+    #expect(items.allSatisfy { $0.listItem?.list == feed.stack.id })
+    #expect(items.first.map { $0.node } == feed.cells[495].id)
+    host.detach()
+}
+
+@Test @MainActor
+func aListTellsAllItsItemsAndWhichAreLaidOut() throws {
+    let feed = Feed(count: 1000)
+    let host = host(feed)
+    feed.scroll.contentOffset = LayoutPoint(x: 0, y: 15000)
+    host.layoutIfNeeded()
+
+    let list = try #require(host.accessibilityList(feed.stack.id))
+    #expect(list.count == 1000)
+    #expect(list.laidOut == 495..<510)
+    // What shows of it: the scroll's window.
+    #expect(list.frame == LayoutRect(x: 0, y: 0, width: 200, height: 150))
+    #expect(host.accessibilityList(feed.scroll.id) == nil)
+    host.detach()
+}
+
+@Test @MainActor
+func anItemNotLaidOutHasTheFrameItIsExpectedToTake() throws {
+    let feed = Feed(count: 1000)
+    let host = host(feed)
+
+    // Item 700 is 30 × 700 points down the list, and the window shows its start.
+    let expected = try #require(host.accessibilityFrame(ofItem: 700, in: feed.stack.id))
+    #expect(expected == LayoutRect(x: 0, y: 21000, width: 200, height: 30))
+
+    #expect(host.revealItem(700, in: feed.stack.id))
+    let laidOut = try #require(host.accessibilityFrame(ofItem: 700, in: feed.stack.id))
+    let element = try #require(host.accessibilityItems().first { $0.listItem?.index == 700 })
+    #expect(element.frame == laidOut)
+    #expect(laidOut.origin.y == 0)
+    host.detach()
+}
+
+@Test @MainActor
+func revealingAnItemLaysItOutWithItsElements() throws {
+    let feed = Feed(count: 1000, length: 45)
+    let host = host(feed)
+
+    #expect(host.revealItem(600, in: feed.stack.id))
+
+    #expect(host.accessibilityItems().contains { $0.listItem?.index == 600 })
+    #expect(shown(feed.cells[600], in: feed.scroll) == 0)
+    #expect(!host.revealItem(5000, in: feed.stack.id))
+    host.detach()
+}
+
+@Test @MainActor
+func anItemOfAGridIsExpectedInItsLane() throws {
+    let grid = Grid((0..<1000).map { Entry(id: $0) })
+    let host = host(grid, width: 210, height: 150)
+
+    // Lanes of 70 points; item 301 is second in line 100.
+    let frame = try #require(host.accessibilityFrame(ofItem: 301, in: grid.stack.id))
+    #expect(frame == LayoutRect(x: 70, y: 3000, width: 70, height: 30))
+    host.detach()
+}
+
+@Test @MainActor
+func aListIsOneEntryInReadingOrderThoughNoneOfItsItemsIsLaidOut() throws {
+    // A 400-point header fills the window: the stack below lays nothing out.
+    let feed = Feed(count: 1000, header: 400)
+    feed.header?.accessibility.label = "Header"
+    let host = host(feed)
+    host.setNeedsLayout()
+    host.layoutIfNeeded()
+    #expect(feed.stack.laidOutItems.isEmpty)
+
+    let entries = host.accessibilityEntries()
+    #expect(entries.count == 2)
+    guard case .element(let header) = entries.first, case .list(let list, let items) = entries.last
+    else {
+        Issue.record("entries \(entries)")
+        return
+    }
+    #expect(header.label == "Header")
+    #expect(list.node == feed.stack.id)
+    #expect(list.count == 1000)
+    #expect(items.isEmpty)
+    host.detach()
+}
+
+@Test @MainActor
+func theEntriesOfAListHoldTheElementsOfItsItemsLaidOut() throws {
+    let feed = Feed(count: 1000)
+    let host = host(feed)
+
+    let entries = host.accessibilityEntries()
+    #expect(entries.count == 1)
+    guard case .list(let list, let items) = entries.first else {
+        Issue.record("entries \(entries)")
+        return
+    }
+    #expect(list.laidOut == 0..<10)
+    #expect(items.map(\.label) == (0..<10).map { "Row \($0)" })
+    #expect(items == host.accessibilityItems())
+    host.detach()
 }

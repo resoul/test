@@ -82,6 +82,13 @@ xcodebuild test -scheme Espalier-Package -destination 'platform=tvOS Simulator,n
 cd Demo && xcodebuild test -project Demo.xcodeproj -scheme LayoutDemoTV -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'
 ```
 
+Доступность на живом экране — UI-тест iOS-демо (рамки элементов, какими их видит система
+доступности; в модульных тестах экранные рамки нулевые):
+
+```sh
+cd Demo && xcodebuild test -project Demo.xcodeproj -scheme LayoutDemoiOS -destination 'platform=iOS Simulator,name=iPhone 17'
+```
+
 ## Отчётность
 
 - Каждый найденный дефект — строка в [docs/defects.md](docs/defects.md) в момент
