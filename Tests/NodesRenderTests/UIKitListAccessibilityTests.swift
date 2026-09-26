@@ -57,7 +57,7 @@
     }
 
     @Test @MainActor
-    func aLazyListIsAListContainerOfAllItsItems() throws {
+    func aLazyListIsAContainerOfAllItsItems() throws {
         let screen = Screen()
         let view = view(of: screen)
         let elements = try #require(view.accessibilityElements as? [UIAccessibilityElement])
@@ -66,7 +66,7 @@
         #expect(elements[0].accessibilityLabel == "Row -1")
         #expect(elements[2].accessibilityLabel == "Row -2")
         let list = try #require(elements[1] as? ListAccessibilityContainer)
-        #expect(list.accessibilityContainerType == .list)
+        #expect(list.accessibilityContainerType == .dataTable)
         #expect(!list.isAccessibilityElement)
         #expect(
             list.accessibilityFrameInContainerSpace == CGRect(x: 0, y: 30, width: 200, height: 150)
@@ -216,6 +216,67 @@
         #expect(standIn.item == 700)
         standIn.accessibilityElementDidBecomeFocused()
         #expect(screen.stack.laidOutItems.contains(700))
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func eachElementOfAListTellsItsRowAmongAllItems() throws {
+        let screen = Screen()
+        let view = view(of: screen)
+        let elements = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+        let list = try #require(elements[1] as? ListAccessibilityContainer)
+
+        // A table of a thousand rows and one column.
+        #expect(list.accessibilityRowCount() == 1000)
+        #expect(list.accessibilityColumnCount() == 1)
+        let laidOut = screen.stack.laidOutItems
+        let row = laidOut.lowerBound + 2
+        let element = try #require(
+            list.accessibilityDataTableCellElement(forRow: row, column: 0)
+                as? NodeAccessibilityElement
+        )
+        #expect(element.accessibilityLabel == "Row \(row)")
+        #expect(element.accessibilityRowRange() == NSRange(location: row, length: 1))
+        #expect(element.accessibilityColumnRange() == NSRange(location: 0, length: 1))
+        let standIn = try #require(
+            list.accessibilityDataTableCellElement(forRow: 700, column: 0) as? ListItemStandIn
+        )
+        #expect(standIn.item == 700)
+        #expect(standIn.accessibilityRowRange() == NSRange(location: 700, length: 1))
+        #expect(standIn.accessibilityColumnRange() == NSRange(location: 0, length: 1))
+        #expect(list.accessibilityDataTableCellElement(forRow: 1000, column: 0) == nil)
+        #expect(list.accessibilityDataTableCellElement(forRow: 5, column: 1) == nil)
+
+        // Elements outside the list are in no table.
+        let title = try #require(elements[0] as? NodeAccessibilityElement)
+        #expect(title.accessibilityRowRange().location == NSNotFound)
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func theElementsOfOneItemShareItsRow() throws {
+        let screen = PairScreen()
+        let view = NodeView(root: screen)
+        view.zoom = 1
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 150)
+        view.layoutIfNeeded()
+        let elements = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+        let list = try #require(elements.first as? ListAccessibilityContainer)
+
+        let first = screen.stack.laidOutItems.lowerBound
+        // Items before those laid out stand in one each; the second item laid out gives the
+        // third and fourth elements after them.
+        let name = try #require(
+            list.accessibilityElement(at: first + 2) as? NodeAccessibilityElement
+        )
+        let button = try #require(
+            list.accessibilityElement(at: first + 3) as? NodeAccessibilityElement
+        )
+        #expect(button.accessibilityLabel == "Open \(first + 1)")
+        #expect(name.accessibilityRowRange() == NSRange(location: first + 1, length: 1))
+        #expect(button.accessibilityRowRange() == NSRange(location: first + 1, length: 1))
+        // The cell of the row is the item's first element.
+        #expect(list.accessibilityDataTableCellElement(forRow: first + 1, column: 0) === name)
         view.host.detach()
     }
 #endif

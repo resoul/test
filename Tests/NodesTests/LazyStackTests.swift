@@ -1174,6 +1174,69 @@ func anItemOfAGridIsExpectedInItsLane() throws {
 }
 
 @Test @MainActor
+func aListIsATableOfOneColumnWithARowForEachItem() throws {
+    let feed = Feed(count: 1000)
+    let host = host(feed)
+
+    let list = try #require(host.accessibilityList(feed.stack.id))
+    #expect(list.rowCount == 1000)
+    #expect(list.columnCount == 1)
+    #expect(list.position(ofItem: 495) == (495, 0))
+    #expect(list.item(row: 999, column: 0) == 999)
+    #expect(list.item(row: 1000, column: 0) == nil)
+    #expect(list.item(row: 5, column: 1) == nil)
+    host.detach()
+}
+
+@Test @MainActor
+func aGridIsATableOfItsLinesAndLanes() throws {
+    // Three lanes of ten items: three full lines and one of a single item.
+    let grid = Grid((0..<10).map { Entry(id: $0) })
+    let host = host(grid, width: 210, height: 150)
+
+    let list = try #require(host.accessibilityList(grid.stack.id))
+    #expect(list.rowCount == 4)
+    #expect(list.columnCount == 3)
+    #expect(list.position(ofItem: 7) == (2, 1))
+    #expect(list.item(row: 2, column: 1) == 7)
+    #expect(list.item(row: 3, column: 0) == 9)
+    #expect(list.item(row: 3, column: 1) == nil)
+    host.detach()
+}
+
+@Test @MainActor
+func aHorizontalListIsATableOfItsLanesAndLines() throws {
+    let grid = Grid((0..<10).map { Entry(id: $0) })
+    let across = AccessibilityList(
+        node: grid.id,
+        count: 10,
+        laidOut: 0..<0,
+        frame: LayoutRect(x: 0, y: 0, width: 0, height: 0),
+        axis: .horizontal,
+        lanes: 2
+    )
+
+    // Lanes are the rows, lines the columns.
+    #expect(across.rowCount == 2)
+    #expect(across.columnCount == 5)
+    #expect(across.position(ofItem: 7) == (1, 3))
+    #expect(across.item(row: 1, column: 3) == 7)
+    #expect(across.item(row: 0, column: 5) == nil)
+
+    let one = AccessibilityList(
+        node: grid.id,
+        count: 3,
+        laidOut: 0..<0,
+        frame: LayoutRect(x: 0, y: 0, width: 0, height: 0),
+        axis: .horizontal,
+        lanes: 4
+    )
+    // Fewer items than lanes: only as many rows as items.
+    #expect(one.rowCount == 3)
+    #expect(one.columnCount == 1)
+}
+
+@Test @MainActor
 func aListIsOneEntryInReadingOrderThoughNoneOfItsItemsIsLaidOut() throws {
     // A 400-point header fills the window: the stack below lays nothing out.
     let feed = Feed(count: 1000, header: 400)

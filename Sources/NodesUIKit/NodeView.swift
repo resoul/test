@@ -1170,14 +1170,20 @@
     /// The elements of a list laid out by where it shows, as VoiceOver goes through a list: one
     /// for each of all its items. The items laid out give their own elements; each of the
     /// others stands in with the frame it is expected to take, and VoiceOver moving to it lays
-    /// the item out and moves on to its element — so VoiceOver reads the whole list and knows
-    /// where it starts and ends.
+    /// the item out and moves on to its element — so VoiceOver reads the whole list.
+    ///
+    /// It is a data table rather than a plain list: that is how UIKit tells VoiceOver where an
+    /// element is among all of them — its row and column, and how many there are. A plain
+    /// list is one column, a grid has a column for each lane.
     @MainActor
-    final class ListAccessibilityContainer: UIAccessibilityElement {
+    final class ListAccessibilityContainer: UIAccessibilityElement,
+        UIAccessibilityContainerDataTable
+    {
         let list: NodeID
         private weak var view: NodeView?
         private var count = 0
         private var laidOut: Range<Int> = 0..<0
+        private var table: AccessibilityList?
         /// The elements of the items laid out, in order, with their items' indices.
         private var elements: [(item: Int, element: NodeAccessibilityElement)] = []
         private var standIns: [Int: ListItemStandIn] = [:]
@@ -1187,7 +1193,7 @@
             self.list = list
             super.init(accessibilityContainer: view)
             isAccessibilityElement = false
-            accessibilityContainerType = .list
+            accessibilityContainerType = .dataTable
         }
 
         func update(
@@ -1196,12 +1202,38 @@
         ) {
             count = list.count
             laidOut = list.laidOut
+            table = list
             self.elements = elements
+            for (item, element) in elements {
+                element.tablePosition = list.position(ofItem: item)
+            }
             // Items laid out now have elements of their own.
             standIns = standIns.filter { !laidOut.contains($0.key) && $0.key < count }
             for standIn in standIns.values {
                 standIn.accessibilityFrameInContainerSpace = frame(ofItem: standIn.item)
+                standIn.tablePosition = list.position(ofItem: standIn.item)
             }
+        }
+
+        func accessibilityRowCount() -> Int {
+            table?.rowCount ?? 0
+        }
+
+        func accessibilityColumnCount() -> Int {
+            table?.columnCount ?? 0
+        }
+
+        /// The first element of the item at `row` and `column`, or its stand-in.
+        func accessibilityDataTableCellElement(
+            forRow row: Int,
+            column: Int
+        ) -> (any UIAccessibilityContainerDataTableCell)? {
+            guard let item = table?.item(row: row, column: column) else { return nil }
+
+            if laidOut.contains(item) {
+                return elements.first { $0.item == item }?.element
+            }
+            return standIn(for: item)
         }
 
         /// Items before the ones laid out, the elements of those, and items after them.
@@ -1242,6 +1274,7 @@
 
             let standIn = ListItemStandIn(list: self, item: item)
             standIn.accessibilityFrameInContainerSpace = frame(ofItem: item)
+            standIn.tablePosition = table?.position(ofItem: item)
             standIns[item] = standIn
             return standIn
         }
@@ -1262,9 +1295,10 @@
     /// An item of a list not laid out, as VoiceOver meets it: VoiceOver moving to it lays the
     /// item out and moves on to its element.
     @MainActor
-    final class ListItemStandIn: UIAccessibilityElement {
+    final class ListItemStandIn: UIAccessibilityElement, UIAccessibilityContainerDataTableCell {
         fileprivate unowned let list: ListAccessibilityContainer
         let item: Int
+        fileprivate(set) var tablePosition: (row: Int, column: Int)?
 
         init(list: ListAccessibilityContainer, item: Int) {
             self.list = list
@@ -1276,14 +1310,26 @@
         override func accessibilityElementDidBecomeFocused() {
             list.focused(self)
         }
+
+        func accessibilityRowRange() -> NSRange {
+            tableRange(tablePosition?.row)
+        }
+
+        func accessibilityColumnRange() -> NSRange {
+            tableRange(tablePosition?.column)
+        }
     }
 
     /// One accessibility element of a node tree. It keeps the node's identity and asks the
     /// host to act on it; it never holds the node itself.
     @MainActor
-    final class NodeAccessibilityElement: UIAccessibilityElement {
+    final class NodeAccessibilityElement: UIAccessibilityElement,
+        UIAccessibilityContainerDataTableCell
+    {
         private var node: NodeID?
         private weak var view: NodeView?
+        /// The row and column of the element's item when it belongs to a list's item.
+        fileprivate(set) var tablePosition: (row: Int, column: Int)?
 
         init(container: NodeView) {
             view = container
@@ -1298,6 +1344,16 @@
             accessibilityHint = item.hint
             accessibilityTraits = NodeAccessibilityElement.traits(item.traits)
             accessibilityFrameInContainerSpace = frame
+            // The list the element belongs to, if any, sets it again.
+            tablePosition = nil
+        }
+
+        func accessibilityRowRange() -> NSRange {
+            tableRange(tablePosition?.row)
+        }
+
+        func accessibilityColumnRange() -> NSRange {
+            tableRange(tablePosition?.column)
         }
 
         override func accessibilityActivate() -> Bool {
@@ -1328,5 +1384,11 @@
             if traits.contains(.notEnabled) { result.insert(.notEnabled) }
             return result
         }
+    }
+
+    /// A data table cell's row or column as UIKit wants it: one wide, or `NSNotFound` when
+    /// the element is not in a table.
+    private func tableRange(_ index: Int?) -> NSRange {
+        index.map { NSRange(location: $0, length: 1) } ?? NSRange(location: NSNotFound, length: 0)
     }
 #endif

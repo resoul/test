@@ -1030,7 +1030,9 @@ public final class NodeHost {
             node: node,
             count: list.itemCount,
             laidOut: list.laidOutItems,
-            frame: shownFrame(of: stack)
+            frame: shownFrame(of: stack),
+            axis: list.itemAxis,
+            lanes: list.itemLanes
         )
     }
 

@@ -587,6 +587,9 @@ extension LazyStack: ViewportDependent {}
 protocol AccessibleList: AnyObject {
     var itemCount: Int { get }
     var laidOutItems: Range<Int> { get }
+    var itemAxis: ScrollAxis { get }
+    /// How many items stand side by side; 1 or more.
+    var itemLanes: Int { get }
     /// The index of the item `node`, placed by the list, stands for.
     func index(ofPlaced node: Node) -> Int?
     /// Where the item at `index` is expected to be, in the list's coordinates: where it is,
@@ -598,6 +601,8 @@ protocol AccessibleList: AnyObject {
 
 extension LazyStack: AccessibleList {
     var itemCount: Int { items.count }
+    var itemAxis: ScrollAxis { axis }
+    var itemLanes: Int { perLine }
 
     func index(ofPlaced node: Node) -> Int? {
         guard placedAreMounted, let offset = placed.firstIndex(where: { $0.node === node })

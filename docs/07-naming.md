@@ -51,6 +51,7 @@ AGENTS.md Trellis).
 | `NodeCache` | согласовано (2026-09-25) |
 | `LazyStack` (`items`, `lanes`, `estimatedLength`, `spacing`, `laidOutItems`) — колонка или строка, раскладывающая только элементы у окна; имя по `LazyVStack`/`LazyHStack` SwiftUI, ось — `ScrollAxis`, как у `Scroll` | реализовано (2026-09-26); имена — предложено |
 | `Node.tracksScreen`, `isOnScreen`, `screenChanged(_:)` — видна ли нода; по образцу `isMounted`/`mountedChanged` | реализовано (2026-09-26); имена — предложено |
+| `AccessibilityList.rowCount`, `columnCount`, `position(ofItem:)`, `item(row:column:)` — по образцу `UIAccessibilityContainerDataTable` | реализовано (2026-09-27); имена — предложено |
 | `NodeHost.accessibilityEntries()`, `AccessibilityEntry`, `AccessibilityList`, `revealItem(_:in:)` — порядок чтения со списками; по образцу `accessibilityItems()` | реализовано (2026-09-26); имена — предложено |
 | `LazyStack.scroll(to:)` — прокрутка к элементу по `id`; по образцу `ScrollViewProxy.scrollTo(_:)` SwiftUI | реализовано (2026-09-26); имя — предложено |
 | `NodeHost.needsFrames`, `onNeedsFrames`, `advanceFrames(to:)` — покадровое движение прокрутки; по образцу `needsLayout`/`onNeedsLayout`/`layoutIfNeeded` | реализовано (2026-09-26); имена — предложено |
