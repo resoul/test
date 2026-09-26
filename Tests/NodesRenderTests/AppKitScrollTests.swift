@@ -232,7 +232,10 @@
         }
     }
 
-    @Test @MainActor
+    /// Whether the Mac's display is awake: a sleeping display gives no frames.
+    private let displayIsAwake = CGDisplayIsAsleep(CGMainDisplayID()) == 0
+
+    @Test(.enabled(if: displayIsAwake, "a sleeping display gives no frames")) @MainActor
     func anAnimatedFarScrollOfALazyStackMovesWithTheDisplaysFrames() async throws {
         let feed = Feed()
         let view = NodeNSView(root: feed)
