@@ -220,6 +220,14 @@ open class Node: LayoutElement {
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public var stickyOffset: LayoutPoint {
+        guard let scroll = enclosingScroll else { return .zero }
+
+        return stickyOffset(showing: scroll.shownOffset)
+    }
+
+    /// `stickyOffset` were the node's scroll to show `view`: the point of its content at the
+    /// window's top left corner.
+    func stickyOffset(showing view: LayoutPoint) -> LayoutPoint {
         guard let sticky, let scroll = enclosingScroll, let rect = scroll.frame(of: self) else {
             return .zero
         }
@@ -235,7 +243,6 @@ open class Node: LayoutElement {
             width: sticky.bounds.size.width,
             height: sticky.bounds.size.height
         )
-        let view = scroll.shownOffset
         let size = scroll.frame.size
         return LayoutPoint(
             x: Node.stick(

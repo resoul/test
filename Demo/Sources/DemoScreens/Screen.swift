@@ -149,13 +149,15 @@
     @MainActor
     final class Actions: Node {
         let rename: Button
-        /// Jumps to the last of the ten thousand lines with an animation: the lines on the
-        /// way are laid out as it passes them.
+        /// Jump with an animation to the last of the ten thousand lines and to the one in the
+        /// middle: the lines on the way are laid out as it passes them.
         let toEnd: Button
+        let toMiddle: Button
 
-        init(rename: Button, toEnd: Button) {
+        init(rename: Button, toEnd: Button, toMiddle: Button) {
             self.rename = rename
             self.toEnd = toEnd
+            self.toMiddle = toMiddle
             super.init()
             isFocusSection = true
         }
@@ -164,8 +166,10 @@
             FlexContainer(.row) {
                 rename
                 toEnd
+                toMiddle
             }
             .gap(12)
+            .wrap()
         }
     }
 
@@ -510,7 +514,16 @@
                     feed?.contentOffset = .zero
                 }
             }
-            let actions = Actions(rename: Button("Rename Ada", action: rename), toEnd: toEnd)
+            let toMiddle = Button("To line 5000") { [weak feed] in
+                withAnimation(.easeInOut(duration: 0.8)) {
+                    _ = (feed?.content as? Feed)?.lines.scroll(to: 5000)
+                }
+            }
+            let actions = Actions(
+                rename: Button("Rename Ada", action: rename),
+                toEnd: toEnd,
+                toMiddle: toMiddle
+            )
             feed.content = Feed(cards: cards, actions: actions, toTop: toTop)
             self.feed = feed
             super.init()
