@@ -345,8 +345,33 @@
         }
     }
 
-    /// What scrolls: the row of tiles, a title that sticks to the top, the cards and the
-    /// actions.
+    /// A line of the long list: its number, and for every third a sentence long enough to
+    /// wrap, so the lines are not all as long as the list assumes.
+    @MainActor
+    final class Line: Node {
+        struct Item: Identifiable {
+            let id: Int
+        }
+
+        let label = Text("", style: TextStyle(size: 15, color: ink))
+
+        func showing(_ item: Item) -> Line {
+            label.text =
+                item.id % 3 == 0
+                ? "Line \(item.id): only the lines near the screen are laid out, however "
+                    + "long the list is; the rest keep their space."
+                : "Line \(item.id)"
+            return self
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer { label }
+                .padding(vertical: 4)
+        }
+    }
+
+    /// What scrolls: the row of tiles, a title that sticks to the top, the cards, the
+    /// actions, the images and ten thousand lines laid out as they come near.
     @MainActor
     final class Feed: Node {
         let tiles = Scroll(.horizontal, content: Tiles())
@@ -355,6 +380,15 @@
         let gallery = Gallery()
         let cards: [ProfileCard]
         let actions: Actions
+        let linesTitle = SectionTitle("10,000 lines")
+        private let lineNodes = NodeCache<Int, Line> { _ in Line() }
+        private(set) lazy var lines = LazyStack(
+            items: (1...10_000).map(Line.Item.init),
+            estimatedLength: 26,
+            spacing: 4
+        ) { [lineNodes] item in
+            lineNodes[item.id].showing(item)
+        }
 
         init(cards: [ProfileCard], actions: Actions) {
             self.cards = cards
@@ -373,6 +407,10 @@
                 // section keeps the remote from reaching it while it is off the screen.
                 images.margin(top: 0, leading: -24, bottom: -8, trailing: -24)
                 gallery
+                linesTitle
+                    .margin(top: 0, leading: -24, bottom: -8, trailing: -24)
+                    .sticky(top: 0)
+                lines
             }
             .gap(16)
             .padding(top: 0, leading: 24, bottom: 24, trailing: 24)
@@ -390,7 +428,8 @@
         let hint = Text(
             "Resize the window: under 460 points a card turns into a column. "
                 + "Tap a Follow badge, or rename Ada: the changes animate. "
-                + "The list scrolls, and so does the row of tiles; images are at its end.",
+                + "The list scrolls, and so does the row of tiles; images and ten thousand "
+                + "lines are at its end.",
             style: TextStyle(size: 14, color: muted)
         )
         let cards: [ProfileCard]

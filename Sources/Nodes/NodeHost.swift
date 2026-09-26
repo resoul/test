@@ -156,6 +156,8 @@ public final class NodeHost {
     public var mainThreadStackBudget: Int? = LayoutContext.currentThreadStackBudget
 
     private var mounted: [NodeID: Node] = [:]
+    /// Mounted nodes whose layout depends on where they show, in layout order.
+    private var viewportDependents: [any ViewportDependent] = []
     /// Nodes of the layout being solved in the background that are not mounted yet.
     private var pending: [Node] = []
     private var pressed: Node?
@@ -181,6 +183,16 @@ public final class NodeHost {
     static var passGeneration: UInt64 = 0
 
     private static var created = 0
+
+    /// Passes one `layoutIfNeeded()` may run: after a pass, a node whose layout depends on
+    /// where it shows (a lazy stack) may find it needs another one — its first pass had to
+    /// guess where it is, and items it laid out may be longer or shorter than it assumed.
+    /// Each pass brings it closer; the limit stops a guess that never settles.
+    static let settlingPasses = 4
+
+    /// The host whose tree is asked for its layouts now: a node not yet mounted, in its
+    /// first layout, learns from it the size of the screen it is going to be on.
+    private(set) static var preparing: NodeHost?
 
     /// A host for `root`, which must not be mounted anywhere else.
     ///
@@ -257,6 +269,9 @@ public final class NodeHost {
     ) -> LayoutSize {
         StateUpdates.flush()
         NodeHost.passGeneration &+= 1
+        let outer = NodeHost.preparing
+        NodeHost.preparing = self
+        defer { NodeHost.preparing = outer }
         return root.asLayoutSpec.measure(
             width: width,
             height: height,
@@ -270,9 +285,15 @@ public final class NodeHost {
     /// Ownership: sets frames and subnodes of the tree. Isolation: MainActor; synchronous.
     /// Errors: none. Cancellation: not applicable.
     public func layoutIfNeeded() {
-        StateUpdates.flush()
-        guard needsLayout else { return }
+        for _ in 0..<NodeHost.settlingPasses {
+            StateUpdates.flush()
+            guard needsLayout, layOut() else { return }
+        }
+    }
 
+    /// Lays the tree out; returns whether the pass was applied on this thread, rather than
+    /// sent to the background or rejected.
+    private func layOut() -> Bool {
         needsLayout = false
         generation &+= 1
         NodeHost.passGeneration &+= 1
@@ -280,7 +301,10 @@ public final class NodeHost {
         let animation = pendingAnimation ?? solvingAnimation
         pendingAnimation = nil
         cancelSolving()
+        let outer = NodeHost.preparing
+        NodeHost.preparing = self
         let prepared = root.asLayoutSpec.prepare(direction: direction, spacing: spacing)
+        NodeHost.preparing = outer
         let rect = LayoutRect(origin: .zero, size: size)
         let trace = traceRequest(for: prepared)
         guard solvesInBackground, passes > 0, !prepared.requiresMainThread else {
@@ -293,7 +317,7 @@ public final class NodeHost {
                     size: rect.size,
                     context: context
                 )
-                finish(
+                return finish(
                     prepared,
                     result,
                     duration: clock.now - start,
@@ -307,11 +331,12 @@ public final class NodeHost {
             } catch is LayoutStackExhausted {
                 reject(prepared, duration: clock.now - start)
             } catch {}
-            return
+            return false
         }
 
         solvingAnimation = animation
         solveInBackground(prepared, trace: trace, stack: .enough, in: rect)
+        return false
     }
 
     /// Reports a pass too deep for any thread it could be solved on; the tree keeps the
@@ -355,7 +380,8 @@ public final class NodeHost {
 
     /// Applies a solved pass, unless an element got a frame in two places: an element has
     /// one frame, and applying either would hide the mistake. The tree then keeps the pass
-    /// before, and the report names the elements.
+    /// before, and the report names the elements. Returns whether the pass was applied.
+    @discardableResult
     private func finish(
         _ prepared: PreparedLayout,
         _ result: LayoutResult,
@@ -363,14 +389,14 @@ public final class NodeHost {
         stack: LayoutReport.Stack,
         in rect: LayoutRect,
         animation: Animation?
-    ) {
+    ) -> Bool {
         let duplicates = prepared.elementsPlacedMoreThanOnce(in: result)
         if let onLayoutReport {
             onLayoutReport(
                 report(prepared, result, duration: duration, stack: stack, duplicates: duplicates)
             )
         }
-        guard duplicates.isEmpty else { return }
+        guard duplicates.isEmpty else { return false }
 
         passes += 1
         needsRender = true
@@ -378,6 +404,17 @@ public final class NodeHost {
             renderAnimation = animation
         }
         mount(prepared.apply(result, in: rect, scale: scale))
+        for dependent in viewportDependents {
+            dependent.layoutApplied()
+        }
+        return true
+    }
+
+    /// A scroll moved: nodes whose layout depends on where they show look again.
+    func viewportMoved() {
+        for dependent in viewportDependents {
+            dependent.viewportMoved()
+        }
     }
 
     private func report(
@@ -960,6 +997,7 @@ public final class NodeHost {
             node.unmount()
         }
         mounted = [:]
+        viewportDependents = []
         root.unmount()
         root.hostOfRoot = nil
         onNeedsLayout = nil
@@ -973,9 +1011,16 @@ public final class NodeHost {
     private func mount(_ placements: [LayoutPlacement]) {
         var present: [NodeID: Node] = [root.id: root]
         var parent: [NodeID: Node] = [:]
+        var dependents: [any ViewportDependent] = []
+        if let dependent = root as? any ViewportDependent {
+            dependents.append(dependent)
+        }
         for placement in placements {
             guard let node = placement.element as? Node, node !== root else { continue }
 
+            if present[node.id] == nil, let dependent = node as? any ViewportDependent {
+                dependents.append(dependent)
+            }
             present[node.id] = node
             if let container = placement.container as? Node,
                 placement.frame != nil || parent[node.id] == nil
@@ -1005,5 +1050,6 @@ public final class NodeHost {
             node.mount(in: parent[id], subnodes: children[id] ?? [])
         }
         mounted = present
+        viewportDependents = dependents
     }
 }

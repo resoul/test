@@ -113,6 +113,71 @@
     }
 
     @Test @MainActor
+    func aMoveByCodeIsNotLostToTheFingersNextMove() throws {
+        let screen = Screen()
+        let view = view(of: screen)
+        guard view.traitCollection.userInterfaceIdiom != .tv else { return }
+
+        // Code moves the scroll — as a lazy stack does to keep what shows in place — and the
+        // finger moves the scroll view 10 points before the next drawing.
+        let physics = try #require(physics(in: view))
+        screen.scroll.contentOffset = LayoutPoint(x: 0, y: 150)
+        physics.contentOffset = CGPoint(x: 0, y: 10)
+
+        #expect(screen.scroll.contentOffset == LayoutPoint(x: 0, y: 160))
+        #expect(physics.contentOffset == CGPoint(x: 0, y: 160))
+        view.host.detach()
+    }
+
+    private struct Numbered: Identifiable {
+        let id: Int
+    }
+
+    /// A scroll of a lazy stack of a thousand 30-point rows.
+    @MainActor
+    private final class Feed: Node {
+        var rows: [Int: Row] = [:]
+        lazy var stack = LazyStack<Numbered>(estimatedLength: 30) { [unowned self] item in
+            if let row = rows[item.id] { return row }
+
+            let row = Row()
+            rows[item.id] = row
+            return row
+        }
+        lazy var scroll = Scroll(.vertical, content: stack)
+
+        override init() {
+            super.init()
+            stack.items = (0..<1000).map { Numbered(id: $0) }
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { scroll }
+        }
+    }
+
+    @Test @MainActor
+    func theScrollingOfALazyStackReachesItsWholeLengthAndDrawsWhereItGoes() throws {
+        let feed = Feed()
+        let view = NodeView(root: feed)
+        view.zoom = 1
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 150)
+        view.layoutIfNeeded()
+        guard view.traitCollection.userInterfaceIdiom != .tv else { return }
+
+        let physics = try #require(physics(in: view))
+        #expect(physics.contentSize == CGSize(width: 200, height: 30_000))
+        physics.contentOffset = CGPoint(x: 0, y: 15_000)
+        view.layoutIfNeeded()
+
+        #expect(feed.stack.laidOutItems.contains(500))
+        let row = try #require(feed.rows[500])
+        #expect(view.renderedLayer(for: row)?.frame.origin.y == 15_000)
+        #expect(view.renderedLayer(for: try #require(feed.rows[0])) == nil)
+        view.host.detach()
+    }
+
+    @Test @MainActor
     func onATVTheFocusScrollsNotTheTouchSurface() {
         let screen = Screen()
         let view = view(of: screen)

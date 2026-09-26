@@ -98,8 +98,24 @@ public final class Scroll: Node {
             guard now != shown else { return }
 
             host?.setNeedsScrollRender(self)
+            host?.viewportMoved()
             onScroll?(now)
         }
+    }
+
+    /// Moves the offset by `delta`, keeping any overscroll: the content before what shows
+    /// got longer or shorter, and what shows stays where it is on screen.
+    func shiftOffset(by delta: LayoutPoint) {
+        let shown = contentOffset
+        requestedOffset.value = offsetRange.clamp(
+            LayoutPoint(x: shown.x + delta.x, y: shown.y + delta.y)
+        )
+        let now = contentOffset
+        guard now != shown else { return }
+
+        host?.setNeedsScrollRender(self)
+        host?.viewportMoved()
+        onScroll?(now)
     }
 
     /// What the window shows: `contentOffset` with `overscroll`.
