@@ -432,3 +432,54 @@ func aLineOfItemsMeasuredApartTakesTheLongestOfThem() {
     #expect(grid.stack.frame.size.height == 2 * 60 + 999 * 30)
     host.detach()
 }
+
+@Test @MainActor
+func moreThanAScreenOfItemsAddedBeforeTheWindowDoNotMoveWhatShows() {
+    let feed = Feed(count: 1000)
+    let host = host(feed)
+    feed.scroll.contentOffset = LayoutPoint(x: 0, y: 7500)
+    host.layoutIfNeeded()
+    #expect(shown(feed.cells[250], in: feed.scroll) == 0)
+
+    // 300 points of items, two screens: what showed is past the reach of the old window.
+    feed.stack.items.insert(contentsOf: (0..<10).map { Entry(id: 2000 + $0) }, at: 0)
+    host.layoutIfNeeded()
+
+    #expect(shown(feed.cells[250], in: feed.scroll) == 0)
+    #expect(feed.scroll.contentOffset.y == 7800)
+    #expect(feed.stack.laidOutItems == 255..<270)
+    host.detach()
+}
+
+@Test @MainActor
+func moreThanAScreenOfItemsRemovedBeforeTheWindowDoNotMoveWhatShows() {
+    let feed = Feed(count: 1000)
+    let host = host(feed)
+    feed.scroll.contentOffset = LayoutPoint(x: 0, y: 7500)
+    host.layoutIfNeeded()
+
+    feed.stack.items.removeSubrange(100..<120)
+    host.layoutIfNeeded()
+
+    #expect(shown(feed.cells[250], in: feed.scroll) == 0)
+    #expect(feed.scroll.contentOffset.y == 6900)
+    host.detach()
+}
+
+@Test @MainActor
+func moreThanAScreenOfLinesAddedBeforeTheWindowOfAGridDoNotMoveWhatShows() {
+    let feed = Feed(count: 1000)
+    feed.stack.lanes = 2
+    let host = host(feed)
+    feed.scroll.contentOffset = LayoutPoint(x: 0, y: 3000)
+    host.layoutIfNeeded()
+    #expect(shown(feed.cells[200], in: feed.scroll) == 0)
+
+    // Ten lines of two.
+    feed.stack.items.insert(contentsOf: (0..<20).map { Entry(id: 2000 + $0) }, at: 0)
+    host.layoutIfNeeded()
+
+    #expect(shown(feed.cells[200], in: feed.scroll) == 0)
+    #expect(feed.scroll.contentOffset.y == 3300)
+    host.detach()
+}

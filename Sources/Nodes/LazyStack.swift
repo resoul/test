@@ -109,7 +109,17 @@ public final class LazyStack<Item: Identifiable>: Node {
     private var covered: (start: Double, end: Double) = (.infinity, -.infinity)
     /// An item that shows as a layout begins, and where it is then in `scroll`: the layout
     /// is followed by a scroll that puts it back there.
-    private var anchor: (id: Item.ID, position: Double, scroll: Scroll)?
+    private var anchor: Anchor?
+
+    private struct Anchor {
+        let id: Item.ID
+        /// Where it is in the scroll, along the axis.
+        let position: Double
+        let scroll: Scroll
+        /// Where it starts from the stack's start, and its index in `items`, as laid out.
+        let start: Double
+        let index: Int
+    }
 
     /// A stack of the nodes `content` returns for `items`, along `axis`.
     ///
@@ -144,13 +154,17 @@ public final class LazyStack<Item: Identifiable>: Node {
         // layout itself when the window nears the end of what is laid out, not on every move.
         // Before the first layout its place is unknown: the start of the list, one screen of
         // it, and the reach after.
-        let span = untracked { visibleSpan() } ?? (start: 0, end: reach)
+        var span = untracked { visibleSpan() } ?? (start: 0, end: reach)
+        untracked { rememberAnchor() }
+        // Items added, removed or measured before what shows moved it along the stack, and
+        // the scroll will follow it there: the window is where it will be then, however far.
+        let moved = anchorMoved()
+        span = (span.start + moved, span.end + moved)
         let lines = self.lines(from: span.start - reach, to: span.end + reach)
         let range =
             lines.isEmpty
             ? 0..<0 : lines.lowerBound * perLine..<min(items.count, lines.upperBound * perLine)
 
-        untracked { rememberAnchor() }
         placed = range.map { index in (items[index].id, content(items[index])) }
         laidOutItems = range
         let total = length
@@ -355,15 +369,38 @@ public final class LazyStack<Item: Identifiable>: Node {
             let scroll, placedAreMounted
         else { return }
 
-        for (id, node) in placed {
+        for (offset, (id, node)) in placed.enumerated() {
             let start = start(of: node)
             guard start + along(node.frame.size) > span.start, start < span.end else { continue }
 
             if let rect = scroll.frame(of: node) {
-                anchor = (id, along(rect.origin), scroll)
+                anchor = Anchor(
+                    id: id,
+                    position: along(rect.origin),
+                    scroll: scroll,
+                    start: start,
+                    index: laidOutItems.lowerBound + offset
+                )
             }
             return
         }
+    }
+
+    /// How far the anchor's item moved from where it was laid out to where its line starts
+    /// now; 0 when there is none, or it is gone.
+    private func anchorMoved() -> Double {
+        guard let anchor else { return 0 }
+
+        let index: Int
+        if anchor.index < items.count, items[anchor.index].id == anchor.id {
+            index = anchor.index
+        } else if let found = items.firstIndex(where: { $0.id == anchor.id }) {
+            // Only after items changed.
+            index = found
+        } else {
+            return 0
+        }
+        return starts[index / perLine] - anchor.start
     }
 
     /// The layout that placed `placed` was applied: learns the items' lengths, puts what
@@ -423,6 +460,7 @@ public final class LazyStack<Item: Identifiable>: Node {
             setNeedsLayout()
         }
     }
+
 }
 
 /// A node whose layout depends on where it shows, told by the host after each layout it is
