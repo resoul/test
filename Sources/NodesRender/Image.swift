@@ -179,7 +179,7 @@
                 data = value
             case let .url(url):
                 stamp = await cache.stamp(for: url)
-                data = try await cache.load(url)
+                data = try await cache.load(url, urgency: urgency)
                 sourceReads += 1
             }
             try Task.checkCancellation()
@@ -373,31 +373,93 @@
     }
 
     /// Whether a load is wanted first: set while the node that asked for it is on screen. It
-    /// can change while the load waits, and the wait is ordered by its value at that time.
+    /// can change while the load waits: a decode waiting in line is ordered by its value when
+    /// a slot frees, and a download running is told of each change.
     final class LoadUrgency: Sendable {
-        private let state = OSAllocatedUnfairLock(initialState: false)
+        private struct State {
+            var isUrgent = false
+            var watchers: [UInt64: @Sendable () -> Void] = [:]
+            var nextWatcher: UInt64 = 0
+        }
+
+        private let state = OSAllocatedUnfairLock(initialState: State())
 
         var isUrgent: Bool {
-            get { state.withLock { $0 } }
-            set { state.withLock { $0 = newValue } }
+            get { state.withLock { $0.isUrgent } }
+            set {
+                let watchers = state.withLock { state -> [@Sendable () -> Void] in
+                    guard state.isUrgent != newValue else { return [] }
+
+                    state.isUrgent = newValue
+                    return Array(state.watchers.values)
+                }
+                // Called outside the lock: a watcher reads the urgency again.
+                for watcher in watchers { watcher() }
+            }
         }
+
+        /// Calls `changed` after each change, until `stopWatching` with the returned token.
+        func watch(_ changed: @escaping @Sendable () -> Void) -> UInt64 {
+            state.withLock { state in
+                state.nextWatcher &+= 1
+                state.watchers[state.nextWatcher] = changed
+                return state.nextWatcher
+            }
+        }
+
+        func stopWatching(_ token: UInt64) {
+            _ = state.withLock { $0.watchers.removeValue(forKey: token) }
+        }
+
+        var watcherCount: Int { state.withLock { $0.watchers.count } }
     }
 
-    /// The urgencies of the callers sharing one decode: it is urgent while any of them is.
+    /// The urgencies of the callers sharing one decode or download: it is urgent while any
+    /// of them is. It tells its own watcher when that may have changed — a caller came or
+    /// left, or one of theirs changed.
     final class SharedUrgency: Sendable {
-        private let callers = OSAllocatedUnfairLock(initialState: [UInt64: LoadUrgency]())
+        private struct State {
+            var callers: [UInt64: (urgency: LoadUrgency, token: UInt64)] = [:]
+            var changed: (@Sendable () -> Void)?
+        }
+
+        private let state = OSAllocatedUnfairLock(initialState: State())
+
+        deinit {
+            // The callers' urgencies outlive a finished load; they stop calling it.
+            for caller in state.withLock({ $0.callers.values }) {
+                caller.urgency.stopWatching(caller.token)
+            }
+        }
 
         var isUrgent: Bool {
-            callers.withLock { $0.values.contains { $0.isUrgent } }
+            let urgencies = state.withLock { $0.callers.values.map(\.urgency) }
+            return urgencies.contains { $0.isUrgent }
+        }
+
+        /// Sets the one watcher, called after each possible change.
+        func watch(_ changed: @escaping @Sendable () -> Void) {
+            state.withLock { $0.changed = changed }
         }
 
         func add(_ urgency: LoadUrgency?, for caller: UInt64) {
             guard let urgency else { return }
-            callers.withLock { $0[caller] = urgency }
+
+            let token = urgency.watch { [weak self] in self?.notify() }
+            state.withLock { $0.callers[caller] = (urgency, token) }
+            notify()
         }
 
         func remove(_ caller: UInt64) {
-            _ = callers.withLock { $0.removeValue(forKey: caller) }
+            let removed = state.withLock { $0.callers.removeValue(forKey: caller) }
+            guard let removed else { return }
+
+            removed.urgency.stopWatching(removed.token)
+            notify()
+        }
+
+        private func notify() {
+            state.withLock { $0.changed }?()
         }
     }
 

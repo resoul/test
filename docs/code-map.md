@@ -205,6 +205,7 @@
 | `Text`, `TextMeasurer`, `TextLayout` | одна `TextLayout` для замера и рисования | правило Trellis: измерение и рисование — одна строка (дефект #37 Trellis) |
 | `Image`, `ImagePipeline`, `ImagePlaceholder`, `ImageLoadPhase` | статичная картинка как нода; placeholder и состояние загрузки; превью, декодирование под рамку × масштаб, общий ограниченный кэш bitmap и защита от запоздавшего результата | [11](11-image.md) |
 | `DecodeGate`, `ImagePipeline.load` (очередь декодирования) | декодирования pipeline идут по одному вне актора; отменённый в очереди запрос уходит без работы; дефект #155 | [11](11-image.md), [defects](defects.md) |
+| `DownloadWatch` (приоритет задачи и предел размера), `ImageCache.load(_:urgency:)`, `Download.urgency`; `LoadUrgency.watch`, `SharedUrgency.watch`/`deinit` | загрузка картинки на экране — высокий приоритет, меняется на ходу | [11](11-image.md#приоритет-видимых) |
 | `DecodeGate.release` — первый срочный; `LoadUrgency`, `SharedUrgency`, `InFlight.urgency`; `Image.urgency`, `screenChanged` | картинки на экране декодируются раньше запаса | [11](11-image.md#приоритет-видимых) |
 | `Node.tracksScreen`, `isOnScreen`, `screenChanged`, `shownRect`, `updateScreen`; `NodeHost.screenTrackers` | видимость ноды — по запросу, после проходов и движений прокрутки | [11](11-image.md#приоритет-видимых) |
 | `ImagePipeline.init(..., decodeGate:)` (внутренний) | тест держит очередь сам, без расчёта на время | тест `thePipelineDecodesAnImageOnScreenBeforeOnesQueuedEarlier` |

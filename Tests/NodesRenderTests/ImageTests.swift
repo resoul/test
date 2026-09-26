@@ -342,6 +342,10 @@
     /// Requests the stub server has answered, by URL path.
     private let stubRequests = OSAllocatedUnfairLock(initialState: [String: Int]())
 
+    /// The priority of each request's task as the stub server began to answer and as it
+    /// finished, by URL path.
+    private let stubPriorities = OSAllocatedUnfairLock(initialState: [String: [Float]]())
+
     /// Answers requests to `image-cache.test`, so the download path of the disk cache runs
     /// without a network: the WebP above by default, 100 000 bytes in chunks for paths
     /// containing `large` (without `Content-Length` when the path also has `chunked`), and 404 for paths containing `missing`. Paths containing `slow` answer after
@@ -366,8 +370,12 @@
                         : ["Content-Type": "image/webp", "Content-Length": String(body.count)]
                 )
             else { return }
+            let priority = task?.priority ?? -1
+            stubPriorities.withLock { $0[url.path] = [priority] }
             stubRequests.withLock { $0[url.path, default: 0] += 1 }
             if url.path.contains("slow") { Thread.sleep(forTimeInterval: 0.3) }
+            let finalPriority = task?.priority ?? -1
+            stubPriorities.withLock { $0[url.path, default: []].append(finalPriority) }
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             // In 10 000-byte chunks, as a network delivers a large body.
             for start in stride(from: 0, to: body.count, by: 10_000) {
@@ -1213,6 +1221,75 @@
         await gate.release()
         for task in [first, second] { try await task.value }
         #expect(order.withLock { $0 } == ["on screen", "off screen"])
+    }
+
+    @Test
+    func aDownloadGoesAtHighPriorityWhileItsImageIsOnScreen() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = stubCache(directory)
+        let onScreen = LoadUrgency()
+        onScreen.isUrgent = true
+
+        let shown = URL(string: "https://image-cache.test/priority-shown.webp")!
+        let near = URL(string: "https://image-cache.test/priority-near.webp")!
+        _ = try await cache.load(shown, urgency: onScreen)
+        _ = try await cache.load(near, urgency: LoadUrgency())
+
+        #expect(stubPriorities.withLock { $0[shown.path] } == [0.75, 0.75])
+        #expect(stubPriorities.withLock { $0[near.path] } == [0.25, 0.25])
+    }
+
+    @Test
+    func aRunningDownloadTakesTheNewPriorityWhenItsImageComesOnScreen() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = stubCache(directory)
+        let urgency = LoadUrgency()
+        let url = URL(string: "https://image-cache.test/priority-slow.webp")!
+
+        let loading = Task { try await cache.load(url, urgency: urgency) }
+        while stubPriorities.withLock({ $0[url.path] }) == nil { await Task.yield() }
+        // Scrolled into sight while the server answers.
+        urgency.isUrgent = true
+        _ = try await loading.value
+
+        #expect(stubPriorities.withLock { $0[url.path] } == [0.25, 0.75])
+    }
+
+    @Test
+    func aSharedDownloadIsUrgentOnceAnUrgentCallerJoinsIt() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = stubCache(directory)
+        let onScreen = LoadUrgency()
+        onScreen.isUrgent = true
+        let url = URL(string: "https://image-cache.test/priority-shared-slow.webp")!
+
+        let near = Task { try await cache.load(url, urgency: LoadUrgency()) }
+        while stubPriorities.withLock({ $0[url.path] }) == nil { await Task.yield() }
+        let shown = Task { try await cache.load(url, urgency: onScreen) }
+        while await cache.downloadWaiters(for: url) < 2 { await Task.yield() }
+        _ = try await near.value
+        _ = try await shown.value
+
+        #expect(stubPriorities.withLock { $0[url.path] } == [0.25, 0.75])
+    }
+
+    @Test
+    func anUrgencyStopsBeingWatchedOnceItsLoadsAreDone() async throws {
+        let urgency = LoadUrgency()
+        let pipeline = ImagePipeline()
+        _ = try await pipeline.load(
+            .data(try encodedImage(width: 20, height: 10)),
+            targetPixelDimension: 20,
+            urgency: urgency
+        )
+
+        for _ in 0..<100 where urgency.watcherCount > 0 {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(urgency.watcherCount == 0)
     }
 
     @Test
