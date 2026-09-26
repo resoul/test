@@ -373,3 +373,89 @@ func revealingANodeScrollsToIt() {
     #expect(screen.scroll.contentOffset == LayoutPoint(x: 0, y: 170))
     host.detach()
 }
+
+/// Counts what `screenChanged` is told.
+@MainActor
+private final class Watched: Node {
+    var changes: [Bool] = []
+
+    override init() {
+        super.init()
+        tracksScreen = true
+    }
+
+    override var layoutContent: LeafContent? { .size(LayoutSize(width: 50, height: 30)) }
+
+    override func screenChanged(_ isOnScreen: Bool) {
+        changes.append(isOnScreen)
+    }
+}
+
+/// A scroll 100 points tall of a column: four 30-point rows, then `watched`, 120 points down.
+@MainActor
+private final class Watching: Node {
+    let watched = Watched()
+    let rows = (0..<4).map { _ in Row(50, 30) }
+    var hidesWatched = false {
+        didSet { setNeedsLayout() }
+    }
+    lazy var scroll = Scroll(.vertical, content: Column(rows: rows, watched: watched, owner: self))
+
+    final class Column: Node {
+        let rows: [Row]
+        let watched: Watched
+        unowned let owner: Watching
+
+        init(rows: [Row], watched: Watched, owner: Watching) {
+            self.rows = rows
+            self.watched = watched
+            self.owner = owner
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                for row in rows { row }
+                watched.hidden(owner.hidesWatched)
+            }
+            .alignItems(.start)
+        }
+    }
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.column) { scroll }
+    }
+}
+
+@Test @MainActor
+func aNodeTrackingTheScreenLearnsWhenItComesIntoSightAndLeaves() {
+    let screen = Watching()
+    let host = host(screen, width: 200, height: 100)
+    #expect(!screen.watched.isOnScreen)
+    #expect(screen.watched.changes.isEmpty)
+
+    // Its edge meeting the window's is not in sight.
+    screen.scroll.contentOffset = LayoutPoint(x: 0, y: 20)
+    #expect(!screen.watched.isOnScreen)
+    screen.scroll.contentOffset = LayoutPoint(x: 0, y: 30)
+    #expect(screen.watched.isOnScreen)
+    screen.scroll.contentOffset = LayoutPoint(x: 0, y: 25)
+    screen.scroll.contentOffset = LayoutPoint(x: 0, y: 0)
+    #expect(!screen.watched.isOnScreen)
+    #expect(screen.watched.changes == [true, false])
+
+    // A hidden node is not on screen, wherever it is.
+    screen.scroll.contentOffset = LayoutPoint(x: 0, y: 30)
+    screen.hidesWatched = true
+    host.layoutIfNeeded()
+    #expect(!screen.watched.isOnScreen)
+    #expect(screen.watched.changes == [true, false, true, false])
+    host.detach()
+}
+
+@Test @MainActor
+func aNodeNotTrackingTheScreenIsNeverOnIt() {
+    let rows = List()
+    let host = host(rows)
+    #expect(rows.rows[0].isOnScreen == false)
+    host.detach()
+}

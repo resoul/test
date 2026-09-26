@@ -141,6 +141,23 @@ open class Node: LayoutElement {
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public private(set) var isMounted = false
 
+    /// Asks the host to keep `isOnScreen` up to date and to call `screenChanged(_:)` — for a
+    /// node whose work should go first while it shows, such as an image loading. Off by
+    /// default: the host looks at such nodes on every scroll move. A change takes effect at
+    /// the next layout.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var tracksScreen = false {
+        didSet { if tracksScreen != oldValue { setNeedsLayout() } }
+    }
+
+    /// Whether some of the node shows: within the host's bounds and within every node around
+    /// it that clips its content, none of them hidden. Kept up to date after each layout and
+    /// scroll move only while `tracksScreen` is set; `false` otherwise.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public private(set) var isOnScreen = false
+
     weak var hostOfRoot: NodeHost?
     /// The host whose layout, still being solved off the main thread, is going to mount this
     /// node. Until then the node hangs from nothing, and a change to it must still reach
@@ -320,6 +337,57 @@ open class Node: LayoutElement {
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: an override
     /// cancels work it no longer needs when the node leaves.
     open func mountedChanged(_ isMounted: Bool) {}
+
+    /// The node came into sight or went out of it (`isOnScreen`), where it `tracksScreen`.
+    /// Called on each change. The default does nothing.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+    open func screenChanged(_ isOnScreen: Bool) {}
+
+    /// Updates `isOnScreen`, telling `screenChanged(_:)` of a change.
+    func updateScreen() {
+        let shows = shownRect != nil
+        guard shows != isOnScreen else { return }
+
+        isOnScreen = shows
+        screenChanged(shows)
+    }
+
+    /// The part of the node's box that shows, in its own coordinates: within the host's
+    /// bounds and every node around it that clips its content. `nil` when none of it shows,
+    /// when it or a node around it is hidden or fully transparent, or when it is not mounted.
+    var shownRect: LayoutRect? {
+        guard isMounted, let host, !isHidden, appearance.opacity > 0 else { return nil }
+
+        var low = LayoutPoint.zero
+        var high = LayoutPoint(x: frame.size.width, y: frame.size.height)
+        // Where this node's box starts in the box of `node`.
+        var position = LayoutPoint.zero
+        var node: Node = self
+        while let supernode = node.supernode {
+            guard !supernode.isHidden, supernode.appearance.opacity > 0 else { return nil }
+
+            let shown = node.shownOrigin
+            position.x += shown.x - supernode.contentOrigin.x
+            position.y += shown.y - supernode.contentOrigin.y
+            if supernode.appearance.clipsContent {
+                low.x = max(low.x, -position.x)
+                low.y = max(low.y, -position.y)
+                high.x = min(high.x, supernode.frame.size.width - position.x)
+                high.y = min(high.y, supernode.frame.size.height - position.y)
+            }
+            node = supernode
+        }
+        position.x += node.frame.origin.x
+        position.y += node.frame.origin.y
+        low.x = max(low.x, -position.x)
+        low.y = max(low.y, -position.y)
+        high.x = min(high.x, host.size.width - position.x)
+        high.y = min(high.y, host.size.height - position.y)
+        guard low.x < high.x, low.y < high.y else { return nil }
+
+        return LayoutRect(x: low.x, y: low.y, width: high.x - low.x, height: high.y - low.y)
+    }
 
     /// The deepest visible node under `point`, given in this node's coordinates, or `nil`.
     /// Later subnodes are on top. Subnodes outside the node's box are found too, unless the
@@ -506,6 +574,7 @@ open class Node: LayoutElement {
     func unmount() {
         let wasMounted = isMounted
         isMounted = false
+        isOnScreen = false
         supernode = nil
         subnodes = []
         updateObserver?.cancel()

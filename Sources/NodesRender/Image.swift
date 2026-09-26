@@ -6,6 +6,7 @@
     import Nodes
     import QuartzCore
     import StateCore
+    import os
 
     /// Where an image is read from. File URLs are read directly; remote URLs use the disk cache.
     ///
@@ -102,10 +103,11 @@
             let id: UInt64
             let cacheGeneration: UInt64
             let task: Task<LoadedImage, Error>
+            let urgency: SharedUrgency
             var waiters: Set<UInt64>
         }
 
-        private let decodeGate = DecodeGate()
+        private let decodeGate: DecodeGate
         private var decoded: [DecodedKey: DecodedEntry] = [:]
         private var inFlight: [DecodedKey: InFlight] = [:]
         private var decodedBytes = 0
@@ -127,13 +129,36 @@
             previewPixelDimension: Int = 256,
             maximumDecodedCacheBytes: Int = 64 * 1024 * 1024
         ) {
+            self.init(
+                cache: cache,
+                maximumDecodedPixelDimension: maximumDecodedPixelDimension,
+                previewPixelDimension: previewPixelDimension,
+                maximumDecodedCacheBytes: maximumDecodedCacheBytes,
+                decodeGate: DecodeGate()
+            )
+        }
+
+        init(
+            cache: ImageCache,
+            maximumDecodedPixelDimension: Int?,
+            previewPixelDimension: Int,
+            maximumDecodedCacheBytes: Int,
+            decodeGate: DecodeGate
+        ) {
+            self.decodeGate = decodeGate
             self.cache = cache
             self.maximumDecodedPixelDimension = maximumDecodedPixelDimension.map { max(1, $0) }
             self.previewPixelDimension = max(1, previewPixelDimension)
             self.maximumDecodedCacheBytes = max(0, maximumDecodedCacheBytes)
         }
 
-        func load(_ source: ImageSource, targetPixelDimension: Int) async throws -> LoadedImage {
+        /// `urgency` says whether the caller wants the image first — while its node is on
+        /// screen; a decode shared by several callers is as urgent as the most urgent of them.
+        func load(
+            _ source: ImageSource,
+            targetPixelDimension: Int,
+            urgency: LoadUrgency? = nil
+        ) async throws -> LoadedImage {
             let limit =
                 maximumDecodedPixelDimension.map {
                     min(max(1, targetPixelDimension), $0)
@@ -175,17 +200,20 @@
             let flight: InFlight
             if var existing = inFlight[key] {
                 existing.waiters.insert(waiterID)
+                existing.urgency.add(urgency, for: waiterID)
                 inFlight[key] = existing
                 flight = existing
             } else {
                 nextFlightID &+= 1
                 let id = nextFlightID
+                let shared = SharedUrgency()
+                shared.add(urgency, for: waiterID)
                 // Decodes run one at a time so several simultaneous images do not create
                 // several full-sized bitmaps at once. They wait in the gate rather than on
                 // this actor, which stays free for cache hits and cancellations; a decode
                 // cancelled while queued leaves the queue without running.
                 let task = Task.detached(priority: Task.currentPriority) { [decodeGate] in
-                    try await decodeGate.acquire()
+                    try await decodeGate.acquire(isUrgent: { shared.isUrgent })
                     await self.decodeStarted()
                     let result = Result { try Self.decode(data, pixelDimension: limit) }
                     await self.decodeFinished()
@@ -196,6 +224,7 @@
                     id: id,
                     cacheGeneration: cacheGeneration,
                     task: task,
+                    urgency: shared,
                     waiters: [waiterID]
                 )
                 inFlight[key] = flight
@@ -264,6 +293,7 @@
         private func removeWaiter(_ id: UInt64, from key: DecodedKey, flightID: UInt64) {
             guard var flight = inFlight[key], flight.id == flightID else { return }
             flight.waiters.remove(id)
+            flight.urgency.remove(id)
             if flight.waiters.isEmpty {
                 flight.task.cancel()
                 inFlight[key] = nil
@@ -342,16 +372,53 @@
         }
     }
 
-    /// Lets one decode run at a time and queues the rest in arrival order. A queued caller
-    /// that is cancelled leaves the queue and throws `CancellationError`.
+    /// Whether a load is wanted first: set while the node that asked for it is on screen. It
+    /// can change while the load waits, and the wait is ordered by its value at that time.
+    final class LoadUrgency: Sendable {
+        private let state = OSAllocatedUnfairLock(initialState: false)
+
+        var isUrgent: Bool {
+            get { state.withLock { $0 } }
+            set { state.withLock { $0 = newValue } }
+        }
+    }
+
+    /// The urgencies of the callers sharing one decode: it is urgent while any of them is.
+    final class SharedUrgency: Sendable {
+        private let callers = OSAllocatedUnfairLock(initialState: [UInt64: LoadUrgency]())
+
+        var isUrgent: Bool {
+            callers.withLock { $0.values.contains { $0.isUrgent } }
+        }
+
+        func add(_ urgency: LoadUrgency?, for caller: UInt64) {
+            guard let urgency else { return }
+            callers.withLock { $0[caller] = urgency }
+        }
+
+        func remove(_ caller: UInt64) {
+            _ = callers.withLock { $0.removeValue(forKey: caller) }
+        }
+    }
+
+    /// Lets one decode run at a time and queues the rest: the first urgent one goes next,
+    /// otherwise the first to arrive. Urgency is asked when the slot frees, so a caller that
+    /// became urgent while waiting overtakes the others. A queued caller that is cancelled
+    /// leaves the queue and throws `CancellationError`.
     actor DecodeGate {
+        private struct Waiting {
+            let id: UInt64
+            let isUrgent: @Sendable () -> Bool
+            let continuation: CheckedContinuation<Void, Error>
+        }
+
         private var isRunning = false
-        private var waiting: [(id: UInt64, continuation: CheckedContinuation<Void, Error>)] = []
+        private var waiting: [Waiting] = []
         private var nextID: UInt64 = 0
 
         var waitingCount: Int { waiting.count }
 
-        func acquire() async throws {
+        func acquire(isUrgent: @escaping @Sendable () -> Bool = { false }) async throws {
             try Task.checkCancellation()
             guard isRunning else {
                 isRunning = true
@@ -363,19 +430,19 @@
             try await withTaskCancellationHandler {
                 try await withCheckedThrowingContinuation {
                     (continuation: CheckedContinuation<Void, Error>) in
-                    enqueue(id, continuation)
+                    enqueue(Waiting(id: id, isUrgent: isUrgent, continuation: continuation))
                 }
             } onCancel: {
                 Task { await self.leave(id) }
             }
         }
 
-        private func enqueue(_ id: UInt64, _ continuation: CheckedContinuation<Void, Error>) {
+        private func enqueue(_ entry: Waiting) {
             // Cancellation that arrived before this point found nothing to remove.
             if Task.isCancelled {
-                continuation.resume(throwing: CancellationError())
+                entry.continuation.resume(throwing: CancellationError())
             } else {
-                waiting.append((id, continuation))
+                waiting.append(entry)
             }
         }
 
@@ -385,8 +452,10 @@
                 return
             }
 
-            // The slot passes straight to the next caller, so nobody can overtake the queue.
-            waiting.removeFirst().continuation.resume()
+            // The slot passes straight to the next caller, so nobody arriving now can overtake
+            // the queue.
+            let next = waiting.firstIndex { $0.isUrgent() } ?? 0
+            waiting.remove(at: next).continuation.resume()
         }
 
         private func leave(_ id: UInt64) {
@@ -487,6 +556,8 @@
         public override var accessibilityContentTraits: AccessibilityTraits { .image }
 
         private let pipeline: ImagePipeline
+        /// Whether the node's loads go before those of images off screen: while it is on it.
+        let urgency = LoadUrgency()
         private let phaseState = State(ImageLoadPhase.empty)
         private var loaded: LoadedImage?
         private var loadTask: Task<Void, Never>?
@@ -515,7 +586,16 @@
             self.placeholder = placeholder
             self.pipeline = pipeline
             super.init()
+            tracksScreen = true
             reload()
+        }
+
+        /// Loads of an image on screen go before those of images near it but off it — the
+        /// ones a lazy stack lays out ahead of the scroll.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func screenChanged(_ isOnScreen: Bool) {
+            urgency.isUrgent = isOnScreen
         }
 
         deinit {
@@ -541,6 +621,7 @@
                 host?.setNeedsRender()
             } else {
                 isSuspended = true
+                urgency.isUrgent = false
                 loadTask?.cancel()
                 detailTask?.cancel()
                 loadTask = nil
@@ -592,9 +673,14 @@
             let request = detailGeneration
             let generation = sourceGeneration
             let pipeline = pipeline
+            let urgency = urgency
             detailTask = Task { [weak self] in
                 do {
-                    let result = try await pipeline.load(source, targetPixelDimension: wanted)
+                    let result = try await pipeline.load(
+                        source,
+                        targetPixelDimension: wanted,
+                        urgency: urgency
+                    )
                     guard !Task.isCancelled, let self, self.sourceGeneration == generation,
                         self.detailGeneration == request
                     else { return }
@@ -728,11 +814,13 @@
 
             let request = sourceGeneration
             let pipeline = pipeline
+            let urgency = urgency
             loadTask = Task { [weak self] in
                 do {
                     let result = try await pipeline.load(
                         source,
-                        targetPixelDimension: pipeline.previewPixelDimension
+                        targetPixelDimension: pipeline.previewPixelDimension,
+                        urgency: urgency
                     )
                     guard !Task.isCancelled, let self, self.sourceGeneration == request else {
                         return
