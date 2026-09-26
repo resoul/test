@@ -1016,32 +1016,165 @@ public final class NodeHost {
         return true
     }
 
-    private func collect(_ node: Node, origin: LayoutPoint, into items: inout [AccessibilityItem]) {
-        node.walkVisible(from: origin) { node, origin in
-            let settings = node.accessibility
-            let ownLabel = settings.label ?? node.accessibilityContentLabel
-            let isElement =
-                settings.isElement
-                ?? (node.onTap != nil || (ownLabel.map { !$0.isEmpty } ?? false))
-            guard isElement else { return true }
+    /// The list laid out by where it shows at `node` — all its items, laid out or not — or
+    /// `nil` when `node` is not such a list or is not mounted.
+    ///
+    /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    public func accessibilityList(_ node: NodeID) -> AccessibilityList? {
+        guard let stack = mounted[node], let list = stack as? any AccessibleList else {
+            return nil
+        }
 
-            var traits = node.accessibilityContentTraits.union(settings.traits)
-            if node.onTap != nil {
-                traits.insert(.button)
-                traits.remove(.staticText)
+        return AccessibilityList(
+            node: node,
+            count: list.itemCount,
+            laidOut: list.laidOutItems,
+            frame: shownFrame(of: stack)
+        )
+    }
+
+    /// Where the item at `index` of the list at `list` is, or is expected to be once laid
+    /// out, in the root's coordinates; `nil` when there is no such list.
+    ///
+    /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    public func accessibilityFrame(ofItem index: Int, in list: NodeID) -> LayoutRect? {
+        guard let stack = mounted[list], let accessible = stack as? any AccessibleList else {
+            return nil
+        }
+
+        let origin = originInRoot(of: stack)
+        let item = accessible.expectedFrame(ofItem: index)
+        return LayoutRect(
+            x: origin.x + item.origin.x,
+            y: origin.y + item.origin.y,
+            width: item.size.width,
+            height: item.size.height
+        )
+    }
+
+    /// Scrolls the list at `list` to the item at `index` and lays the tree out, so that the
+    /// item has its elements — where an assistive technology moved to an item not laid out.
+    /// Returns whether there is such an item.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    @discardableResult
+    public func revealItem(_ index: Int, in list: NodeID) -> Bool {
+        guard let accessible = mounted[list] as? any AccessibleList,
+            accessible.reveal(itemAt: index)
+        else { return false }
+
+        layoutIfNeeded()
+        return true
+    }
+
+    /// Where `node`'s box shows, in the root's coordinates.
+    private func originInRoot(of node: Node) -> LayoutPoint {
+        var origin = node.shownOrigin
+        var current = node
+        while let supernode = current.supernode {
+            let shown = supernode.shownOrigin
+            origin.x += shown.x - supernode.contentOrigin.x
+            origin.y += shown.y - supernode.contentOrigin.y
+            current = supernode
+        }
+        return origin
+    }
+
+    /// The part of `node` that shows within the nodes around it that clip their content, in
+    /// the root's coordinates.
+    private func shownFrame(of node: Node) -> LayoutRect {
+        let origin = originInRoot(of: node)
+        var minX = origin.x
+        var minY = origin.y
+        var maxX = origin.x + node.frame.size.width
+        var maxY = origin.y + node.frame.size.height
+        var current = node.supernode
+        while let clipping = current {
+            if clipping.appearance.clipsContent {
+                let box = originInRoot(of: clipping)
+                minX = max(minX, box.x)
+                minY = max(minY, box.y)
+                maxX = min(maxX, box.x + clipping.frame.size.width)
+                maxY = min(maxY, box.y + clipping.frame.size.height)
             }
-            items.append(
-                AccessibilityItem(
-                    node: node.id,
-                    frame: node.frame(from: origin),
-                    label: ownLabel ?? spokenText(inside: node),
-                    value: settings.value,
-                    hint: settings.hint,
-                    traits: traits
-                )
-            )
+            current = clipping.supernode
+        }
+        return LayoutRect(x: minX, y: minY, width: max(0, maxX - minX), height: max(0, maxY - minY))
+    }
+
+    /// The item of a list laid out by where it shows that `node` is in, if any: the nearest
+    /// such list around it.
+    private func listItem(of node: Node) -> AccessibilityListItem? {
+        var child = node
+        while let supernode = child.supernode {
+            if let list = supernode as? any AccessibleList {
+                return list.index(ofPlaced: child).map {
+                    AccessibilityListItem(list: supernode.id, index: $0)
+                }
+            }
+            child = supernode
+        }
+        return nil
+    }
+
+    /// The tree's accessibility in reading order, with each list laid out by where it shows
+    /// as one entry holding the elements of its items laid out — also a list with none laid
+    /// out, whose items an assistive technology reaches through `revealItem(_:in:)`.
+    ///
+    /// Ownership: returns values. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    public func accessibilityEntries() -> [AccessibilityEntry] {
+        var entries: [AccessibilityEntry] = []
+        root.walkVisible(from: .zero) { node, origin in
+            if node is any AccessibleList, let list = accessibilityList(node.id) {
+                var items: [AccessibilityItem] = []
+                collect(node, origin: origin, into: &items)
+                entries.append(.list(list, items))
+                return false
+            }
+            guard let item = accessibilityItem(node, origin: origin) else { return true }
+
+            entries.append(.element(item))
             return false
         }
+        return entries
+    }
+
+    private func collect(_ node: Node, origin: LayoutPoint, into items: inout [AccessibilityItem]) {
+        node.walkVisible(from: origin) { node, origin in
+            guard let item = accessibilityItem(node, origin: origin) else { return true }
+
+            items.append(item)
+            return false
+        }
+    }
+
+    /// The element `node` makes, at `origin`, or `nil` when it is not one — its subnodes may
+    /// be.
+    private func accessibilityItem(_ node: Node, origin: LayoutPoint) -> AccessibilityItem? {
+        let settings = node.accessibility
+        let ownLabel = settings.label ?? node.accessibilityContentLabel
+        let isElement =
+            settings.isElement
+            ?? (node.onTap != nil || (ownLabel.map { !$0.isEmpty } ?? false))
+        guard isElement else { return nil }
+
+        var traits = node.accessibilityContentTraits.union(settings.traits)
+        if node.onTap != nil {
+            traits.insert(.button)
+            traits.remove(.staticText)
+        }
+        return AccessibilityItem(
+            node: node.id,
+            frame: node.frame(from: origin),
+            label: ownLabel ?? spokenText(inside: node),
+            value: settings.value,
+            hint: settings.hint,
+            traits: traits,
+            listItem: listItem(of: node)
+        )
     }
 
     /// The labels of the visible nodes inside `node`, in order — the name of an element made

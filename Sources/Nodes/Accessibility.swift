@@ -73,4 +73,59 @@ public struct AccessibilityItem: Sendable, Hashable {
     public let hint: String?
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public let traits: AccessibilityTraits
+    /// The item of a list laid out by where it shows (a `LazyStack`) the element belongs to,
+    /// or `nil`.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var listItem: AccessibilityListItem?
+}
+
+/// An item of a list laid out by where it shows: the list's node and the item's index.
+///
+/// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+public struct AccessibilityListItem: Sendable, Hashable {
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public let list: NodeID
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public let index: Int
+
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public init(list: NodeID, index: Int) {
+        self.list = list
+        self.index = index
+    }
+}
+
+/// A list laid out by where it shows, as assistive technologies see it: all its items, of
+/// which only some are laid out and have elements; the rest stand in with the frame they
+/// are expected to take.
+///
+/// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+public struct AccessibilityList: Sendable, Hashable {
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public let node: NodeID
+    /// All the items.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public let count: Int
+    /// The items laid out now; the others have no elements.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public let laidOut: Range<Int>
+    /// The part of the list that shows, in the root's coordinates.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public let frame: LayoutRect
+}
+
+/// One entry of a tree's accessibility in reading order.
+///
+/// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+public enum AccessibilityEntry: Sendable, Hashable {
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    case element(AccessibilityItem)
+    /// A list laid out by where it shows, with the elements of its items laid out.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    case list(AccessibilityList, [AccessibilityItem])
 }
