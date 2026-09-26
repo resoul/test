@@ -145,7 +145,8 @@
         let after = try #require(view.accessibilityChildren() as? [NSAccessibilityElement])
         #expect(after.count == 10)
         #expect(zip(before, after).allSatisfy { $0 === $1 })
-        #expect(after[2].accessibilityFrameInParentSpace().minY == 0)
+        // At the top of the 100-point view: AppKit measures a parent's space from its bottom.
+        #expect(after[2].accessibilityFrameInParentSpace().maxY == 100)
         view.host.detach()
     }
 

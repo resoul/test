@@ -1356,6 +1356,8 @@ func aListIsOneEntryInReadingOrderThoughNoneOfItsItemsIsLaidOut() throws {
     #expect(header.label == "Header")
     #expect(list.node == feed.stack.id)
     #expect(list.count == 1000)
+    // None of it shows: its frame is the whole list, where it is below the window.
+    #expect(list.frame == LayoutRect(x: 0, y: 400, width: 200, height: 30000))
     #expect(items.isEmpty)
     host.detach()
 }

@@ -87,7 +87,12 @@ cd Demo && xcodebuild test -project Demo.xcodeproj -scheme LayoutDemoTV -destina
 
 ```sh
 cd Demo && xcodebuild test -project Demo.xcodeproj -scheme LayoutDemoiOS -destination 'platform=iOS Simulator,name=iPhone 17'
+cd Demo && xcodebuild test -project Demo.xcodeproj -scheme LayoutDemoMac -destination 'platform=macOS'
 ```
+
+Тесты Mac, которые обращаются к API доступности напрямую (строка по номеру, действие
+«показать»), пропускаются, пока исполнителю тестов не разрешено управлять компьютером
+(Системные настройки → Конфиденциальность и безопасность → Универсальный доступ).
 
 ## Отчётность
 

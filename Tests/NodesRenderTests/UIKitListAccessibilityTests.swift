@@ -279,4 +279,65 @@
         #expect(list.accessibilityDataTableCellElement(forRow: first + 1, column: 0) === name)
         view.host.detach()
     }
+
+    /// A 300-point header, then the list, in one scroll: the list starts below the window.
+    @MainActor
+    private final class Below: Node {
+        let rows = NodeCache<Int, Row> { _ in Row() }
+        let header = Row().showing(-1)
+        lazy var stack = LazyStack<Numbered>(estimatedLength: 30) { [rows] item in
+            rows[item.id].showing(item.id)
+        }
+        lazy var scroll = Scroll(.vertical, content: Column(header: header, stack: stack))
+
+        override init() {
+            super.init()
+            stack.items = (0..<1000).map { Numbered(id: $0) }
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { scroll }
+        }
+
+        private final class Column: Node {
+            let header: Row
+            let stack: LazyStack<Numbered>
+
+            init(header: Row, stack: LazyStack<Numbered>) {
+                self.header = header
+                self.stack = stack
+                super.init()
+            }
+
+            override func layoutSpec() -> LayoutSpec? {
+                FlexContainer(.column) {
+                    header.size(width: 200, height: 300)
+                    stack
+                }
+            }
+        }
+    }
+
+    @Test @MainActor
+    func aListBelowTheWindowKeepsItsPlace() throws {
+        let below = Below()
+        let view = NodeView(root: below)
+        view.zoom = 1
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 150)
+        view.layoutIfNeeded()
+        let elements = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+        let list = try #require(elements.last as? ListAccessibilityContainer)
+
+        // Nothing of it shows: an empty frame would be taken for none, and the items would
+        // lose where the list is. It takes the whole list's.
+        #expect(
+            list.accessibilityFrameInContainerSpace
+                == CGRect(x: 0, y: 300, width: 200, height: 30000)
+        )
+        let second = try #require(list.accessibilityElement(at: 1) as? UIAccessibilityElement)
+        #expect(
+            second.accessibilityFrameInContainerSpace == CGRect(x: 0, y: 30, width: 200, height: 30)
+        )
+        view.host.detach()
+    }
 #endif
