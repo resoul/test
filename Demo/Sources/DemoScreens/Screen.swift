@@ -445,11 +445,11 @@
                     .margin(top: 0, leading: -24, bottom: -8, trailing: -24)
                     .sticky(top: 0)
                 for card in cards { card }
-                actions
-                // After the button: on Apple TV a block with nothing to focus above a focus
-                // section keeps the remote from reaching it while it is off the screen.
+                // Between the cards and the button: on Apple TV the remote goes past a block
+                // with nothing to focus to the focus section under it.
                 images.margin(top: 0, leading: -24, bottom: -8, trailing: -24)
                 gallery
+                actions
                 gridTitle
                     .margin(top: 0, leading: -24, bottom: -8, trailing: -24)
                     .sticky(top: 0)

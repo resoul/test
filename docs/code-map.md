@@ -250,6 +250,7 @@
 | `NodeFocusItem` (UIKit), `NodeView.focusItems(in:)`, `didUpdateFocus`, `presses*` | один `UIFocusItem` на ноду, живёт пока нода; хранит `NodeID` и кадр; view — first responder, чтобы получить нажатия | Trellis `TrellisNodeProxy` |
 | `Appearance.scale`, `Shadow`; `LayerRenderer` — `position`/`bounds`/`transform` | увеличение и тень для фокуса; кадр — через position/bounds, т.к. `frame` при transform не определён | — |
 | `Node.isFocusSection`, `NodeHost.focusSections`, `SectionGuide` (UIKit) | `UIFocusGuide` на площади ноды, цель — последняя фокусированная внутри, иначе первая; выключен, пока фокус внутри | SwiftUI `.focusSection()` (tvOS) |
+| `SectionEntry` (UIKit), `NodeView.updateSections`, ветка входа в `didUpdateFocus` | секция внутри прокрутки — вход во всю её рамку среди элементов контейнера прокрутки; фокус со входа переводится запросом к `NodeView`, не к элементу ноды | дефект #168 |
 | `FocusLook`, `NodeHost.focusLook`, `FocusRing` | TV — нода приподнимается; iPad/Mac — рамка от адаптера, нода не меняется | системный вид фокуса на каждой платформе |
 | `NodeHost.moveFocus`, `FocusMove`, `nearest` | Tab — порядок чтения, `false` на краю (дальше — следующий view); стрелки — вперёд ×1 + вбок ×2 | Trellis D38: стрелки по геометрии, tie по порядку |
 | `NodeHost.requestFocus`, `onFocusRequest`; `NodeView.requestedFocus`, `applyFocusRequest` | приложение просит, система переводит, хост узнаёт через `didUpdateFocus` — одна дорога для всех переходов | правило Trellis: система фокуса — единственный владелец |
