@@ -74,7 +74,9 @@ public struct SpacingScale: Sendable, Hashable {
 }
 
 /// A width from which a responsive value or a `Breakpoint` branch applies: points, or a
-/// named size. The names describe the width of the space an element gets, not a device.
+/// named size. The names describe the width of the space an element gets, not a device;
+/// they stay names until the layout is prepared, and the theme's `BreakpointScale` of that
+/// pass gives their points. A number written out stays that number.
 ///
 ///     extension BreakpointWidth {
 ///         static let sidebar: Self = 280
@@ -84,37 +86,112 @@ public struct SpacingScale: Sendable, Hashable {
 public struct BreakpointWidth: Sendable, Hashable, ExpressibleByIntegerLiteral,
     ExpressibleByFloatLiteral
 {
-    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public let points: Double
+    enum Kind: Hashable {
+        case points(Double)
+        case named(Name)
+    }
+
+    /// The named sizes, narrowest first.
+    enum Name: Int, Hashable, CaseIterable {
+        case sm
+        case md
+        case lg
+        case xl
+        case xxl
+    }
+
+    let kind: Kind
+
+    init(kind: Kind) {
+        self.kind = kind
+    }
 
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public init(integerLiteral value: Int) {
-        points = Double(value)
+        kind = .points(Double(value))
     }
 
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public init(floatLiteral value: Double) {
-        points = value
+        kind = .points(value)
     }
 
-    /// 400 points: a large phone in portrait, a card in a wide column.
+    /// A fixed width in points, whatever the theme.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public static let sm: BreakpointWidth = 400
-    /// 600 points: a phone in landscape, a narrow iPad column.
+    public static func points(_ value: Double) -> BreakpointWidth {
+        BreakpointWidth(kind: .points(value))
+    }
+
+    /// 400 points by default: a large phone in portrait, a card in a wide column.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public static let md: BreakpointWidth = 600
-    /// 840 points: an iPad in portrait, a Mac window.
+    public static let sm = BreakpointWidth(kind: .named(.sm))
+    /// 600 points by default: a phone in landscape, a narrow iPad column.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public static let lg: BreakpointWidth = 840
-    /// 1200 points: an iPad in landscape, a large Mac window.
+    public static let md = BreakpointWidth(kind: .named(.md))
+    /// 840 points by default: an iPad in portrait, a Mac window.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public static let xl: BreakpointWidth = 1200
-    /// 1600 points: tvOS, a full-screen Mac window.
+    public static let lg = BreakpointWidth(kind: .named(.lg))
+    /// 1200 points by default: an iPad in landscape, a large Mac window.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public static let xxl: BreakpointWidth = 1600
+    public static let xl = BreakpointWidth(kind: .named(.xl))
+    /// 1600 points by default: tvOS, a full-screen Mac window.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public static let xxl = BreakpointWidth(kind: .named(.xxl))
+}
+
+/// The points of each named breakpoint. A theme supplies its own; `standard` is 400, 600,
+/// 840, 1200, 1600.
+///
+/// Ownership: value type. Isolation: none. Errors: none. Cancellation: not applicable.
+public struct BreakpointScale: Sendable, Hashable {
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var sm: Double
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var md: Double
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var lg: Double
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var xl: Double
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var xxl: Double
+
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public init(sm: Double, md: Double, lg: Double, xl: Double, xxl: Double) {
+        self.sm = sm
+        self.md = md
+        self.lg = lg
+        self.xl = xl
+        self.xxl = xxl
+    }
+
+    /// 400, 600, 840, 1200, 1600.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public static let standard = BreakpointScale(sm: 400, md: 600, lg: 840, xl: 1200, xxl: 1600)
+
+    /// The points of `width`: a name's in this scale, a number's own.
+    ///
+    /// Ownership: returns a value. Isolation: none. Errors: none. Cancellation: none.
+    public func points(_ width: BreakpointWidth) -> Double {
+        switch width.kind {
+        case let .points(value):
+            value
+        case .named(.sm):
+            sm
+        case .named(.md):
+            md
+        case .named(.lg):
+            lg
+        case .named(.xl):
+            xl
+        case .named(.xxl):
+            xxl
+        }
+    }
 }

@@ -4,6 +4,7 @@
     import ImageIO
     import LayoutCore
     import Nodes
+    import ThemeCore
     import QuartzCore
     import StateCore
     import os

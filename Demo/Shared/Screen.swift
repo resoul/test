@@ -5,10 +5,8 @@
     import Nodes
     import NodesRender
     import StateCore
+    import ThemeCore
 
-    private let ink = Color(red: 0.11, green: 0.12, blue: 0.14)
-    private let muted = Color(red: 0.45, green: 0.47, blue: 0.52)
-    private let accent = Color(red: 0.16, green: 0.42, blue: 0.95)
 
     /// What one card shows.
     @MainActor
@@ -69,8 +67,12 @@
         override func update() {
             let following = profile.isFollowing.value
             label.text = following ? "Following" : "Follow"
-            label.style.color = following ? ink : .white
-            appearance.background = following ? Color(red: 0.9, green: 0.91, blue: 0.93) : accent
+            let theme = self.theme
+            label.style.color = theme.color(following ? .primaryText : .onAccent)
+            appearance.background =
+                following
+                ? theme.color(.surface).mixed(with: theme.color(.primaryText), amount: 0.1)
+                : theme.color(.accent)
         }
 
         override func layoutSpec() -> LayoutSpec? {
@@ -84,28 +86,28 @@
     @MainActor
     final class ProfileCard: Node {
         let avatar: Avatar
-        let name = Text("", style: TextStyle(size: 20, weight: .semibold, color: ink))
-        let handle = Text("", style: TextStyle(size: 13, color: muted))
+        let name = Text("", style: TextStyle(size: 20, weight: .semibold))
+        let handle = Text("", style: TextStyle(size: 13, colorRole: .secondaryText))
         let bio: Text
-        let note = Text("", style: TextStyle(size: 13, weight: .medium, color: accent))
+        let note = Text("", style: TextStyle(size: 13, weight: .medium, colorRole: .accent))
         let badge: FollowBadge
         let profile: Profile
 
         init(profile: Profile) {
             self.profile = profile
             avatar = Avatar(color: profile.color)
-            bio = Text(profile.bio, style: TextStyle(size: 15, color: ink))
+            bio = Text(profile.bio, style: TextStyle(size: 15))
             badge = FollowBadge(profile: profile)
             super.init()
-            appearance.background = .white
             appearance.cornerRadius = 12
             appearance.borderWidth = 1
-            appearance.borderColor = Color(red: 0.88, green: 0.89, blue: 0.91)
             // On Apple TV, moving toward any part of the card focuses its badge.
             isFocusSection = true
         }
 
         override func update() {
+            appearance.background = theme.color(.surface)
+            appearance.borderColor = theme.color(.separator)
             name.text = profile.name.value
             handle.text =
                 "@" + profile.name.value.lowercased().replacingOccurrences(of: " ", with: "")
@@ -315,7 +317,7 @@
 
         init(_ image: Image, caption: String) {
             self.image = image
-            self.caption = Text(caption, style: TextStyle(size: 12, color: muted))
+            self.caption = Text(caption, style: TextStyle(size: 12, colorRole: .secondaryText))
             super.init()
             image.appearance.background = Color(red: 0.88, green: 0.89, blue: 0.91)
         }
@@ -374,16 +376,19 @@
     @MainActor
     final class MailRow: Node {
         let dot = Node()
-        let sender = Text("", style: TextStyle(size: 15, weight: .semibold, color: ink))
-        let subject = Text("", style: TextStyle(size: 14, color: muted))
+        let sender = Text("", style: TextStyle(size: 15, weight: .semibold))
+        let subject = Text("", style: TextStyle(size: 14, colorRole: .secondaryText))
         let flag = Node()
 
         override init() {
             super.init()
-            dot.appearance.background = accent
             dot.appearance.cornerRadius = 4
             flag.appearance.background = Color(red: 0.98, green: 0.62, blue: 0.10)
             flag.appearance.cornerRadius = 3
+        }
+
+        override func update() {
+            dot.appearance.background = theme.color(.accent)
         }
 
         func showing(_ mail: Mail) -> MailRow {
@@ -466,7 +471,10 @@
             }
             table.leadingActions = { [weak self] mail in
                 [
-                    SwipeAction(mail.isUnread ? "Read" : "Unread", color: accent) {
+                    SwipeAction(
+                        mail.isUnread ? "Read" : "Unread",
+                        color: self?.theme.color(.accent)
+                    ) {
                         self?.change(mail.id) { $0.isUnread.toggle() }
                     }
                 ]
@@ -546,8 +554,11 @@
             scroll.content = Card()
             scroll.zoomRange = 1...4
             scroll.onScroll = { [weak self] _ in self?.relabel() }
-            scroll.appearance.background = Color(red: 0.90, green: 0.91, blue: 0.94)
             scroll.appearance.cornerRadius = 12
+        }
+
+        override func update() {
+            scroll.appearance.background = theme.color(.surface)
         }
 
         private func relabel() {
@@ -566,7 +577,7 @@
             let text = Text(
                 "Small print, sharp at any zoom: the text is drawn again for the pixels it "
                     + "takes. Pinch to zoom in, and move around the card.",
-                style: TextStyle(size: 11, color: ink)
+                style: TextStyle(size: 11)
             )
             let dots = [
                 Color(red: 0.93, green: 0.45, blue: 0.35),
@@ -728,9 +739,12 @@
         let label: Text
 
         init(_ title: String) {
-            label = Text(title, style: TextStyle(size: 17, weight: .semibold, color: ink))
+            label = Text(title, style: TextStyle(size: 17, weight: .semibold))
             super.init()
-            appearance.background = Color(red: 0.96, green: 0.96, blue: 0.97)
+        }
+
+        override func update() {
+            appearance.background = theme.color(.background)
         }
 
         override func layoutSpec() -> LayoutSpec? {
@@ -747,7 +761,7 @@
             let id: Int
         }
 
-        let label = Text("", style: TextStyle(size: 15, color: ink))
+        let label = Text("", style: TextStyle(size: 15))
 
         func showing(_ item: Item) -> Line {
             label.text =
@@ -885,7 +899,7 @@
     final class Screen: Node {
         let title = Text(
             "Nodes, text, state and a breakpoint",
-            style: TextStyle(size: 26, weight: .bold, color: ink)
+            style: TextStyle(size: 26, weight: .bold)
         )
         let hint = Text(
             "Resize the window: under 460 points a card turns into a column, and from 760 "
@@ -895,7 +909,7 @@
                 + "the inbox to move messages and delete several. "
                 + "The list scrolls, and so does the row of tiles; images, a grid and ten "
                 + "thousand lines are at its end.",
-            style: TextStyle(size: 14, color: muted)
+            style: TextStyle(size: 14, colorRole: .secondaryText)
         )
         let cards: [ProfileCard]
         let feed: Scroll
@@ -931,7 +945,10 @@
             feed.content = Feed(cards: cards, actions: actions, toTop: toTop)
             self.feed = feed
             super.init()
-            appearance.background = Color(red: 0.96, green: 0.96, blue: 0.97)
+        }
+
+        override func update() {
+            appearance.background = theme.color(.background)
         }
 
         override func layoutSpec() -> LayoutSpec? {

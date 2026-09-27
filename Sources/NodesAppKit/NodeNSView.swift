@@ -2,9 +2,11 @@
 // is a UIKit app and uses the UIKit adapter, so this module is empty.
 #if canImport(AppKit) && !canImport(UIKit)
     import AppKit
+    import LayoutAppKit
     import LayoutCore
     import Nodes
     import NodesRender
+    import ThemeCore
     import os
 
     /// Where the adapter writes layout reports.
@@ -59,6 +61,12 @@
             layer = hostedLayer
             wantsLayer = true
             host.focusLook = .ring
+            NSWorkspace.shared.notificationCenter.addObserver(
+                self,
+                selector: #selector(systemSettingsChanged),
+                name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+                object: nil
+            )
             #if DEBUG
                 // Problems in the layouts, and a trace the app asked for, go to the unified log
                 // while debugging; a pass without either stays quiet.
@@ -169,6 +177,7 @@
             isLayingOut = true
             defer { isLayingOut = false }
 
+            updateConditions()
             let content = LayoutSize(
                 width: Double(bounds.width) / factor,
                 height: Double(bounds.height) / factor
@@ -355,6 +364,30 @@
                 width: NSView.noIntrinsicMetric,
                 height: host.fittingSize(width: width).height * factor
             )
+        }
+
+        /// Follows the window's appearance, light or dark.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func viewDidChangeEffectiveAppearance() {
+            super.viewDidChangeEffectiveAppearance()
+            updateConditions()
+        }
+
+        /// Takes the system's settings into the host's conditions: light or dark, Increase
+        /// Contrast, Reduce Motion. They apply at once, without an animation of the tree's
+        /// own.
+        private func updateConditions() {
+            let conditions = DisplayConditions(effectiveAppearance)
+            guard conditions != host.conditions else { return }
+
+            withAnimation(nil) {
+                host.conditions = conditions
+            }
+        }
+
+        @objc private func systemSettingsChanged() {
+            updateConditions()
         }
 
         /// Presses on nodes with `onTap`; other clicks go on up the responder chain.

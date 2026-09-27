@@ -1,6 +1,7 @@
 #if canImport(QuartzCore)
     import LayoutCore
     import Nodes
+    import ThemeCore
     import QuartzCore
 
     /// A node that draws its own content (text, a shape) into its layer.

@@ -1,6 +1,7 @@
 #if canImport(ImageIO)
     import ImageIO
     import LayoutCore
+    import ThemeCore
     import Nodes
     import os
     @testable import NodesRender

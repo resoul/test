@@ -24,9 +24,9 @@ NodesRender     дерево нод → дерево CALayer (QuartzCore), об�
                 сеть через URLSession; см. 11).
 NodesUIKit      встраивание нод в UIKit: view.addSubnode(node)
 NodesAppKit     встраивание нод в AppKit
-Theme           (ещё не создан; решено 2026-09-27) тема: цвета, типографика, радиусы,
-                анимации, пороги, шкала отступов; тема по умолчанию (см. 09). Только
-                Foundation. Тип шкалы отступов остаётся в LayoutCore.
+ThemeCore       тема: цвета (Color), типографика, радиусы, анимации, пороги, шкала
+                отступов; тема по умолчанию, условия отображения, переопределения (см. 09).
+                Только Foundation и LayoutCore. Модуль не `Theme`: в нём тип `Theme`.
 StateCore       синхронное состояние на MainActor с отслеживанием чтений: State, Computed,
                 Observer, Effect, StateTransaction (см. 08). Только стандартная библиотека.
 StateAsyncRay   адаптер AsyncRay ↔ StateCore (AsyncRay 1.0.0)
@@ -38,8 +38,9 @@ StateAsyncRay   адаптер AsyncRay ↔ StateCore (AsyncRay 1.0.0)
 NodesUIKit ──► NodesRender ──► Nodes ──► LayoutCore ◄── LayoutUIKit
 NodesAppKit ─┘                                      ◄── LayoutAppKit
 StateAsyncRay ──► StateCore ◄── Nodes   (Nodes отслеживает чтения в layoutSpec()/update())
-Nodes ──► Theme ──► LayoutCore      (решено 2026-09-27, модуля ещё нет, см. 09)
-LayoutUIKit, LayoutAppKit ──► Theme   (тема для обычных view, см. 09)
+Nodes ──► ThemeCore ──► LayoutCore
+LayoutUIKit, LayoutAppKit ──► ThemeCore   (тема для обычных view, см. 09)
+NodesUIKit ──► LayoutUIKit, NodesAppKit ──► LayoutAppKit   (условия отображения системы)
 ```
 
 ## Правила

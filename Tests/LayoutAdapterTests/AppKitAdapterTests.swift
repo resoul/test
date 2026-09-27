@@ -3,6 +3,7 @@
     @testable import LayoutAppKit
     import LayoutCore
     import Testing
+    import ThemeCore
 
     @MainActor
     private final class Card: LayoutNSView {
@@ -142,5 +143,50 @@
         #expect(reports.last?.isRejected == true)
         #expect(reports.last?.duplicates.count == 1)
         #expect(view.item.frame == CGRect(x: 0, y: 0, width: 10, height: 10))
+    }
+
+    /// A view laid out with a theme it is given: two boxes a spacing step apart, side by side
+    /// from the theme's `.md` on.
+    @MainActor
+    private final class Panel: LayoutNSView {
+        let first = NSView()
+        let second = NSView()
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            addSubview(first)
+            addSubview(second)
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                first.size(10)
+                second.size(10)
+            }
+            .direction(.row, from: .md)
+            .gap(.s5)
+        }
+    }
+
+    @MainActor
+    @Test
+    func aPlainViewLaysOutWithTheSpacingAndBreakpointsOfItsTheme() {
+        let panel = Panel(frame: NSRect(x: 0, y: 0, width: 500, height: 100))
+        panel.needsLayout = true
+        panel.layoutSubtreeIfNeeded()
+        // Under the standard .md (600): a column, 16 apart.
+        #expect(panel.second.frame.minX == 0)
+
+        var theme = Theme.standard
+        theme.spacing = SpacingScale(steps: [1, 2, 3, 4, 5, 6, 7, 8, 9])
+        theme.breakpoints.md = 400
+        panel.layoutTheme = theme
+        panel.needsLayout = true
+        panel.layoutSubtreeIfNeeded()
+
+        // From .md at 400: a row, 5 apart.
+        #expect(panel.second.frame.minX == 15)
     }
 #endif

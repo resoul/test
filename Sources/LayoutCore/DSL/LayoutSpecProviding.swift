@@ -19,9 +19,18 @@ public protocol LayoutSpecProviding: AnyObject {
     ///
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
     var layoutSpacing: SpacingScale { get }
+
+    /// The points of named breakpoints (`.sm` … `.xxl`) in this object's layout. The
+    /// default is `BreakpointScale.standard`; a theme returns its own.
+    ///
+    /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
+    var layoutBreakpoints: BreakpointScale { get }
 }
 
 extension LayoutSpecProviding {
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
     public var layoutSpacing: SpacingScale { .standard }
+
+    /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
+    public var layoutBreakpoints: BreakpointScale { .standard }
 }

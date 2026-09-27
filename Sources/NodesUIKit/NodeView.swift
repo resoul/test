@@ -1,7 +1,9 @@
 #if canImport(UIKit)
     import LayoutCore
+    import LayoutUIKit
     import Nodes
     import NodesRender
+    import ThemeCore
     import UIKit
     import os
 
@@ -96,6 +98,21 @@
                 name: UIFocusSystem.movementDidFailNotification,
                 object: nil
             )
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(systemSettingsChanged),
+                name: UIAccessibility.reduceMotionStatusDidChangeNotification,
+                object: nil
+            )
+            if #available(iOS 17, tvOS 17, *) {
+                registerForTraitChanges(
+                    [
+                        UITraitUserInterfaceStyle.self, UITraitAccessibilityContrast.self,
+                        UITraitPreferredContentSizeCategory.self,
+                    ],
+                    action: #selector(systemSettingsChanged)
+                )
+            }
             #if DEBUG
                 // Problems in the layouts, and a trace the app asked for, go to the unified log
                 // while debugging; a pass without either stays quiet.
@@ -152,6 +169,7 @@
             isLayingOut = true
             defer { isLayingOut = false }
 
+            updateConditions()
             let content = LayoutSize(
                 width: Double(bounds.width) / factor,
                 height: Double(bounds.height) / factor
@@ -509,6 +527,23 @@
             if window != nil, isTV {
                 becomeFirstResponder()
             }
+            updateConditions()
+        }
+
+        /// Takes the system's settings into the host's conditions: the interface style,
+        /// contrast, text size and Reduce Motion. They apply at once — the system animates its
+        /// own switch, and the tree does not add one of its own.
+        private func updateConditions() {
+            let conditions = DisplayConditions(traitCollection)
+            guard conditions != host.conditions else { return }
+
+            withAnimation(nil) {
+                host.conditions = conditions
+            }
+        }
+
+        @objc private func systemSettingsChanged() {
+            updateConditions()
         }
 
         /// The remote's select button presses the focused node; other presses go on up the

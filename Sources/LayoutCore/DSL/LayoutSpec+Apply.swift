@@ -244,9 +244,10 @@ extension LayoutSpec {
     /// Cancellation: not applicable.
     public func prepare(
         direction: LayoutDirection = .leftToRight,
-        spacing: SpacingScale = .standard
+        spacing: SpacingScale = .standard,
+        breakpoints: BreakpointScale = .standard
     ) -> PreparedLayout {
-        var tree = LayoutTree(direction: direction, spacing: spacing)
+        var tree = LayoutTree(direction: direction, spacing: spacing, breakpoints: breakpoints)
         let input = tree.root(for: self)
         return PreparedLayout(
             tree: LayoutTreeOwner(input),
@@ -270,9 +271,10 @@ extension LayoutSpec {
         direction: LayoutDirection = .leftToRight,
         scale: Double = 1,
         spacing: SpacingScale = .standard,
+        breakpoints: BreakpointScale = .standard,
         reporting: LayoutSpecReporting? = nil
     ) -> [LayoutPlacement] {
-        let prepared = prepare(direction: direction, spacing: spacing)
+        let prepared = prepare(direction: direction, spacing: spacing, breakpoints: breakpoints)
         var trace: LayoutTraceRequest?
         if let reporting, !reporting.traceAreas.isEmpty {
             let traced = reporting.tracedElements
@@ -319,9 +321,10 @@ extension LayoutSpec {
         width: AvailableSpace,
         height: AvailableSpace = .maxContent,
         direction: LayoutDirection = .leftToRight,
-        spacing: SpacingScale = .standard
+        spacing: SpacingScale = .standard,
+        breakpoints: BreakpointScale = .standard
     ) -> LayoutSize {
-        var tree = LayoutTree(direction: direction, spacing: spacing)
+        var tree = LayoutTree(direction: direction, spacing: spacing, breakpoints: breakpoints)
         let root = tree.root(for: self)
         let context = LayoutContext(stackBudget: LayoutContext.currentThreadStackBudget)
         let size = try? FlexboxEngine.measure(root, width: width, height: height, context: context)
@@ -349,6 +352,7 @@ struct LayoutTree {
 
     let direction: LayoutDirection
     let spacing: SpacingScale
+    let breakpoints: BreakpointScale
     var elements: [Entry] = []
     /// Some leaf's content can only be measured on the main thread.
     private(set) var requiresMainThread = false
@@ -359,9 +363,10 @@ struct LayoutTree {
     /// or through its subelements, is placed as a leaf there instead of recursing forever.
     private var expanding: Set<ObjectIdentifier> = []
 
-    init(direction: LayoutDirection, spacing: SpacingScale) {
+    init(direction: LayoutDirection, spacing: SpacingScale, breakpoints: BreakpointScale) {
         self.direction = direction
         self.spacing = spacing
+        self.breakpoints = breakpoints
     }
 
     /// How the items of one list are placed: what they inherit from the spec around them.
@@ -477,7 +482,7 @@ struct LayoutTree {
                 var own = embedded
                 if case .container = own.content {} else { own = LayoutSpec(.column) { embedded } }
                 own.patches += spec.patches
-                let (ownStyle, ownVariants) = own.resolvedStyle(spacing)
+                let (ownStyle, ownVariants) = own.resolvedStyle(spacing, breakpoints)
                 guard case let .container(items) = own.content else { return .none }
 
                 expanding.insert(key)
@@ -496,7 +501,7 @@ struct LayoutTree {
                 )
             }
 
-            let (style, variants) = spec.resolvedStyle(spacing)
+            let (style, variants) = spec.resolvedStyle(spacing, breakpoints)
             let content = element.layoutContent
             if case let .measured(measurer) = content, measurer.requiresMainThread {
                 requiresMainThread = true
@@ -512,7 +517,7 @@ struct LayoutTree {
             )
 
         case let .container(items):
-            let (style, variants) = spec.resolvedStyle(spacing)
+            let (style, variants) = spec.resolvedStyle(spacing, breakpoints)
             let id = LayoutID(UInt64.max - containers)
             containers += 1
             if let container = place.container {
@@ -536,7 +541,12 @@ struct LayoutTree {
             // Each branch item is shown within its widths only. A breakpoint standing right in
             // a branch opens up in its place, within the branch's widths: it has no element of
             // its own to hide.
-            var queue = LayoutTree.branches(cases, otherwise, within: .all)
+            var queue = LayoutTree.branches(
+                cases,
+                otherwise,
+                within: .all,
+                breakpoints: breakpoints
+            )
             var branches: [LayoutSpec] = []
             var index = 0
             while index < queue.count {
@@ -544,7 +554,12 @@ struct LayoutTree {
                 if case let .alternatives(innerCases, innerOtherwise) = item.content {
                     queue.replaceSubrange(
                         index...index,
-                        with: LayoutTree.branches(innerCases, innerOtherwise, within: widths)
+                        with: LayoutTree.branches(
+                            innerCases,
+                            innerOtherwise,
+                            within: widths,
+                            breakpoints: breakpoints
+                        )
                     )
                     continue
                 }
@@ -570,16 +585,16 @@ struct LayoutTree {
     /// The widths a branch item shows at: from `lowest` on — from none, when `nil` — up to
     /// `highest`, not included — without end, when `nil`.
     struct Widths {
-        var lowest: BreakpointWidth?
-        var highest: BreakpointWidth?
+        var lowest: Double?
+        var highest: Double?
 
         static let all = Widths(lowest: nil, highest: nil)
 
         /// The widths in both.
         func within(_ outer: Widths) -> Widths {
             Widths(
-                lowest: [lowest, outer.lowest].compactMap { $0 }.max { $0.points < $1.points },
-                highest: [highest, outer.highest].compactMap { $0 }.min { $0.points < $1.points }
+                lowest: [lowest, outer.lowest].compactMap { $0 }.max(),
+                highest: [highest, outer.highest].compactMap { $0 }.min()
             )
         }
     }
@@ -589,15 +604,17 @@ struct LayoutTree {
     static func branches(
         _ cases: [BreakpointCase],
         _ otherwise: [LayoutSpec],
-        within outer: Widths
+        within outer: Widths,
+        breakpoints: BreakpointScale
     ) -> [(LayoutSpec, Widths)] {
-        let widest = cases.sorted { $0.threshold.points > $1.threshold.points }
+        let widest = cases.map { (breakpoints.points($0.threshold), $0.items) }
+            .sorted { $0.0 > $1.0 }
         var result: [(LayoutSpec, Widths)] = []
-        var above: BreakpointWidth?
-        for branch in widest {
-            let widths = Widths(lowest: branch.threshold, highest: above).within(outer)
-            result += branch.items.map { ($0, widths) }
-            above = branch.threshold
+        var above: Double?
+        for (threshold, items) in widest {
+            let widths = Widths(lowest: threshold, highest: above).within(outer)
+            result += items.map { ($0, widths) }
+            above = threshold
         }
         let narrow = Widths(lowest: nil, highest: above).within(outer)
         result += otherwise.map { ($0, narrow) }
@@ -618,12 +635,12 @@ struct LayoutTree {
         ]
         if let lowest = widths.lowest {
             display.append(
-                LayoutSpec.StylePatch(from: lowest) { style, _ in style.display = .flex }
+                LayoutSpec.StylePatch(from: .points(lowest)) { style, _ in style.display = .flex }
             )
         }
         if let highest = widths.highest {
             display.append(
-                LayoutSpec.StylePatch(from: highest) { style, _ in style.display = .none }
+                LayoutSpec.StylePatch(from: .points(highest)) { style, _ in style.display = .none }
             )
         }
         branch.patches.insert(contentsOf: display, at: 0)

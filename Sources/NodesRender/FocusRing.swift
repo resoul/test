@@ -1,6 +1,7 @@
 #if canImport(QuartzCore)
     import LayoutCore
     import Nodes
+    import ThemeCore
     import QuartzCore
 
     /// The ring around the focused node that keyboard focus shows on iPad and Mac. The

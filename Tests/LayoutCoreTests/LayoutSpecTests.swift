@@ -755,3 +755,67 @@ func applyReportsVariantsChosenWithoutAWidth() {
     #expect(report?.hasProblems == true)
     #expect(report?.lines[0].hasSuffix("widthless=none") == false)
 }
+
+@MainActor
+@Test
+func aNamedBreakpointTakesItsPointsFromTheScaleOfThePass() {
+    let wide = Box(10, 10)
+    let narrow = Box(10, 10)
+    func spec() -> LayoutSpec {
+        Breakpoint(from: .md) {
+            wide
+        } otherwise: {
+            narrow
+        }
+    }
+    let rect = LayoutRect(x: 0, y: 0, width: 500, height: 100)
+
+    // 500 is under the standard 600.
+    spec().apply(in: rect)
+    #expect(narrow.isVisible == true)
+    #expect(wide.isVisible == false)
+
+    // A theme with .md at 400.
+    var scale = BreakpointScale.standard
+    scale.md = 400
+    spec().apply(in: rect, breakpoints: scale)
+    #expect(wide.isVisible == true)
+    #expect(narrow.isVisible == false)
+}
+
+@MainActor
+@Test
+func aWidthWrittenAsANumberStaysThatNumberWhateverTheScale() {
+    let box = Box(10, 10)
+    let spec = FlexContainer(.row) {
+        box.size(10).size(20, from: 600).size(30, from: .md)
+    }
+    let rect = LayoutRect(x: 0, y: 0, width: 700, height: 100)
+
+    // Standard scale: .md is 600 too; both apply, the later one wins.
+    spec.apply(in: rect)
+    #expect(box.frame?.size.width == 30)
+    // .md moved to 800: at 700 only the 600 written out applies.
+    var scale = BreakpointScale.standard
+    scale.md = 800
+    spec.apply(in: rect, breakpoints: scale)
+    #expect(box.frame?.size.width == 20)
+}
+
+@MainActor
+@Test
+func aBreakpointOfSeveralCasesOrdersThemByTheScaleOfThePass() {
+    let large = Box(10, 10)
+    let medium = Box(10, 10)
+    let small = Box(10, 10)
+    // A scale that turns the standard order around: .lg under .md.
+    let scale = BreakpointScale(sm: 100, md: 700, lg: 300, xl: 1200, xxl: 1600)
+    let spec = Breakpoint([.from(.lg) { large }, .from(.md) { medium }]) { small }
+
+    spec.apply(in: LayoutRect(x: 0, y: 0, width: 500, height: 100), breakpoints: scale)
+    #expect(large.isVisible == true)
+    #expect(medium.isVisible == false)
+    spec.apply(in: LayoutRect(x: 0, y: 0, width: 800, height: 100), breakpoints: scale)
+    #expect(medium.isVisible == true)
+    #expect(large.isVisible == false)
+}

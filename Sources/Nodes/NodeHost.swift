@@ -1,6 +1,7 @@
 import Foundation
 import LayoutCore
 import StateCore
+import ThemeCore
 
 /// Lays out a tree of nodes in a given size. A platform adapter owns one per root: it sets
 /// `size`, `scale` and `direction`, is told through `onNeedsLayout` when the tree must be laid
@@ -37,11 +38,54 @@ public final class NodeHost {
         didSet { if direction != oldValue { setNeedsLayout() } }
     }
 
-    /// The points of spacing steps (`.s1` … `.s9`) in the tree's layouts.
+    /// The tree's theme: its colors, text, radii and motion, which nodes read through
+    /// `Node.theme`, and the spacing steps and breakpoints of its layouts. Setting it inside
+    /// `withAnimation` animates what it changes; the nodes that read it update, and the tree
+    /// is laid out again.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
-    public var spacing: SpacingScale = .standard {
-        didSet { setNeedsLayout() }
+    public var theme: Theme {
+        get { untracked { themeState.value } }
+        set {
+            guard newValue != theme else { return }
+
+            themeState.value = newValue
+            setNeedsLayout()
+        }
+    }
+
+    /// How the tree is shown: color scheme, contrast, text size, motion. The adapters set it
+    /// from the system's settings, without an animation; `ThemeOverride` changes it for a
+    /// part of the tree.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var conditions: DisplayConditions {
+        get { untracked { conditionsState.value } }
+        set { conditionsState.value = newValue }
+    }
+
+    /// The points of spacing steps (`.s1` … `.s9`) in the tree's layouts: the theme's.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var spacing: SpacingScale {
+        get { theme.spacing }
+        set { theme.spacing = newValue }
+    }
+
+    private let themeState = State(Theme.standard)
+    private let conditionsState = State(DisplayConditions.standard)
+    /// Changes when a node's `themeOverride` changes, or a node that read its theme away
+    /// from the tree comes under an override: the nodes that read their theme read it again.
+    private let overrides = State(0)
+
+    /// The tree's theme in its conditions, read so that the reader follows it.
+    var resolvedTheme: ResolvedTheme {
+        _ = overrides.value
+        return ResolvedTheme(theme: themeState.value, conditions: conditionsState.value)
+    }
+
+    func themeOverridesChanged() {
+        overrides.value &+= 1
     }
 
     /// Called once when the tree goes from laid out to needing a layout — the adapter
@@ -344,7 +388,8 @@ public final class NodeHost {
             width: width,
             height: height,
             direction: direction,
-            spacing: spacing
+            spacing: theme.spacing,
+            breakpoints: theme.breakpoints
         )
     }
 
@@ -372,7 +417,11 @@ public final class NodeHost {
         cancelSolving()
         let outer = NodeHost.preparing
         NodeHost.preparing = self
-        let prepared = root.asLayoutSpec.prepare(direction: direction, spacing: spacing)
+        let prepared = root.asLayoutSpec.prepare(
+            direction: direction,
+            spacing: theme.spacing,
+            breakpoints: theme.breakpoints
+        )
         NodeHost.preparing = outer
         let rect = LayoutRect(origin: .zero, size: size)
         let trace = traceRequest(for: prepared)
