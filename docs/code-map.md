@@ -229,7 +229,7 @@
 | `Node.hitTest`, `Node.onTap`, `pressChanged` | нажатия: ближайшая нода с действием, засчитывается над той же нодой | как `UIButton` (touch up inside) |
 | `NodeHost.pointerDown/Up/Cancelled` | платформо-нейтральный путь событий; адаптер только передаёт точку | тестируется на Linux |
 | `Button` (`NodesRender`) | текст на фоне, затемнение при нажатии | демо |
-| `NodeCache`, `NodeHost.passGeneration` | нода на id модели; ушедшие отпускаются на следующем проходе | [04](04-conditionals-and-responsive.md#7-кэш-нод-для-динамических-списков) |
+| `NodeCache`, `NodeCache.reserve`, `clearReserve()`, `NodeHost.passGeneration` | нода на id модели; ушедшие отпускаются на следующем проходе или ждут в запасе | [04](04-conditionals-and-responsive.md#7-кэш-нод-для-динамических-списков) |
 | `LayoutSpec.prepare`, `PreparedLayout` | подготовка (MainActor) / расчёт (где угодно) / применение (MainActor) | фоновый расчёт |
 | `ContentMeasurer.requiresMainThread` | view меряются только на главном: такая раскладка решается там | `ViewMeasurer` |
 | `NodeHost.mainThreadStackBudget`, `SolveOutcome`, `reject`; `LayoutReport.Stack` | проход не поместился в стек главного — на поток хоста или отклонён | дефект #124 |
