@@ -366,15 +366,24 @@ open class Node: LayoutElement {
         )
     }
 
-    /// The subnodes in the order they are drawn, the last on top: sticky ones over the rest,
-    /// as positioned boxes are over the others in CSS; otherwise in layout order.
+    /// The subnodes in the order they are drawn, the last on top: by `appearance.zIndex`,
+    /// and at the same one sticky ones over the rest, as positioned boxes are over the others
+    /// in CSS; otherwise in layout order.
     ///
     /// Ownership: returns nodes the node keeps. Isolation: MainActor. Errors: none.
     /// Cancellation: not applicable.
     public var subnodesInDrawingOrder: [Node] {
-        guard subnodes.contains(where: { $0.sticky != nil }) else { return subnodes }
+        guard subnodes.contains(where: { $0.sticky != nil || $0.appearance.zIndex != 0 }) else {
+            return subnodes
+        }
 
-        return subnodes.filter { $0.sticky == nil } + subnodes.filter { $0.sticky != nil }
+        // By rank, and in layout order within one.
+        func rank(_ entry: (offset: Int, element: Node)) -> (Int, Int, Int) {
+            (entry.element.appearance.zIndex, entry.element.sticky == nil ? 0 : 1, entry.offset)
+        }
+        return subnodes.enumerated()
+            .sorted { rank($0) < rank($1) }
+            .map(\.element)
     }
 
     /// The node got or lost the focus — to show it. Runs inside the host's

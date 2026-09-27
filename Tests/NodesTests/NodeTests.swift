@@ -1270,3 +1270,46 @@ func anAnimationIsATransactionThatAnimatesItsWrites() {
     #expect(host.renderAnimation == .linear(duration: 1))
     host.detach()
 }
+
+/// Three 40-point boxes, one under another, the second moved down over the third.
+@MainActor
+private final class Pile: Node {
+    let boxes = (0..<3).map { _ in Box(100, 40) }
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.column) {
+            for box in boxes { box }
+        }
+    }
+}
+
+@Test @MainActor
+func aHigherZIndexIsDrawnOverTheNextSiblingsAndTakesTheirTaps() {
+    let pile = Pile()
+    let host = host(pile)
+    defer { host.detach() }
+    let (first, second, third) = (pile.boxes[0], pile.boxes[1], pile.boxes[2])
+    second.appearance.offset = LayoutPoint(x: 0, y: 30)
+
+    // In layout order the third is over the second where they overlap.
+    #expect(
+        pile.subnodesInDrawingOrder.map(ObjectIdentifier.init)
+            == [first, second, third].map(ObjectIdentifier.init)
+    )
+    #expect(pile.hitTest(LayoutPoint(x: 10, y: 90)) === third)
+
+    second.appearance.zIndex = 1
+    #expect(
+        pile.subnodesInDrawingOrder.map(ObjectIdentifier.init)
+            == [first, third, second].map(ObjectIdentifier.init)
+    )
+    #expect(pile.hitTest(LayoutPoint(x: 10, y: 90)) === second)
+
+    first.appearance.zIndex = -1
+    third.appearance.zIndex = 1
+    // Below the rest, and at the same index in layout order.
+    #expect(
+        pile.subnodesInDrawingOrder.map(ObjectIdentifier.init)
+            == [first, second, third].map(ObjectIdentifier.init)
+    )
+}

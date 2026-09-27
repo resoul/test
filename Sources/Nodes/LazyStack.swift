@@ -44,10 +44,37 @@ public final class LazyStack<Item: Identifiable>: Node {
     /// not applicable.
     public var items: [Item] {
         didSet {
+            itemsVersion &+= 1
             startsAreStale = true
             setNeedsLayout()
         }
     }
+
+    /// Called when a layout of the stack is mounted that placed the nodes of `items` as they
+    /// are now, before it is drawn: what it changes is drawn with that layout. A layout
+    /// made before `items` last changed does not call it.
+    ///
+    /// Ownership: the stack keeps the closure; it must not keep the stack. Isolation:
+    /// MainActor. Errors: none. Cancellation: set to `nil`.
+    public var onLayoutApplied: (@MainActor () -> Void)?
+
+    /// Counts the changes of `items`, and the one the last `layoutSpec()` placed.
+    private var itemsVersion = 0
+    private var placedVersion = -1
+
+    /// Sets `items` leaving the scroll where it is: the items move under the window as the
+    /// new ones have them, where setting `items` keeps what shows in place — so that a row
+    /// dragged to a new place in the list takes its place without the list following it.
+    ///
+    /// Ownership: the stack keeps the items. Isolation: MainActor. Errors: none.
+    /// Cancellation: not applicable.
+    public func setItemsHoldingScroll(_ items: [Item]) {
+        holdsScroll = true
+        self.items = items
+    }
+
+    /// The next layout does not keep what shows in place.
+    private var holdsScroll = false
 
     /// The length along `axis` taken by an item that was never laid out.
     ///
@@ -161,7 +188,12 @@ public final class LazyStack<Item: Identifiable>: Node {
         // Before the first layout its place is unknown: the start of the list, one screen of
         // it, and the reach after.
         var span = untracked { visibleSpan() } ?? (start: 0, end: reach)
-        untracked { rememberAnchor() }
+        if holdsScroll {
+            holdsScroll = false
+            anchor = nil
+        } else {
+            untracked { rememberAnchor() }
+        }
         // Items added, removed or measured before what shows moved it along the stack, and
         // the scroll will follow it there: the window is where it will be then, however far.
         let moved = anchorMoved()
@@ -172,6 +204,7 @@ public final class LazyStack<Item: Identifiable>: Node {
             ? 0..<0 : lines.lowerBound * perLine..<min(items.count, lines.upperBound * perLine)
 
         placed = range.map { index in (items[index].id, content(items[index])) }
+        placedVersion = itemsVersion
         laidOutItems = range
         let total = length
         let before = lines.isEmpty ? total : starts[lines.lowerBound]
@@ -556,6 +589,9 @@ public final class LazyStack<Item: Identifiable>: Node {
         }
         anchor = nil
         viewportMoved()
+        if placedVersion == itemsVersion {
+            onLayoutApplied?()
+        }
     }
 
     /// Something around the stack moved: asks for a layout if the window, with half a screen

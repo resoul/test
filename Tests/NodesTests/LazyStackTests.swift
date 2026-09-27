@@ -1455,3 +1455,29 @@ func zoomedItemsAddedBeforeTheWindowDoNotMoveWhatShows() {
     #expect(feed.scroll.contentOffset.y == 1320)
     host.detach()
 }
+
+@Test @MainActor
+func itemsSetHoldingTheScrollMoveUnderTheWindow() {
+    let feed = Feed(count: 100)
+    let host = host(feed)
+    feed.scroll.contentOffset = LayoutPoint(x: 0, y: 600)
+    host.layoutIfNeeded()
+    let top = feed.cells[20]
+    #expect(shown(top, in: feed.scroll) == 0)
+
+    // Item 20 goes after item 21, as a row dragged down a place.
+    var items = feed.stack.items
+    items.swapAt(20, 21)
+    feed.stack.setItemsHoldingScroll(items)
+    host.layoutIfNeeded()
+
+    #expect(feed.scroll.contentOffset.y == 600)
+    #expect(shown(feed.cells[21], in: feed.scroll) == 0)
+    #expect(shown(top, in: feed.scroll) == 30)
+
+    // Setting items again keeps what shows in place as before.
+    feed.stack.items.insert(Entry(id: 1000), at: 0)
+    host.layoutIfNeeded()
+    #expect(shown(feed.cells[21], in: feed.scroll) == 0)
+    #expect(feed.scroll.contentOffset.y == 630)
+}

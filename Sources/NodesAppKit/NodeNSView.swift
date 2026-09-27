@@ -361,15 +361,91 @@
         ///
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func mouseDown(with event: NSEvent) {
-            if !host.pointerDown(at: point(of: event)) {
+            if !mouseDown(at: point(of: event), time: event.timestamp) {
                 super.mouseDown(with: event)
+            }
+        }
+
+        /// Drags the node under the click along the way the mouse first goes, if it is
+        /// dragged that way.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func mouseDragged(with event: NSEvent) {
+            if !mouseDragged(to: point(of: event), time: event.timestamp) {
+                super.mouseDragged(with: event)
             }
         }
 
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func mouseUp(with event: NSEvent) {
-            host.pointerUp(at: point(of: event))
+            mouseUp(at: point(of: event))
             super.mouseUp(with: event)
+        }
+
+        /// A press of the mouse under way: where it began, and — once it moved far enough to
+        /// be a drag of a node — how fast it moves.
+        private struct MousePress {
+            let start: LayoutPoint
+            var isDrag = false
+            var last: (point: LayoutPoint, time: Double)
+            var speed = LayoutPoint.zero
+        }
+
+        private var mousePress: MousePress?
+
+        /// Points the mouse moves before a press is a drag.
+        private static let dragDistance = 4.0
+
+        /// The mouse went down at `point`; returns whether a node takes the press.
+        @discardableResult
+        func mouseDown(at point: LayoutPoint, time: Double) -> Bool {
+            mousePress = MousePress(start: point, last: (point, time))
+            return host.pointerDown(at: point)
+        }
+
+        /// The mouse moved to `point` while down; returns whether a node's drag took it.
+        @discardableResult
+        func mouseDragged(to point: LayoutPoint, time: Double) -> Bool {
+            guard var press = mousePress else { return false }
+
+            let moved = LayoutPoint(x: point.x - press.start.x, y: point.y - press.start.y)
+            if !press.isDrag {
+                guard hypot(moved.x, moved.y) >= NodeNSView.dragDistance else { return false }
+
+                let axis: ScrollAxis = abs(moved.x) > abs(moved.y) ? .horizontal : .vertical
+                guard host.dragBegan(at: press.start, along: axis) else {
+                    mousePress = nil
+                    return false
+                }
+
+                press.isDrag = true
+            }
+            if time > press.last.time {
+                let elapsed = time - press.last.time
+                press.speed = LayoutPoint(
+                    x: (point.x - press.last.point.x) / elapsed,
+                    y: (point.y - press.last.point.y) / elapsed
+                )
+            }
+            press.last = (point, time)
+            mousePress = press
+            host.dragMoved(by: moved)
+            return true
+        }
+
+        /// The mouse went up at `point`: ends the drag of a node, or the press.
+        func mouseUp(at point: LayoutPoint) {
+            let press = mousePress
+            mousePress = nil
+            guard let press, press.isDrag else {
+                host.pointerUp(at: point)
+                return
+            }
+
+            host.dragEnded(
+                by: LayoutPoint(x: point.x - press.start.x, y: point.y - press.start.y),
+                velocity: press.speed
+            )
         }
 
         /// A click on an inactive window also reaches the nodes.
