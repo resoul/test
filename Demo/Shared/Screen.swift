@@ -361,6 +361,127 @@
         }
     }
 
+    /// A message of the inbox.
+    struct Mail: Identifiable {
+        let id: Int
+        let sender: String
+        let subject: String
+        var isUnread = true
+        var isFlagged = false
+    }
+
+    /// A message's row: a dot while it is unread, the sender and the subject, and a flag.
+    @MainActor
+    final class MailRow: Node {
+        let dot = Node()
+        let sender = Text("", style: TextStyle(size: 15, weight: .semibold, color: ink))
+        let subject = Text("", style: TextStyle(size: 14, color: muted))
+        let flag = Node()
+
+        override init() {
+            super.init()
+            dot.appearance.background = accent
+            dot.appearance.cornerRadius = 4
+            flag.appearance.background = Color(red: 0.98, green: 0.62, blue: 0.10)
+            flag.appearance.cornerRadius = 3
+        }
+
+        func showing(_ mail: Mail) -> MailRow {
+            sender.text = mail.sender
+            subject.text = mail.subject
+            dot.appearance.opacity = mail.isUnread ? 1 : 0
+            flag.appearance.opacity = mail.isFlagged ? 1 : 0
+            return self
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.row) {
+                dot.size(width: 8, height: 8)
+                FlexContainer(.column) {
+                    sender
+                    subject
+                }
+                .gap(2)
+                .flex(grow: 1, shrink: 1)
+                flag.size(width: 6, height: 20)
+            }
+            .alignItems(.center)
+            .gap(12)
+            .padding(top: 10, leading: 16, bottom: 10, trailing: 16)
+        }
+    }
+
+    /// An inbox of a dozen messages, in the scroll of the screen: swipe one aside for its
+    /// actions — delete it, flag it, mark it read.
+    @MainActor
+    final class Inbox: Node {
+        private let rows = NodeCache<Int, MailRow> { _ in MailRow() }
+        private var mails: [Mail] = [
+            ("Ada Lovelace", "Notes on the Analytical Engine"),
+            ("Grace Hopper", "The first actual bug, taped in"),
+            ("Alan Turing", "On computable numbers"),
+            ("Katherine Johnson", "Trajectories for Friendship 7"),
+            ("Edsger Dijkstra", "Go to statement considered harmful"),
+            ("Barbara Liskov", "Data abstraction and hierarchy"),
+            ("Donald Knuth", "Volume 4B is out"),
+            ("Margaret Hamilton", "Priority displays, and why"),
+            ("Claude Shannon", "A mathematical theory of communication"),
+            ("Frances Allen", "Program optimization"),
+            ("John Backus", "Can programming be liberated?"),
+            ("Radia Perlman", "Algorhyme"),
+        ].enumerated().map { index, mail in
+            Mail(id: index, sender: mail.0, subject: mail.1, isUnread: index % 3 != 2)
+        }
+        private(set) lazy var table = Table<Mail>(scrolls: false, estimatedRowHeight: 60) {
+            [rows] mail in rows[mail.id].showing(mail)
+        }
+
+        override init() {
+            super.init()
+            table.appearance.cornerRadius = 12
+            table.appearance.clipsContent = true
+            table.trailingActions = { [weak self] mail in
+                [
+                    SwipeAction("Delete", role: .destructive) { self?.delete(mail.id) },
+                    SwipeAction(
+                        mail.isFlagged ? "Unflag" : "Flag",
+                        color: Color(red: 0.98, green: 0.62, blue: 0.10)
+                    ) { self?.change(mail.id) { $0.isFlagged.toggle() } },
+                ]
+            }
+            table.leadingActions = { [weak self] mail in
+                [
+                    SwipeAction(mail.isUnread ? "Read" : "Unread", color: accent) {
+                        self?.change(mail.id) { $0.isUnread.toggle() }
+                    }
+                ]
+            }
+            show()
+        }
+
+        private func show() {
+            table.sections = [TableSection(id: "inbox", items: mails)]
+        }
+
+        private func delete(_ id: Int) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                mails.removeAll { $0.id == id }
+                show()
+            }
+        }
+
+        private func change(_ id: Int, _ edit: (inout Mail) -> Void) {
+            guard let index = mails.firstIndex(where: { $0.id == id }) else { return }
+
+            edit(&mails[index])
+            show()
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { table }
+        }
+    }
+
     /// A window onto a card that zooms up to four times: pinch it — on a Mac, pinch the
     /// trackpad or double tap it with two fingers — or use the button.
     @MainActor
@@ -640,6 +761,8 @@
         let gallery = Gallery()
         let cards: [ProfileCard]
         let actions: Actions
+        let inboxTitle = SectionTitle("Inbox")
+        let inbox = Inbox()
         let zoomTitle = SectionTitle("Zoom")
         let zoom = Zoom()
         let pagesTitle = SectionTitle("Pages")
@@ -693,6 +816,8 @@
                 transitionsTitle.margin(top: 0, leading: -24, bottom: -8, trailing: -24)
                 transitions
                 actions
+                inboxTitle.margin(top: 0, leading: -24, bottom: -8, trailing: -24)
+                inbox
                 gridTitle
                     .margin(top: 0, leading: -24, bottom: -8, trailing: -24)
                     .sticky(top: 0)
@@ -720,7 +845,7 @@
             "Resize the window: under 460 points a card turns into a column, and from 760 "
                 + "it spreads out. "
                 + "Tap a Follow badge, or rename Ada: the changes animate. Pull the list down "
-                + "to refresh. "
+                + "to refresh. Swipe a message of the inbox aside for its actions. "
                 + "The list scrolls, and so does the row of tiles; images, a grid and ten "
                 + "thousand lines are at its end.",
             style: TextStyle(size: 14, color: muted)

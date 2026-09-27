@@ -67,4 +67,22 @@
         #expect(zoomed.width == plain.width * 3)
         #expect(layer.contentsScale == 6)
     }
+
+    @Test @MainActor
+    func aNodeMovedAsideIsDrawnThere() throws {
+        let block = Block()
+        let host = NodeHost(root: block, size: LayoutSize(width: 200, height: 100))
+        let renderer = LayerRenderer()
+        CATransaction.begin()
+        defer {
+            host.detach()
+            CATransaction.commit()
+        }
+        block.appearance.offset = LayoutPoint(x: -30, y: 5)
+        host.layoutIfNeeded()
+        renderer.render(block, in: CALayer())
+
+        let layer = try #require(renderer.layer(for: block))
+        #expect(layer.frame == CGRect(x: -30, y: 5, width: 200, height: 100))
+    }
 #endif

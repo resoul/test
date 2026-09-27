@@ -171,6 +171,8 @@ public final class NodeHost {
     /// Nodes of the layout being solved in the background that are not mounted yet.
     private var pending: [Node] = []
     private var pressed: Node?
+    /// The node a drag under way moves.
+    private var dragged: Node?
     private var generation: UInt64 = 0
     private var solving: Task<Void, Never>?
     private var solverThread: Thread?
@@ -695,6 +697,80 @@ public final class NodeHost {
         target.pressChanged(false)
     }
 
+    // MARK: - Drag
+
+    /// For platform adapters: whether a drag starting at `point`, in the root's coordinates,
+    /// along `axis` has a node to take it.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func canDrag(at point: LayoutPoint, along axis: ScrollAxis) -> Bool {
+        dragTarget(at: point, along: axis) != nil
+    }
+
+    /// For platform adapters: a drag along `axis` began at `point`. Returns whether a node
+    /// takes it — it is told, and a press under way is let go without a tap.
+    ///
+    /// Ownership: remembers the dragged node until the drag ends. Isolation: MainActor.
+    /// Errors: none. Cancellation: `dragCancelled()`.
+    @discardableResult
+    public func dragBegan(at point: LayoutPoint, along axis: ScrollAxis) -> Bool {
+        dragCancelled()
+        guard let target = dragTarget(at: point, along: axis) else { return false }
+
+        pointerCancelled()
+        dragged = target
+        target.onDrag?(Drag(phase: .began, translation: .zero))
+        return true
+    }
+
+    /// For platform adapters: the drag moved `translation` points since it began.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func dragMoved(by translation: LayoutPoint) {
+        dragged?.onDrag?(Drag(phase: .changed, translation: translation))
+    }
+
+    /// For platform adapters: the pointer let the drag go, `translation` points from where it
+    /// began, moving at `velocity` points a second.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func dragEnded(by translation: LayoutPoint, velocity: LayoutPoint) {
+        let target = dragged
+        dragged = nil
+        target?.onDrag?(Drag(phase: .ended, translation: translation, velocity: velocity))
+    }
+
+    /// For platform adapters: the system took the drag away.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func dragCancelled() {
+        let target = dragged
+        dragged = nil
+        target?.onDrag?(Drag(phase: .cancelled, translation: .zero))
+    }
+
+    /// The innermost node under `point` dragged along `axis`.
+    private func dragTarget(at point: LayoutPoint, along axis: ScrollAxis) -> Node? {
+        var node = root.hitTest(point)
+        while let current = node, current.onDrag == nil || current.dragAxis != axis {
+            node = current.supernode
+        }
+        return node
+    }
+
+    /// Does the accessibility action at `index` of the node with `id` (`AccessibilityItem
+    /// .actions`); returns whether it did.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    @discardableResult
+    public func performAccessibilityAction(_ index: Int, of id: NodeID) -> Bool {
+        guard let node = node(id), node.accessibilityActions.indices.contains(index) else {
+            return false
+        }
+
+        return node.accessibilityActions[index].perform()
+    }
+
     /// The mounted node with `id`, or `nil`.
     ///
     /// Ownership: returns a node of the tree. Isolation: MainActor. Errors: none.
@@ -1177,7 +1253,8 @@ public final class NodeHost {
             value: settings.value,
             hint: settings.hint,
             traits: traits,
-            listItem: listItem(of: node)
+            listItem: listItem(of: node),
+            actions: node.accessibilityActions.map(\.name)
         )
     }
 

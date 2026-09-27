@@ -78,6 +78,33 @@ public struct AccessibilityItem: Sendable, Hashable {
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public var listItem: AccessibilityListItem?
+    /// The names of the node's `accessibilityActions`, in order; `NodeHost` performs one by
+    /// its index.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var actions: [String] = []
+}
+
+/// Something an assistive technology can do with a node besides activating it — what a
+/// swipe on a row offers: VoiceOver lists the actions of the element it is on.
+///
+/// Ownership: value holding the closure. Isolation: MainActor. Errors: none. Cancellation:
+/// not applicable.
+@MainActor
+public struct AccessibilityAction {
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var name: String
+    /// Does it; returns whether it could.
+    ///
+    /// Ownership: the action keeps the closure; it must not keep the node. Isolation:
+    /// MainActor. Errors: none. Cancellation: not applicable.
+    public var perform: @MainActor () -> Bool
+
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public init(name: String, perform: @escaping @MainActor () -> Bool) {
+        self.name = name
+        self.perform = perform
+    }
 }
 
 /// An item of a list laid out by where it shows: the list's node and the item's index.

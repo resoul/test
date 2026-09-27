@@ -1,3 +1,5 @@
+import LayoutCore
+
 /// A color in sRGB, components from 0 to 1.
 ///
 /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
@@ -60,6 +62,13 @@ public struct Appearance: Sendable, Hashable {
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public var scale: Double = 1
+
+    /// Points the box is drawn moved by from its frame, as a CSS translation: the layout does
+    /// not change, and taps, focus and accessibility find the node where it is drawn. A row
+    /// swiped aside moves so.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var offset = LayoutPoint.zero
 
     /// Turns a second the drawn box keeps turning by, clockwise about its center — a
     /// spinner's — for as long as it is set; 0, the default, does not turn. Nothing else

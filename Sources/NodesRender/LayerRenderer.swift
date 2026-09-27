@@ -395,13 +395,14 @@
         }
 
         /// The center of the node's layer in its supernode's: its frame's, moved by where it
-        /// sticks.
+        /// sticks and by its appearance's offset.
         private static func position(of node: Node) -> CGPoint {
             let frame = node.frame
             let offset = node.stickyOffset
+            let moved = node.appearance.offset
             return CGPoint(
-                x: frame.origin.x + offset.x + frame.size.width / 2,
-                y: frame.origin.y + offset.y + frame.size.height / 2
+                x: frame.origin.x + offset.x + moved.x + frame.size.width / 2,
+                y: frame.origin.y + offset.y + moved.y + frame.size.height / 2
             )
         }
 

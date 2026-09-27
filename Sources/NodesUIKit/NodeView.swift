@@ -83,6 +83,8 @@
             host.onNeedsFrames = { [weak self] in
                 self?.startFrames()
             }
+            // Before any scroll, so that a node's drag works outside scrolls too.
+            _ = dragPan
             #if DEBUG
                 // Problems in the layouts, and a trace the app asked for, go to the unified log
                 // while debugging; a pass without either stays quiet.
@@ -241,7 +243,7 @@
             if !isTV {
                 for item in host.scrollItems() {
                     let driver =
-                        scrollDrivers[item.scroll.id] ?? ScrollDriver(in: self, scroll: item.scroll)
+                        scrollDrivers[item.scroll.id] ?? newScrollDriver(for: item.scroll)
                     driver.place(zoomed(item.frame), factor: factor)
                     kept[item.scroll.id] = driver
                 }
@@ -250,6 +252,71 @@
                 driver.remove()
             }
             scrollDrivers = kept
+        }
+
+        /// A driver for `scroll`, whose pan waits for a node's drag to decline the touch: a row
+        /// swiped aside does not scroll the list.
+        private func newScrollDriver(for scroll: Scroll) -> ScrollDriver {
+            let driver = ScrollDriver(in: self, scroll: scroll)
+            driver.pan.require(toFail: dragPan)
+            return driver
+        }
+
+        /// Drags of nodes (`Node.dragAxis`). Not on a TV: its touch surface moves the focus.
+        /// The device tells, not the traits: the view is not in a window yet when it is made.
+        private lazy var dragPan: UIPanGestureRecognizer = {
+            let pan = UIPanGestureRecognizer(target: self, action: #selector(dragPanned(_:)))
+            if UIDevice.current.userInterfaceIdiom != .tv {
+                addGestureRecognizer(pan)
+            }
+            return pan
+        }()
+
+        /// The axis the drag under way goes along, and where it began.
+        private var dragStart: (axis: ScrollAxis, point: LayoutPoint)?
+
+        /// Whether a pan at `location`, in the view's points, moving at `velocity`, drags a
+        /// node: it goes mostly along an axis some node there is dragged along.
+        func dragAxis(at location: CGPoint, velocity: CGPoint) -> ScrollAxis? {
+            let axis: ScrollAxis = abs(velocity.x) > abs(velocity.y) ? .horizontal : .vertical
+            let point = LayoutPoint(x: Double(location.x) / factor, y: Double(location.y) / factor)
+            return host.canDrag(at: point, along: axis) ? axis : nil
+        }
+
+        @objc private func dragPanned(_ pan: UIPanGestureRecognizer) {
+            let translation = pan.translation(in: self)
+            let moved = LayoutPoint(
+                x: Double(translation.x) / factor,
+                y: Double(translation.y) / factor
+            )
+            switch pan.state {
+            case .began:
+                let location = pan.location(in: self)
+                let start = CGPoint(x: location.x - translation.x, y: location.y - translation.y)
+                guard let axis = dragAxis(at: start, velocity: pan.velocity(in: self)) else {
+                    return
+                }
+
+                let point = LayoutPoint(x: Double(start.x) / factor, y: Double(start.y) / factor)
+                dragStart = (axis, point)
+                host.dragBegan(at: point, along: axis)
+                host.dragMoved(by: moved)
+            case .changed:
+                host.dragMoved(by: moved)
+            case .ended:
+                let velocity = pan.velocity(in: self)
+                host.dragEnded(
+                    by: moved,
+                    velocity: LayoutPoint(
+                        x: Double(velocity.x) / factor,
+                        y: Double(velocity.y) / factor
+                    )
+                )
+                dragStart = nil
+            default:
+                host.dragCancelled()
+                dragStart = nil
+            }
         }
 
         /// Touches over the scrolls' physics come to this view, like any other: the scroll
@@ -272,6 +339,13 @@
         public override func gestureRecognizerShouldBegin(
             _ gestureRecognizer: UIGestureRecognizer
         ) -> Bool {
+            if gestureRecognizer === dragPan {
+                // Where the finger went down, not where the pan noticed it.
+                let location = dragPan.location(in: self)
+                let translation = dragPan.translation(in: self)
+                let start = CGPoint(x: location.x - translation.x, y: location.y - translation.y)
+                return dragAxis(at: start, velocity: dragPan.velocity(in: self)) != nil
+            }
             guard
                 let driver = scrollDrivers.values.first(where: {
                     $0.pan === gestureRecognizer
@@ -1484,8 +1558,23 @@
             super.init(accessibilityContainer: container)
         }
 
+        /// The names of the actions shown, so that they are made again only when they change.
+        private var actionNames: [String] = []
+
         /// Shows what `item` says, at `frame` in the view's coordinates.
         func update(_ item: AccessibilityItem, frame: CGRect) {
+            if item.actions != actionNames || item.node != node {
+                actionNames = item.actions
+                let id = item.node
+                accessibilityCustomActions =
+                    item.actions.isEmpty
+                    ? nil
+                    : item.actions.enumerated().map { index, name in
+                        UIAccessibilityCustomAction(name: name) { [weak view] _ in
+                            view?.host.performAccessibilityAction(index, of: id) ?? false
+                        }
+                    }
+            }
             node = item.node
             accessibilityLabel = item.label
             accessibilityValue = item.value

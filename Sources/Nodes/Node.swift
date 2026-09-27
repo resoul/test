@@ -112,6 +112,15 @@ open class Node: LayoutElement {
         didSet { if accessibility != oldValue { host?.setNeedsRender() } }
     }
 
+    /// What assistive technologies can do with the node besides activating it; each shows
+    /// as an action of its element.
+    ///
+    /// Ownership: the node keeps the actions; they must not keep the node. Isolation:
+    /// MainActor. Errors: none. Cancellation: not applicable.
+    public var accessibilityActions: [AccessibilityAction] = [] {
+        didSet { host?.setNeedsRender() }
+    }
+
     /// What the node's content says to assistive technologies by itself — text, for a node
     /// showing text. The default is `nil`.
     ///
@@ -128,6 +137,20 @@ open class Node: LayoutElement {
     /// Ownership: the node keeps the closure; it must not keep the node. Isolation:
     /// MainActor. Errors: none. Cancellation: set to `nil`.
     public var onTap: (@MainActor () -> Void)?
+
+    /// The way the node is dragged — a row swiped aside along `.horizontal` — or `nil`, the
+    /// default, for none. A drag along it that starts on the node, or on a subnode not
+    /// dragged that way itself, goes to `onDrag`, and a tap on it does not happen; a drag the
+    /// other way scrolls as usual.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var dragAxis: ScrollAxis?
+
+    /// What a drag along `dragAxis` does, told as it goes.
+    ///
+    /// Ownership: the node keeps the closure; it must not keep the node. Isolation:
+    /// MainActor. Errors: none. Cancellation: a drag the system takes away ends `cancelled`.
+    public var onDrag: (@MainActor (Drag) -> Void)?
 
     /// Whether the remote (tvOS) can move focus to the node. `nil`, the default, makes a node
     /// with `onTap` focusable. A focusable node is focused as a whole: nodes inside it are
@@ -317,12 +340,18 @@ open class Node: LayoutElement {
     }
 
     /// Where the node shows in its supernode's coordinates as laid out: its frame's
-    /// origin, moved by `stickyOffset`.
+    /// origin, moved by `stickyOffset` and by `appearance.offset`.
     var shownOrigin: LayoutPoint {
-        guard sticky != nil else { return frame.origin }
+        let moved = appearance.offset
+        guard sticky != nil else {
+            return LayoutPoint(x: frame.origin.x + moved.x, y: frame.origin.y + moved.y)
+        }
 
         let offset = stickyOffset
-        return LayoutPoint(x: frame.origin.x + offset.x, y: frame.origin.y + offset.y)
+        return LayoutPoint(
+            x: frame.origin.x + offset.x + moved.x,
+            y: frame.origin.y + offset.y + moved.y
+        )
     }
 
     /// The subnodes in the order they are drawn, the last on top: sticky ones over the rest,
@@ -668,5 +697,44 @@ struct Placement: Equatable {
             ),
             scale: scale * zoom
         )
+    }
+}
+
+/// Where a drag of a node is: `Node.onDrag` is told each step.
+///
+/// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+public struct Drag: Sendable, Hashable {
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public enum Phase: Sendable, Hashable {
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case began
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case changed
+        /// The pointer let go.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case ended
+        /// The system took the drag away: go back to where it began.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case cancelled
+    }
+
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var phase: Phase
+    /// Points the pointer moved since the drag began, in the root's coordinates.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var translation: LayoutPoint
+    /// Points a second the pointer moved at when it let go; zero before.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var velocity: LayoutPoint
+
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public init(phase: Phase, translation: LayoutPoint, velocity: LayoutPoint = .zero) {
+        self.phase = phase
+        self.translation = translation
+        self.velocity = velocity
     }
 }

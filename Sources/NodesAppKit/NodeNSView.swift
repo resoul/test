@@ -535,6 +535,10 @@
         /// When a mouse wheel last turned a page: the wheel keeps turning for a while, and
         /// one turn is one page.
         private var lastWheelPage: Double?
+        /// Where the gesture began, until its first move tells whether it drags a node.
+        private var dragAt: LayoutPoint?
+        /// How far the fingers moved a node's drag under way.
+        private var dragTranslation: LayoutPoint?
 
         /// Moves the scrolls under `point` by `delta`, in the view's points, and returns
         /// whether it took the event.
@@ -551,6 +555,17 @@
                 glideIsSpent = false
                 springBack()
             case .released:
+                if let moved = dragTranslation {
+                    // The fingers move the other way from the content.
+                    host.dragEnded(
+                        by: moved,
+                        velocity: LayoutPoint(x: -fingerSpeed.x, y: -fingerSpeed.y)
+                    )
+                    dragTranslation = nil
+                    glideIsSpent = true
+                    pageStarts = []
+                    return true
+                }
                 if let pull = pulled, pull.scroll.platformDidRelease() {
                     // Pulled far enough to refresh: it opens the room rather than springing
                     // back.
@@ -571,6 +586,8 @@
             latched = scrolls
             var left = LayoutPoint(x: delta.x / factor, y: delta.y / factor)
             if phase == .began {
+                dragAt = point
+                dragTranslation = nil
                 pageStarts = scrolls.filter(\.isPaging).map { ($0, $0.contentOffset) }
                 fingerSpeed = .zero
                 lastTouch = time
@@ -582,6 +599,20 @@
                     y: fingerSpeed.y * 0.4 + speed.y * 0.6
                 )
                 lastTouch = time
+            }
+            if phase == .touching, let at = dragAt, left != .zero {
+                // The first move tells the way: a node dragged along it takes the gesture.
+                dragAt = nil
+                let axis: ScrollAxis = abs(left.x) > abs(left.y) ? .horizontal : .vertical
+                if host.dragBegan(at: at, along: axis) {
+                    dragTranslation = .zero
+                }
+            }
+            if phase == .touching, let moved = dragTranslation {
+                let now = LayoutPoint(x: moved.x - left.x, y: moved.y - left.y)
+                dragTranslation = now
+                host.dragMoved(by: now)
+                return true
             }
             if phase == .wheel,
                 let pager = scrolls.first(where: { $0.isPaging && along($0.axis, left) != 0 })
@@ -869,7 +900,10 @@
         /// constant, so the nonisolated press can read it without touching `self`'s state.
         private let press: @MainActor @Sendable () -> Bool
 
+        private weak var host: NodeHost?
+
         init(parent: NodeNSView, node: NodeID) {
+            host = parent.host
             press = { [weak host = parent.host] in
                 host?.activate(node) ?? false
             }
@@ -879,8 +913,26 @@
             setAccessibilityParent(parent)
         }
 
+        /// The names of the actions shown, so that they are made again only when they change.
+        private var actionNames: [String] = []
+
         /// Shows what `item` says, at `frame` in its parent's space.
         func update(_ item: AccessibilityItem, frame: CGRect) {
+            if item.actions != actionNames {
+                actionNames = item.actions
+                let id = item.node
+                let host = host
+                setAccessibilityCustomActions(
+                    item.actions.enumerated().map { index, name in
+                        NSAccessibilityCustomAction(name: name) { [weak host] in
+                            // AppKit calls it on the main thread; `assumeIsolated` checks.
+                            MainActor.assumeIsolated {
+                                host?.performAccessibilityAction(index, of: id) ?? false
+                            }
+                        }
+                    }
+                )
+            }
             setAccessibilityLabel(item.label)
             setAccessibilityValue(item.value)
             setAccessibilityHelp(item.hint)
