@@ -357,31 +357,53 @@
         try inbox.lift(1)
         #expect(inbox.row(1)?.appearance.zIndex == 1)
         #expect(inbox.row(1)?.supernode?.subnodesInDrawingOrder.last === inbox.row(1))
-        // Its middle is past the middles of the next three rows.
+        // Its middle is past the middles of the next two rows, where they are.
         inbox.drag(by: 100)
 
         #expect(inbox.shownTop(1) == start + 100)
-        // Those three moved up to make room; the fourth after it did not.
+        // Those two moved up to make room; the third after it did not.
         #expect(inbox.shownTop(2) == start)
-        #expect(inbox.shownTop(4) == start + 88)
+        #expect(inbox.shownTop(3) == start + 44)
+        #expect(inbox.shownTop(4) == start + 132)
         #expect(inbox.shownTop(5) == second + 3 * 44)
         #expect(inbox.moves.isEmpty)
 
         inbox.drop(at: 100)
-        #expect(inbox.order[0].prefix(6) == [0, 2, 3, 4, 1, 5])
+        #expect(inbox.order[0].prefix(6) == [0, 2, 3, 1, 4, 5])
         #expect(
             inbox.moves == [
                 TableMove(
                     item: 1,
                     from: TablePosition(section: "today", index: 1),
-                    to: TablePosition(section: "today", index: 4)
+                    to: TablePosition(section: "today", index: 3)
                 )
             ]
         )
         // It settles into its place.
         #expect(inbox.row(1)?.appearance.offset == .zero)
         #expect(inbox.row(1)?.appearance.zIndex == 0)
-        #expect(inbox.shownTop(1) == start + 132)
+        #expect(inbox.shownTop(1) == start + 88)
+    }
+
+    @Test @MainActor
+    func aRowGoesPastANeighborOnlyOnceItsMiddleCrossesTheNeighbors() throws {
+        let inbox = Inbox()
+        defer { inbox.host.detach() }
+        inbox.edit()
+        let start = try #require(inbox.shownTop(2))
+
+        try inbox.lift(1)
+        // A point down, and up to just short of the next row's middle, 44 below its own:
+        // nothing makes room.
+        inbox.drag(by: 1)
+        #expect(inbox.shownTop(2) == start)
+        inbox.drag(by: 43)
+        #expect(inbox.shownTop(2) == start)
+        // Past it: the next row moves up.
+        inbox.drag(by: 45)
+        #expect(inbox.shownTop(2) == start - 44)
+        inbox.drop(at: 45)
+        #expect(inbox.order[0].prefix(3) == [0, 2, 1])
     }
 
     @Test @MainActor
@@ -415,10 +437,9 @@
         inbox.host.layoutIfNeeded()
         let row = try #require(inbox.frame(9))
         let first = try #require(inbox.frame(10))
-        // With row 9 out, the title starts where the row did: the row's middle goes just
-        // below the title's.
+        // The row's middle goes just below the title's, where the title is.
         let title = first.origin.y - (row.origin.y + 44)
-        let middle = row.origin.y + title / 2 + 5
+        let middle = row.origin.y + 44 + title / 2 + 5
         let by = middle - (row.origin.y + 22)
 
         try inbox.lift(9)
@@ -499,7 +520,7 @@
         inbox.edit()
 
         try inbox.lift(1)
-        inbox.drag(by: 30)
+        inbox.drag(by: 50)
         inbox.table.isEditing = false
         inbox.host.layoutIfNeeded()
         inbox.table.advance(by: 1)
@@ -586,9 +607,9 @@
         inbox.table.advance(by: 1)
         #expect(inbox.row(0)?.appearance.offset == .zero)
 
-        // Its middle went 150 points down, past the middles of the next four rows.
-        #expect(inbox.order[0].prefix(6) == [1, 2, 3, 4, 0, 5])
-        #expect(inbox.moves.map(\.to) == [TablePosition(section: "today", index: 4)])
+        // Its middle went 150 points down, past the middles of the next three rows.
+        #expect(inbox.order[0].prefix(6) == [1, 2, 3, 0, 4, 5])
+        #expect(inbox.moves.map(\.to) == [TablePosition(section: "today", index: 3)])
     }
 #endif
 
@@ -858,8 +879,8 @@
         inbox.host.layoutIfNeeded()
         await inbox.host.layoutFinished()
         inbox.table.advance(by: 1)
-        // Laid out in its place, 132 points down, it went down into it.
-        #expect(inbox.shownTop(1) == start + 132)
+        // Laid out in its place, 88 points down, it went down into it.
+        #expect(inbox.shownTop(1) == start + 88)
         #expect(inbox.row(1)?.appearance.offset == .zero)
     }
 #endif
