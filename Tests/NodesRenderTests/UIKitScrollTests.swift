@@ -220,6 +220,56 @@
         view.host.detach()
     }
 
+    /// Lets the frames of the moves under way run until they end, or for 30 seconds.
+    @MainActor
+    private func runFrames(of view: NodeView) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now + .seconds(30)
+        while view.host.needsFrames, clock.now < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+            view.layoutIfNeeded()
+        }
+    }
+
+    @Test @MainActor
+    func theScrollViewAnsweringANewContentSizeDoesNotStopAMoveButAFingerDoes() async throws {
+        let feed = Feed()
+        let view = NodeView(root: feed)
+        view.zoom = 1
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 150)
+        view.layoutIfNeeded()
+        guard view.traitCollection.userInterfaceIdiom != .tv else { return }
+
+        // The scroll view tells its delegate it scrolled when a new content size moves its
+        // offset to fit: here on every new size.
+        let physics = try #require(physics(in: view))
+        let observation = physics.observe(\.contentSize) { scrollView, _ in
+            MainActor.assumeIsolated {
+                scrollView.delegate?.scrollViewDidScroll?(scrollView)
+            }
+        }
+        defer { observation.invalidate() }
+
+        withAnimation(.linear(duration: 0.3)) {
+            feed.scroll.contentOffset = LayoutPoint(x: 0, y: 15_000)
+        }
+        // The content grows while the move goes on.
+        feed.stack.items = (0..<1001).map { Numbered(id: $0) }
+        view.layoutIfNeeded()
+        #expect(physics.contentSize.height == 30_030)
+        try await runFrames(of: view)
+        #expect(feed.scroll.contentOffset.y == 15_000)
+
+        withAnimation(.linear(duration: 0.3)) {
+            feed.scroll.contentOffset = .zero
+        }
+        // A move of the scroll view the driver did not make stops it where it is.
+        physics.delegate?.scrollViewDidScroll?(physics)
+        try await runFrames(of: view)
+        #expect(feed.scroll.contentOffset.y == 15_000)
+        view.host.detach()
+    }
+
     @Test @MainActor
     func onATVTheFocusScrollsNotTheTouchSurface() {
         let screen = Screen()

@@ -305,6 +305,8 @@
 | `ViewportDependent`, `NodeHost.viewportDependents`, `viewportMoved`, `settlingPasses`, `preparing`; `layOut()` | хост сообщает о проходах и движении; до 4 проходов подряд в `layoutIfNeeded` | [03](03-layout-api.md) (десятый срез) |
 | `ScrollDriver.synced`, `catchUp` (UIKit) | сдвиг прокрутки кодом под пальцем и в инерции переносится на `UIScrollView` | [05](05-platform-adapters.md#прокрутка); тест `aMoveByCodeIsNotLostToTheFingersNextMove` |
 | `ScrollDriver` (UIKit), `NodeView.hitTest`, `gestureRecognizerShouldBegin` | пустой `UIScrollView` — только физика; его пан на `NodeView` | [05](05-platform-adapters.md#прокрутка) |
+| `ScrollDriver.whileFollowing`, `isFollowing` (UIKit) | вложенная защита от обратных вызовов `UIScrollView` восстанавливает прежнее значение | дефект #204 |
+| `NodeView.accessibilityHitTest(_:event:)` (UIKit, iOS/tvOS 18+) | элемент доступности ищется так же, как касание: нода поверх другой скрывает её элементы | дефект #203 |
 | `NodeNSView.scrollWheel`, `scroll(by:at:)`, `latched` | колесо/трекпад: внутренняя прокрутка, остаток — внешней; жест держится за начальные | [05](05-platform-adapters.md#прокрутка) |
 | `NodeView` на iPad: `usesFocus`, `selects` | система фокуса iPadOS с клавиатурой; групп фокуса нет — свойство недоступно на tvOS | дефект #135 |
 | `NodeView.zoom`, `contentLayer`, `zoomed` | дерево раскладывается в `bounds / zoom`, слой содержимого увеличен от левого верхнего угла; `host.scale` = экран × zoom, чтобы текст был чётким; `nil` — 2 на TV, 1 иначе | интерфейс для TV: размеры под телефон с 2–3 м читаются примерно вдвое крупнее |

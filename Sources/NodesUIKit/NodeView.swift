@@ -960,6 +960,29 @@
             set {}
         }
 
+        /// The element of the node a touch at `point` reaches, or of the nearest node around it
+        /// that has one; `nil` when none of them does. Found as touches find their node, so a
+        /// node drawn over another — a section's title stuck over the rows — hides the
+        /// elements under it: an element is where it can be touched.
+        ///
+        /// The system asks this from iOS and tvOS 18 on; before, it goes by the elements'
+        /// frames.
+        ///
+        /// Ownership: returns an element the view keeps. Isolation: MainActor. Errors: none.
+        /// Cancellation: none.
+        @available(iOS 18, tvOS 18, *)
+        public override func accessibilityHitTest(_ point: CGPoint, event: UIEvent?) -> Any? {
+            _ = accessibilityElements
+            var node = host.root.hitTest(
+                LayoutPoint(x: Double(point.x) / factor, y: Double(point.y) / factor)
+            )
+            while let current = node {
+                if let element = accessibilityByNode[current.id] { return element }
+                node = current.supernode
+            }
+            return nil
+        }
+
         private func updateAccessibilityElements() -> [UIAccessibilityElement] {
             var kept: [NodeID: NodeAccessibilityElement] = [:]
             var keptLists: [NodeID: ListAccessibilityContainer] = [:]
@@ -1163,6 +1186,17 @@
         private(set) var zoomGestures: [UIGestureRecognizer] = []
         /// Set while the driver moves the scroll view itself, so it does not hear itself.
         private var isFollowing = false
+
+        /// Runs `body` with the scroll view's callbacks taken as its answer to code. The flag
+        /// goes back to what it was, not to off: a call inside another — `follow` inside
+        /// `place` — leaves the outer one still covered.
+        private func whileFollowing(_ body: () -> Void) {
+            let wasFollowing = isFollowing
+            isFollowing = true
+            defer { isFollowing = wasFollowing }
+            body()
+        }
+
         private var factor = 1.0
         /// The scroll's offset when the scroll view and it last agreed.
         private var synced: LayoutPoint?
@@ -1243,8 +1277,9 @@
         func place(_ frame: CGRect, factor: Double) {
             guard let scroll else { return }
 
+            let wasFollowing = isFollowing
             isFollowing = true
-            defer { isFollowing = false }
+            defer { isFollowing = wasFollowing }
 
             self.factor = factor
             physics.frame = frame
@@ -1300,8 +1335,9 @@
         func follow(factor: Double) {
             guard let scroll else { return }
 
+            let wasFollowing = isFollowing
             isFollowing = true
-            defer { isFollowing = false }
+            defer { isFollowing = wasFollowing }
 
             let offset = scroll.shownOffset
             if physics.isTracking || physics.isDecelerating {
@@ -1364,9 +1400,7 @@
 
             if scroll.platformDidRelease() {
                 // Pulled far enough to refresh: the glide comes to rest with the room open.
-                isFollowing = true
-                applyInsets(of: scroll, factor: factor)
-                isFollowing = false
+                whileFollowing { applyInsets(of: scroll, factor: factor) }
                 let offset = scroll.contentOffset
                 targetContentOffset.pointee = CGPoint(x: offset.x * factor, y: offset.y * factor)
                 return
@@ -1389,9 +1423,7 @@
             guard !isFollowing, let scroll else { return }
 
             // A move code made since the last drawing is not lost to the finger's.
-            isFollowing = true
-            catchUp(to: scroll.shownOffset, factor: factor)
-            isFollowing = false
+            whileFollowing { catchUp(to: scroll.shownOffset, factor: factor) }
             if scroll.isZoomable, Double(physics.zoomScale) != scroll.zoomScale {
                 reportZoom(of: scroll)
                 return
