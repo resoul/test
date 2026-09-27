@@ -469,7 +469,6 @@
             let slot = slot(
                 for: top + length / 2,
                 moving: current,
-                length: length,
                 mounted: mounted,
                 in: lift.scroll
             )
@@ -508,12 +507,13 @@
             return min(max(top, box.origin.y), box.origin.y + box.size.height - length)
         }
 
-        /// The place among the entries, the lifted one at `current` taken out, where those
-        /// before it end above `middle` — not before the first section's title.
+        /// The place among the entries, the lifted one at `current` taken out: after each whose
+        /// middle, where it is laid out, is above `middle` — the lifted row passes a neighbor
+        /// once its middle crosses the neighbor's — and not before the first section's
+        /// title.
         private func slot(
             for middle: Double,
             moving current: Int,
-            length: Double,
             mounted: [(index: Int, id: EntryID, node: Node)],
             in scroll: Scroll
         ) -> Int {
@@ -522,9 +522,7 @@
             for entry in mounted where entry.index != current {
                 guard let frame = scroll.frame(of: entry.node) else { break }
 
-                // Where it is laid out with the lifted row out of the list.
-                let start = frame.origin.y - (entry.index > current ? length : 0)
-                guard start + frame.size.height / 2 < middle else { break }
+                guard frame.origin.y + frame.size.height / 2 < middle else { break }
 
                 slot += 1
             }
