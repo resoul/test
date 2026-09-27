@@ -41,7 +41,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 /// Shows the node screen full size, with the margins a TV screen needs.
 final class ScreenController: UIViewController {
     private let model = DemoModel()
-    private lazy var screen = NodeView(root: model.screen)
+    /// A screen for the remote's reach instead of the demo, for UI tests (`FocusProbe`).
+    private let probe = ProcessInfo.processInfo.environment["FOCUS_PROBE"].map { FocusProbe($0) }
+    private lazy var screen = NodeView(root: probe ?? model.screen)
 
     override func viewDidLoad() {
         super.viewDidLoad()

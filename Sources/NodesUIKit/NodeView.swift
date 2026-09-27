@@ -51,6 +51,11 @@
         /// A node the app asked to focus (`NodeHost.requestFocus`), until the focus system
         /// moves the focus.
         private var requestedFocus: NodeID?
+        /// A move of the focus the focus system could not make, which the view makes: the node
+        /// it goes to, and until when it tries.
+        private var reaching: (node: NodeID, until: Double, asked: Bool)?
+        /// The check, after the focus system scrolled a scroll, that the focused node shows.
+        private var focusScrollCheck: DispatchWorkItem?
         /// The platform's scrolling of each scroll of the tree, off a TV.
         private var scrollDrivers: [NodeID: ScrollDriver] = [:]
         /// The display's frames, while a scroll moves frame by frame.
@@ -85,6 +90,12 @@
             }
             // Before any scroll, so that a node's drag works outside scrolls too.
             _ = dragPan
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(focusMovementFailed(_:)),
+                name: UIFocusSystem.movementDidFailNotification,
+                object: nil
+            )
             #if DEBUG
                 // Problems in the layouts, and a trace the app asked for, go to the unified log
                 // while debugging; a pass without either stays quiet.
@@ -456,6 +467,7 @@
         ) {
             super.didUpdateFocus(in: context, with: coordinator)
             requestedFocus = nil
+            reaching = nil
             if let entry = context.nextFocusedItem as? SectionEntry, entry.view === self {
                 // The focus system has scrolled the section into sight to focus its entry;
                 // the node the entry leads to shows now, and the focus goes on to it. The update
@@ -534,6 +546,210 @@
             }
         }
 
+        // MARK: - Reach
+
+        /// The focus system found nothing to move the focus to from one of the tree's nodes.
+        /// It looks only in a strip in the direction pressed, as wide as the focused node, and
+        /// only so far: it widens the strip's length four times, to about five windows. A node
+        /// beside the strip, or further along it, under blocks with nothing to focus is out of
+        /// its reach. The view then finds the nearest node that way in the whole content of
+        /// the node's scroll itself, scrolls it into sight, and moves the focus there.
+        @objc private func focusMovementFailed(_ notification: Notification) {
+            guard usesFocus, reaching == nil,
+                let context = notification.userInfo?[UIFocusSystem.focusUpdateContextUserInfoKey]
+                    as? UIFocusUpdateContext,
+                let from = context.previouslyFocusedItem as? NodeFocusItem, from.view === self,
+                let target = reachTarget(from: from, heading: context.focusHeading)
+            else { return }
+
+            reaching = (target, CACurrentMediaTime() + NodeView.reachTime, false)
+            requestedFocus = target
+            withAnimation(host.focusAnimation) {
+                host.reveal(target)
+            }
+            continueReach()
+        }
+
+        /// Seconds a move the view makes has to get there; then it gives up.
+        private static let reachTime = 2.0
+
+        /// Where a move from `from` toward `heading` goes: the nearest node that way in the
+        /// scroll `from` is in, else in the scroll around it, and so on out — a scroll across
+        /// inside a scroll down has nothing above its row. `nil` when no scroll has one.
+        func reachTarget(from: NodeFocusItem, heading: UIFocusHeading) -> NodeID? {
+            var origin = from.frame
+            var current = from.parent as? ScrollFocusContainer
+            while let container = current {
+                if let target = reachTarget(
+                    from: from,
+                    at: origin,
+                    heading: heading,
+                    in: container
+                ) {
+                    return target
+                }
+                // Out to the scroll around it: its content starts at its frame there, moved
+                // back by its offset.
+                let offset = container.contentOffset
+                origin = origin.offsetBy(
+                    dx: container.frame.minX - offset.x,
+                    dy: container.frame.minY - offset.y
+                )
+                current = container.parent as? ScrollFocusContainer
+            }
+            return nil
+        }
+
+        /// The node nearest to `origin`, where `from` is, that lies wholly toward `heading`
+        /// in the whole content of `container`, preferring ones straight ahead: the distance
+        /// ahead counts once, the distance aside twice. A section the focus is not in counts as a whole, and leads to
+        /// its node focused last, else its first; a scroll inside counts with its nodes.
+        /// `nil` when there is none that way.
+        func reachTarget(
+            from: NodeFocusItem,
+            at origin: CGRect,
+            heading: UIFocusHeading,
+            in container: ScrollFocusContainer
+        ) -> NodeID? {
+            let sections = container.items.compactMap { $0 as? SectionEntry }
+                .filter { $0.canBecomeFocused }
+            var best: (node: NodeID, score: CGFloat)?
+            func consider(_ node: NodeID, _ frame: CGRect) {
+                guard let score = NodeView.score(from: origin, to: frame, heading: heading),
+                    score < best?.score ?? .infinity
+                else { return }
+
+                best = (node, score)
+            }
+            // `place` takes a frame in the items' scroll to `container`'s content.
+            func look(in items: [any UIFocusItem], place: (CGRect) -> CGRect) {
+                for item in items {
+                    switch item {
+                    case let entry as SectionEntry:
+                        if entry.canBecomeFocused, let target = entry.target {
+                            consider(target, place(entry.frame))
+                        }
+                    case let node as NodeFocusItem:
+                        // A node in a section the focus is not in is reached by the section.
+                        guard node !== from,
+                            !sections.contains(where: { $0.items.contains(node.node) })
+                        else { continue }
+
+                        consider(node.node, place(node.frame))
+                    case let inner as ScrollFocusContainer:
+                        // Its content starts at its frame, moved back by its offset.
+                        let offset = inner.contentOffset
+                        let frame = inner.frame
+                        look(in: inner.items) { rect in
+                            place(
+                                rect.offsetBy(dx: frame.minX - offset.x, dy: frame.minY - offset.y)
+                            )
+                        }
+                    default:
+                        continue
+                    }
+                }
+            }
+            look(in: container.items) { $0 }
+            return best?.node
+        }
+
+        /// How far `frame` is from `origin` toward `heading` — ahead once, aside twice — or
+        /// `nil` when it is not wholly that way.
+        static func score(from origin: CGRect, to frame: CGRect, heading: UIFocusHeading)
+            -> CGFloat?
+        {
+            func gap(_ a: CGFloat, _ aEnd: CGFloat, _ b: CGFloat, _ bEnd: CGFloat) -> CGFloat {
+                max(0, max(b - aEnd, a - bEnd))
+            }
+            let ahead: CGFloat
+            let aside: CGFloat
+            if heading.contains(.down) {
+                ahead = frame.minY - origin.maxY
+                aside = gap(origin.minX, origin.maxX, frame.minX, frame.maxX)
+            } else if heading.contains(.up) {
+                ahead = origin.minY - frame.maxY
+                aside = gap(origin.minX, origin.maxX, frame.minX, frame.maxX)
+            } else if heading.contains(.right) {
+                ahead = frame.minX - origin.maxX
+                aside = gap(origin.minY, origin.maxY, frame.minY, frame.maxY)
+            } else if heading.contains(.left) {
+                ahead = origin.minX - frame.maxX
+                aside = gap(origin.minY, origin.maxY, frame.minY, frame.maxY)
+            } else {
+                return nil
+            }
+            guard ahead >= 0 else { return nil }
+
+            return ahead + 2 * aside
+        }
+
+        /// After a drawing: once the node a move the view makes goes to shows where it is
+        /// laid out now, asks for the focus there — of the view, which holds the focus, and
+        /// prefers the node (`preferredFocusEnvironments`). Gives up after `reachTime`.
+        private func continueReach() {
+            guard let reaching else { return }
+
+            guard CACurrentMediaTime() < reaching.until,
+                let item = focusItemsByNode[reaching.node]
+            else {
+                self.reaching = nil
+                if requestedFocus == reaching.node {
+                    requestedFocus = nil
+                }
+                return
+            }
+            guard shows(item), !reaching.asked else { return }
+
+            self.reaching?.asked = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.reaching?.node == reaching.node else { return }
+
+                self.setNeedsFocusUpdate()
+                self.updateFocusIfNeeded()
+                // One try: the focus is there now, or the focus system would not move it.
+                if self.reaching?.node == reaching.node {
+                    self.reaching = nil
+                    self.requestedFocus = nil
+                }
+            }
+        }
+
+        /// Whether `item` shows in the window of its scroll, whole — or, larger than it,
+        /// over it.
+        private func shows(_ item: NodeFocusItem) -> Bool {
+            guard let container = item.parent as? ScrollFocusContainer else { return true }
+
+            let window = container.bounds
+            return window.contains(item.frame)
+                || (item.frame.height > window.height && item.frame.intersects(window))
+        }
+
+        /// The focus system scrolled `container`: once it stops, the focused node shows. On
+        /// a far move it stops the scroll short of the node it focused, or past it, and the
+        /// node is left out of sight; the scroll then goes on to it.
+        func focusScrollMoved(_ container: ScrollFocusContainer) {
+            focusScrollCheck?.cancel()
+            let check = DispatchWorkItem { [weak self, weak container] in
+                guard let self, let container, let focused = self.host.focusedNode,
+                    let item = self.focusItemsByNode[focused], item.parent === container,
+                    !self.shows(item)
+                else { return }
+
+                withAnimation(self.host.focusAnimation) {
+                    self.host.reveal(focused)
+                }
+            }
+            focusScrollCheck = check
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + NodeView.focusScrollPause,
+                execute: check
+            )
+        }
+
+        /// Seconds without a move of a scroll by the focus system after which it has stopped.
+        private static let focusScrollPause = 0.15
+
         /// Asks the focus system to focus the node's item; a node without one yet gets it
         /// after the next drawing. Without a focus system (iPhone) the host just notes it.
         private func requestFocus(on node: NodeID) {
@@ -599,7 +815,11 @@
             if lostFocus || (!hadItems && !focusOrder.isEmpty) {
                 setNeedsFocusUpdate()
             }
-            applyFocusRequest()
+            if reaching != nil {
+                continueReach()
+            } else {
+                applyFocusRequest()
+            }
         }
 
         /// Brings the scrolls' focus containers in line with the tree's scrolls: each framed in
@@ -1299,6 +1519,7 @@
                         y: Double(newValue.y) / factor
                     )
                 }
+                view?.focusScrollMoved(self)
             }
         }
 

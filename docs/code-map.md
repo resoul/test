@@ -312,3 +312,4 @@
 | `LayoutReport`, `NodeHost.onLayoutReport`, `number`, `traceAreas`, `tracedNodes`; `finish` — отклонение прохода | отчёт прохода, дубликаты | [03](03-layout-api.md#управление-subnodes), [10](10-layout-engine.md#диагностика) |
 | `NodeView`/`NodeNSView` — `onLayoutReport` в `DEBUG`, `os.Logger` | вывод решает адаптер | [10](10-layout-engine.md#диагностика) |
 | `Demo/Demo.xcodeproj` | одно демо: экран `Demo/Shared` в таргетах `LayoutDemoMac`, `LayoutDemoiOS` (с Catalyst), `LayoutDemoTV` и `LayoutDemoTVUITests`; папки таргетов — синхронизированные группы, пакет подключён локально (`..`) | решение пользователя 2026-09-26: один проект с разными таргетами |
+| `NodeView.focusMovementFailed`, `reachTarget`, `score`, `continueReach`, `focusScrollMoved`; `Demo/TV/FocusProbe`, `Demo/TVUITests/FocusReachTests` | фокус пульта за пределами поиска UIKit: резервный переход и доводка прокрутки | [03](03-layout-api.md) (фокус пульта через высокий блок); дефект #198 |
