@@ -70,8 +70,9 @@
     ///
     /// A render with an animation moves every layer from what it shows now — midway through
     /// an earlier animation too — to the new frame and appearance. A node that comes into a
-    /// tree already on screen fades in, and one that leaves it fades out where it was; a
-    /// hidden node fades out as well. Drawn content (text) is not animated: it changes at
+    /// tree already on screen comes in the way its `transition` says — fades in, by default
+    /// — and one that leaves it goes out that way from where it was; a node hidden or shown
+    /// again does the same. Drawn content (text) is not animated: it changes at
     /// once and keeps its size while the frame moves.
     ///
     /// Ownership: the renderer owns the layers it creates; layers of nodes no longer mounted
@@ -90,6 +91,8 @@
         private var drawnOffsets: [NodeID: LayoutPoint] = [:]
         /// The sticky nodes inside each scroll at the last render: they move when it scrolls.
         private var stickyNodes: [NodeID: [Node]] = [:]
+        /// The transition of each node rendered, for when it leaves: the node is gone by then.
+        private var transitions: [NodeID: Transition] = [:]
 
         /// What a layer's contents were drawn from.
         private struct Drawing: Equatable {
@@ -102,6 +105,8 @@
         /// took out of their superlayers.
         private struct Pass {
             let animation: Animation?
+            /// The tree is laid out from the right: leading is right.
+            let rightToLeft: Bool
             /// The layer the tree is rendered into: coordinates of the pass start there.
             let container: CALayer
             var visited: Set<NodeID> = []
@@ -145,7 +150,11 @@
             CATransaction.setDisableActions(true)
             defer { CATransaction.commit() }
 
-            var pass = Pass(animation: animation, container: container)
+            var pass = Pass(
+                animation: animation,
+                rightToLeft: root.host?.direction == .rightToLeft,
+                container: container
+            )
             stickyNodes = [:]
             let rootLayer = sync(root, pass: &pass)
             if rootLayer.superlayer !== container {
@@ -162,16 +171,17 @@
                 )
             }
 
-            var gone: [ObjectIdentifier: NodeID] = [:]
+            var gone: [ObjectIdentifier: (id: NodeID, transition: Transition)] = [:]
             for id in layers.keys where !pass.visited.contains(id) {
                 if let layer = layers.removeValue(forKey: id) {
-                    gone[ObjectIdentifier(layer)] = id
+                    gone[ObjectIdentifier(layer)] = (id, transitions[id] ?? .opacity)
                 }
+                transitions[id] = nil
                 drawn[id] = nil
                 indicators[id] = nil
                 drawnOffsets[id] = nil
             }
-            settle(pass.detached, gone: gone, animation: animation)
+            settle(pass.detached, gone: gone, pass: pass)
         }
 
         /// Moves the content of `scrolls` to their offsets, and shows their indicators, without
@@ -258,6 +268,7 @@
             pass: inout Pass
         ) -> Level {
             pass.visited.insert(node.id)
+            transitions[node.id] = node.transition
             var isNew = false
             var cameBack = false
             let layer: CALayer
@@ -296,7 +307,8 @@
             )
             layer.position = LayerRenderer.position(of: node)
             apply(node.appearance, to: layer)
-            applyVisibility(of: node, to: layer, isNew: isNew, animated: pass.animation != nil)
+            let wasHidden = layer.isHidden
+            let startsHiding = applyVisibility(of: node, to: layer, isNew: isNew, pass: pass)
             if let drawing = node as? any LayerDrawing {
                 // The content keeps its size while the frame animates, instead of being
                 // stretched with it.
@@ -327,14 +339,22 @@
                     shown: before.shown,
                     animation: pass.animation
                 )
+                if let animation = pass.animation {
+                    if wasHidden && !layer.isHidden {
+                        // Shown again: it comes in as a node coming into the tree does.
+                        comeIn(layer, node.transition, animation, pass: pass, replacing: true)
+                    } else if startsHiding {
+                        goOut(
+                            layer,
+                            node.transition.removal,
+                            node.transition.animation ?? animation,
+                            shown: before.shown,
+                            pass: pass
+                        )
+                    }
+                }
             } else if let animation = pass.animation, !parentIsNew, !layer.isHidden {
-                let fadeIn = makeAnimation(
-                    "opacity",
-                    from: Float(0),
-                    to: layer.opacity,
-                    animation
-                )
-                layer.add(fadeIn, forKey: "opacity")
+                comeIn(layer, node.transition, animation, pass: pass, replacing: false)
             }
 
             var indicator: CALayer?
@@ -407,43 +427,185 @@
             }
         }
 
-        /// A hidden node's layer is hidden — after fading out, when the render is animated
-        /// or the fade is already running.
+        /// A hidden node's layer is hidden — after going out the way its transition says,
+        /// when the render is animated or the node is already on its way out. Returns whether
+        /// it starts going out in this render.
         private func applyVisibility(
             of node: Node,
             to layer: CALayer,
             isNew: Bool,
-            animated: Bool
-        ) {
+            pass: Pass
+        ) -> Bool {
             guard node.isHidden else {
                 layer.isHidden = false
-                return
+                return false
             }
-            guard !layer.isHidden else { return }
+            guard !layer.isHidden else { return false }
 
-            if !isNew && (animated || layer.animation(forKey: "opacity") != nil) {
+            let goingOut = layer.animation(forKey: "opacity") != nil
+            let effect = node.transition.removal
+            if !isNew && (goingOut || (pass.animation != nil && !effect.isIdentity)) {
+                // Where it goes out to, which the move animates to; it is hidden at the first
+                // render after.
                 layer.opacity = 0
-            } else {
-                layer.isHidden = true
+                layer.transform = LayerRenderer.transform(
+                    effect,
+                    size: layer.bounds.size,
+                    base: layer.transform,
+                    rightToLeft: pass.rightToLeft
+                )
+                return !goingOut
+            }
+            layer.isHidden = true
+            return false
+        }
+
+        /// Adds the animations that bring `layer`, new in a tree already shown or shown
+        /// again, in from where `transition` has it away. `replacing` drops the fade in the
+        /// render added for a layer shown again when the transition does not fade.
+        private func comeIn(
+            _ layer: CALayer,
+            _ transition: Transition,
+            _ animation: Animation,
+            pass: Pass,
+            replacing: Bool
+        ) {
+            let effect = transition.insertion
+            let animation = transition.animation ?? animation
+            if effect.opacity != 1 {
+                let from = layer.opacity * Float(effect.opacity)
+                layer.add(
+                    makeAnimation("opacity", from: from, to: layer.opacity, animation),
+                    forKey: "opacity"
+                )
+            } else if replacing {
+                layer.removeAnimation(forKey: "opacity")
+            }
+            if effect.changesGeometry {
+                let away = LayerRenderer.transform(
+                    effect,
+                    size: layer.bounds.size,
+                    base: layer.transform,
+                    rightToLeft: pass.rightToLeft
+                )
+                layer.add(
+                    makeAnimation("transform", from: away, to: layer.transform, animation),
+                    forKey: "transform"
+                )
             }
         }
 
+        /// Adds the animations that take `layer` out to where `effect` has it, from what it
+        /// `shown`: its model is already there, and fully transparent, so it does not show
+        /// once they are over. The opacity always animates, if only from a value to itself:
+        /// a layer on its way out is one with that animation.
+        private func goOut(
+            _ layer: CALayer,
+            _ effect: Transition.Effect,
+            _ animation: Animation,
+            shown: Look,
+            pass: Pass
+        ) {
+            layer.opacity = 0
+            layer.add(
+                makeAnimation(
+                    "opacity",
+                    from: shown.opacity,
+                    to: shown.opacity * Float(effect.opacity),
+                    animation
+                ),
+                forKey: "opacity"
+            )
+            guard effect.changesGeometry else { return }
+
+            layer.add(
+                makeAnimation("transform", from: shown.transform, to: layer.transform, animation),
+                forKey: "transform"
+            )
+        }
+
+        /// `base` with `effect` applied after it, for a layer of `size`: the node as it is
+        /// while away.
+        static func transform(
+            _ effect: Transition.Effect,
+            size: CGSize,
+            base: CATransform3D,
+            rightToLeft: Bool
+        ) -> CATransform3D {
+            guard effect.changesGeometry else { return base }
+
+            // Leading is on the right from the right: moves across, turns about the vertical
+            // line and anchors across go the other way.
+            let across: CGFloat = rightToLeft ? -1 : 1
+            let anchorX = rightToLeft ? 1 - effect.anchor.x : effect.anchor.x
+            let pivot = CGPoint(
+                x: (CGFloat(anchorX) - 0.5) * size.width,
+                y: (CGFloat(effect.anchor.y) - 0.5) * size.height
+            )
+            // Core Animation cannot take a scale of zero apart to animate it.
+            let scaleX = max(CGFloat(effect.scaleX), 0.001)
+            let scaleY = max(CGFloat(effect.scaleY), 0.001)
+            var turn = CATransform3DMakeScale(scaleX, scaleY, 1)
+            if effect.rotation != 0 {
+                turn = CATransform3DRotate(turn, CGFloat(effect.rotation * .pi / 180), 0, 0, 1)
+            }
+            if effect.flipX != 0 || effect.flipY != 0 {
+                turn = CATransform3DRotate(turn, CGFloat(effect.flipX * .pi / 180), 1, 0, 0)
+                turn = CATransform3DRotate(
+                    turn,
+                    across * CGFloat(effect.flipY * .pi / 180),
+                    0,
+                    1,
+                    0
+                )
+                // Seen from twice the node's size away, so the near side looks bigger.
+                var perspective = CATransform3DIdentity
+                perspective.m34 = -1 / (2 * max(size.width, size.height, 1))
+                turn = CATransform3DConcat(turn, perspective)
+            }
+            let about = CATransform3DConcat(
+                CATransform3DConcat(CATransform3DMakeTranslation(-pivot.x, -pivot.y, 0), turn),
+                CATransform3DMakeTranslation(pivot.x, pivot.y, 0)
+            )
+            let move = CATransform3DMakeTranslation(
+                across * CGFloat(effect.offset.x + effect.sizeOffset.x * Double(size.width)),
+                CGFloat(effect.offset.y + effect.sizeOffset.y * Double(size.height)),
+                0
+            )
+            return CATransform3DConcat(CATransform3DConcat(base, about), move)
+        }
+
         /// Decides what happens to the layers taken out of their superlayers by this render:
-        /// a layer whose node left fades out where it was when the render is animated, and so
-        /// does one still fading from before; any other is dropped.
+        /// a layer whose node left goes out the way its transition says, from where it was,
+        /// when the render is animated, and so does one still going out from before; any
+        /// other is dropped.
         private func settle(
             _ detached: [(layer: CALayer, superlayer: CALayer, index: Int)],
-            gone: [ObjectIdentifier: NodeID],
-            animation: Animation?
+            gone: [ObjectIdentifier: (id: NodeID, transition: Transition)],
+            pass: Pass
         ) {
             var fading: [NodeID: CALayer] = [:]
             for entry in detached {
                 let layer = entry.layer
-                if let id = gone[ObjectIdentifier(layer)], let animation {
-                    let from = Look(presentedBy: layer).opacity
-                    layer.opacity = 0
-                    let fadeOut = makeAnimation("opacity", from: from, to: Float(0), animation)
-                    layer.add(fadeOut, forKey: "opacity")
+                if let (id, transition) = gone[ObjectIdentifier(layer)],
+                    let animation = pass.animation
+                {
+                    guard !transition.removal.isIdentity else { continue }
+
+                    let shown = Look(presentedBy: layer)
+                    layer.transform = LayerRenderer.transform(
+                        transition.removal,
+                        size: layer.bounds.size,
+                        base: layer.transform,
+                        rightToLeft: pass.rightToLeft
+                    )
+                    goOut(
+                        layer,
+                        transition.removal,
+                        transition.animation ?? animation,
+                        shown: shown,
+                        pass: pass
+                    )
                     fading[id] = layer
                 } else if let id = leaving.first(where: { $0.value === layer })?.key,
                     layer.animation(forKey: "opacity") != nil

@@ -88,6 +88,23 @@ open class Node: LayoutElement {
         didSet { if appearance != oldValue { host?.setNeedsRender() } }
     }
 
+    /// How the node comes onto the screen and leaves it in an animated change; see
+    /// `Transition`. The default fades.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var transition: Transition = .opacity
+
+    /// Sets `transition` and returns the node, for use where it is placed:
+    /// `if showsBadge { badge.transition(.scale) }`.
+    ///
+    /// Ownership: returns `self`. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    @discardableResult
+    public func transition(_ transition: Transition) -> Self {
+        self.transition = transition
+        return self
+    }
+
     /// How the node presents itself to assistive technologies; see `Accessibility`.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
