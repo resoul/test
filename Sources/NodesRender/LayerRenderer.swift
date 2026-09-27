@@ -166,7 +166,7 @@
                     entry.drawing,
                     of: entry.node,
                     into: entry.layer,
-                    scale: scale,
+                    scale: scale * LayerRenderer.zoom(of: entry.node),
                     animation: animation
                 )
             }
@@ -307,6 +307,16 @@
             )
             layer.position = LayerRenderer.position(of: node)
             apply(node.appearance, to: layer)
+            if let scroll = node.supernode as? Scroll, scroll.zoomScale != 1 {
+                // Zoomed content is drawn bigger from the content's origin: its center moves
+                // out as far as it grows.
+                let zoom = CGFloat(scroll.zoomScale)
+                layer.position = CGPoint(x: layer.position.x * zoom, y: layer.position.y * zoom)
+                layer.transform = CATransform3DConcat(
+                    layer.transform,
+                    CATransform3DMakeScale(zoom, zoom, 1)
+                )
+            }
             let wasHidden = layer.isHidden
             let startsHiding = applyVisibility(of: node, to: layer, isNew: isNew, pass: pass)
             if let drawing = node as? any LayerDrawing {
@@ -372,14 +382,27 @@
             )
         }
 
+        /// How many times bigger than laid out the scrolls around `node` draw it: content
+        /// zoomed in is drawn for as many more pixels, so that text stays sharp.
+        private static func zoom(of node: Node) -> Double {
+            var zoom = 1.0
+            var current = node.supernode
+            while let supernode = current {
+                zoom *= (supernode as? Scroll)?.zoomScale ?? 1
+                current = supernode.supernode
+            }
+            return zoom
+        }
+
         /// The center of the node's layer in its supernode's: its frame's, moved by where it
-        /// sticks.
+        /// sticks and by its appearance's offset.
         private static func position(of node: Node) -> CGPoint {
             let frame = node.frame
             let offset = node.stickyOffset
+            let moved = node.appearance.offset
             return CGPoint(
-                x: frame.origin.x + offset.x + frame.size.width / 2,
-                y: frame.origin.y + offset.y + frame.size.height / 2
+                x: frame.origin.x + offset.x + moved.x + frame.size.width / 2,
+                y: frame.origin.y + offset.y + moved.y + frame.size.height / 2
             )
         }
 
@@ -958,6 +981,7 @@
                 appearance.scale == 1
                 ? CATransform3DIdentity
                 : CATransform3DMakeScale(CGFloat(appearance.scale), CGFloat(appearance.scale), 1)
+            applySpin(appearance.spin, to: layer)
             if let shadow = appearance.shadow {
                 layer.shadowColor = cgColor(shadow.color)
                 layer.shadowOpacity = Float(shadow.opacity)
@@ -967,6 +991,28 @@
                 // The color and geometry stay, so a shadow that goes away fades out in place.
                 layer.shadowOpacity = 0
             }
+        }
+
+        /// Keeps `layer` turning `spin` times a second, or stops it. The turn is added to the
+        /// layer's transform rather than set, so a scale or a transition moves it as well.
+        private func applySpin(_ spin: Double, to layer: CALayer) {
+            let key = "spin"
+            guard spin != 0 else {
+                layer.removeAnimation(forKey: key)
+                return
+            }
+
+            let duration = 1 / abs(spin)
+            if let running = layer.animation(forKey: key), running.duration == duration {
+                return
+            }
+            let turn = CABasicAnimation(keyPath: "transform.rotation.z")
+            turn.fromValue = 0
+            turn.toValue = spin > 0 ? 2 * Double.pi : -2 * Double.pi
+            turn.duration = duration
+            turn.repeatCount = .infinity
+            turn.isAdditive = true
+            layer.add(turn, forKey: key)
         }
 
         private func cgColor(_ color: Color) -> CGColor {

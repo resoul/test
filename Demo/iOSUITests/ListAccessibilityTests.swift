@@ -40,6 +40,14 @@ final class ListAccessibilityTests: XCTestCase {
         for _ in 0..<12 where !flip.isHittable {
             app.swipeUp(velocity: .slow)
         }
+        // A tap on content still gliding only stops it: wait for the list to come to rest.
+        var last = flip.frame
+        for _ in 0..<20 {
+            Thread.sleep(forTimeInterval: 0.25)
+            let now = flip.frame
+            if now == last { break }
+            last = now
+        }
         let card = app.staticTexts["Tap a transition"]
         XCTAssertTrue(card.exists)
         let place = card.frame

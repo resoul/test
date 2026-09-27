@@ -532,37 +532,24 @@ struct LayoutTree {
                 )
             )
 
-        case let .alternatives(threshold, wide, narrow):
-            // Each branch item is shown on its side of the threshold only. The display changes
-            // come first, so an item's own `hidden` still hides it on its side.
+        case let .alternatives(cases, otherwise):
+            // Each branch item is shown within its widths only. A breakpoint standing right in
+            // a branch opens up in its place, within the branch's widths: it has no element of
+            // its own to hide.
+            var queue = LayoutTree.branches(cases, otherwise, within: .all)
             var branches: [LayoutSpec] = []
-            for (items, isWide) in [(wide, true), (narrow, false)] {
-                for item in items {
-                    var branch = item
-                    branch.patches.insert(
-                        LayoutSpec.StylePatch(from: nil) { style, _ in
-                            style.display = isWide ? .none : .flex
-                        },
-                        at: 0
+            var index = 0
+            while index < queue.count {
+                let (item, widths) = queue[index]
+                if case let .alternatives(innerCases, innerOtherwise) = item.content {
+                    queue.replaceSubrange(
+                        index...index,
+                        with: LayoutTree.branches(innerCases, innerOtherwise, within: widths)
                     )
-                    branch.patches.insert(
-                        LayoutSpec.StylePatch(from: threshold) { style, _ in
-                            style.display = isWide ? .flex : .none
-                        },
-                        at: 1
-                    )
-                    if place.fill {
-                        branch.patches.append(
-                            LayoutSpec.StylePatch(from: nil) { style, _ in
-                                if style.height == .auto && style.basis == .auto && style.grow == 0
-                                {
-                                    style.grow = 1
-                                }
-                            }
-                        )
-                    }
-                    branches.append(branch)
+                    continue
                 }
+                branches.append(LayoutTree.shown(item, within: widths, fills: place.fill))
+                index += 1
             }
             return .open(
                 Frame(
@@ -578,6 +565,78 @@ struct LayoutTree {
                 )
             )
         }
+    }
+
+    /// The widths a branch item shows at: from `lowest` on — from none, when `nil` — up to
+    /// `highest`, not included — without end, when `nil`.
+    struct Widths {
+        var lowest: BreakpointWidth?
+        var highest: BreakpointWidth?
+
+        static let all = Widths(lowest: nil, highest: nil)
+
+        /// The widths in both.
+        func within(_ outer: Widths) -> Widths {
+            Widths(
+                lowest: [lowest, outer.lowest].compactMap { $0 }.max { $0.points < $1.points },
+                highest: [highest, outer.highest].compactMap { $0 }.min { $0.points < $1.points }
+            )
+        }
+    }
+
+    /// The items of the cases and of `otherwise`, the widest case first, each with the widths
+    /// it shows at, kept within `outer`.
+    static func branches(
+        _ cases: [BreakpointCase],
+        _ otherwise: [LayoutSpec],
+        within outer: Widths
+    ) -> [(LayoutSpec, Widths)] {
+        let widest = cases.sorted { $0.threshold.points > $1.threshold.points }
+        var result: [(LayoutSpec, Widths)] = []
+        var above: BreakpointWidth?
+        for branch in widest {
+            let widths = Widths(lowest: branch.threshold, highest: above).within(outer)
+            result += branch.items.map { ($0, widths) }
+            above = branch.threshold
+        }
+        let narrow = Widths(lowest: nil, highest: above).within(outer)
+        result += otherwise.map { ($0, narrow) }
+        return result
+    }
+
+    /// `item`, shown within `widths` only. The display changes come first, so an item's own
+    /// `hidden` still hides it within them; hiding from `highest` on comes last, so widths
+    /// that end before they start hide it at all. In a place that fills, it grows into the
+    /// room.
+    static func shown(_ item: LayoutSpec, within widths: Widths, fills: Bool) -> LayoutSpec {
+        var branch = item
+        let fromNone = widths.lowest == nil
+        var display = [
+            LayoutSpec.StylePatch(from: nil) { style, _ in
+                style.display = fromNone ? .flex : .none
+            }
+        ]
+        if let lowest = widths.lowest {
+            display.append(
+                LayoutSpec.StylePatch(from: lowest) { style, _ in style.display = .flex }
+            )
+        }
+        if let highest = widths.highest {
+            display.append(
+                LayoutSpec.StylePatch(from: highest) { style, _ in style.display = .none }
+            )
+        }
+        branch.patches.insert(contentsOf: display, at: 0)
+        if fills {
+            branch.patches.append(
+                LayoutSpec.StylePatch(from: nil) { style, _ in
+                    if style.height == .auto && style.basis == .auto && style.grow == 0 {
+                        style.grow = 1
+                    }
+                }
+            )
+        }
+        return branch
     }
 
     /// The nodes a finished list becomes.
