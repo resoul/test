@@ -415,12 +415,14 @@ public final class LazyStack<Item: Identifiable>: Node {
         at alignment: ScrollAlignment,
         in scroll: Scroll
     ) -> LayoutPoint? {
-        guard isMounted, let box = scroll.frame(of: self) else { return nil }
+        guard isMounted, let placement = scroll.placement(of: self) else { return nil }
 
         updateStarts()
+        let box = placement.rect(LayoutRect(origin: .zero, size: frame.size))
+        // Where the line is along the stack, as drawn: zoomed, the offset is too.
         let line = index / perLine
-        let start = starts[line]
-        let length = end(of: line) - start
+        let start = starts[line] * placement.scale
+        let length = (end(of: line) - starts[line]) * placement.scale
         let window = axis == .vertical ? scroll.frame.size.height : scroll.frame.size.width
         // How far into the window the line starts.
         func lead(covered: Double) -> Double {

@@ -41,6 +41,48 @@
         #expect(layer.frame == CGRect(x: 0, y: 0, width: 200, height: 100))
     }
 
+    @MainActor
+    private final class Header: Node {
+        override var layoutContent: LeafContent? { .size(LayoutSize(width: 200, height: 20)) }
+    }
+
+    /// A header that sticks to the top over two blocks.
+    @MainActor
+    private final class Page: Node {
+        let header = Header()
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                header.sticky(top: 0)
+                Block()
+                Block()
+            }
+        }
+    }
+
+    @Test @MainActor
+    func zoomedAStickyHeaderIsDrawnAtTheTopOfTheWindow() throws {
+        let page = Page()
+        let scroll = Scroll(.vertical, content: page)
+        scroll.zoomRange = 1...4
+        let host = NodeHost(root: scroll, size: LayoutSize(width: 200, height: 100))
+        let renderer = LayerRenderer()
+        let root = CALayer()
+        CATransaction.begin()
+        defer {
+            host.detach()
+            CATransaction.commit()
+        }
+        host.layoutIfNeeded()
+        scroll.zoom(to: 2, around: .zero)
+        scroll.contentOffset = LayoutPoint(x: 0, y: 100)
+        host.layoutIfNeeded()
+        renderer.render(scroll, in: root)
+
+        let layer = try #require(renderer.layer(for: page.header))
+        #expect(layer.convert(layer.bounds, to: root) == CGRect(x: 0, y: 0, width: 400, height: 40))
+    }
+
     @Test @MainActor
     func zoomedTextIsDrawnForTheZoomedPixels() throws {
         let text = Text("Zoom", style: TextStyle(size: 14))

@@ -493,12 +493,18 @@ public final class Scroll: Node {
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public func frame(of node: Node) -> LayoutRect? {
+        placement(of: node)?.rect(LayoutRect(origin: .zero, size: node.frame.size))
+    }
+
+    /// Where the box of `node` is in the scroll's coordinates, as laid out, and how many
+    /// times bigger it is drawn there: the zoom, when it is in the content.
+    func placement(of node: Node) -> Placement? {
         guard var placement = node.placement(in: self, shown: false) else { return nil }
 
         // That took this scroll's own offset out too: frames here are as laid out.
         placement.origin.x += contentOrigin.x
         placement.origin.y += contentOrigin.y
-        return placement.rect(LayoutRect(origin: .zero, size: node.frame.size))
+        return placement
     }
 
     /// How far into the window from where it starts along `axis` — its top, or its leading
@@ -513,32 +519,35 @@ public final class Scroll: Node {
             if !(node is Scroll) {
                 pending.append(contentsOf: node.subnodes)
             }
-            guard let sticky = node.sticky, let rect = frame(of: node) else { continue }
+            guard let sticky = node.sticky, let placement = placement(of: node) else { continue }
 
+            let rect = placement.rect(LayoutRect(origin: .zero, size: node.frame.size))
+            // The offset and the insets are as laid out: drawn, they are zoomed too.
+            let scale = placement.scale
             let shift = node.stickyOffset(showing: offset)
             switch axis {
             case .vertical:
                 guard let top = sticky.top else { continue }
 
-                let start = rect.origin.y + shift.y
+                let start = rect.origin.y + shift.y * scale
                 let end = start + rect.size.height
-                if start <= offset.y + top, end > offset.y {
+                if start <= offset.y + top * scale, end > offset.y {
                     covered = max(covered, end - offset.y)
                 }
             case .horizontal where host?.direction == .rightToLeft:
                 guard let right = sticky.right else { continue }
 
                 let windowEnd = offset.x + frame.size.width
-                let start = rect.origin.x + shift.x
-                if start + rect.size.width >= windowEnd - right, start < windowEnd {
+                let start = rect.origin.x + shift.x * scale
+                if start + rect.size.width >= windowEnd - right * scale, start < windowEnd {
                     covered = max(covered, windowEnd - start)
                 }
             case .horizontal:
                 guard let left = sticky.left else { continue }
 
-                let start = rect.origin.x + shift.x
+                let start = rect.origin.x + shift.x * scale
                 let end = start + rect.size.width
-                if start <= offset.x + left, end > offset.x {
+                if start <= offset.x + left * scale, end > offset.x {
                     covered = max(covered, end - offset.x)
                 }
             }

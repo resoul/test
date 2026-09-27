@@ -266,13 +266,22 @@ open class Node: LayoutElement {
     }
 
     /// `stickyOffset` were the node's scroll to show `view`: the point of its content at the
-    /// window's top left corner.
+    /// window's top left corner, as drawn.
     func stickyOffset(showing view: LayoutPoint) -> LayoutPoint {
-        guard let sticky, let scroll = enclosingScroll, let rect = scroll.frame(of: self) else {
-            return .zero
-        }
+        guard let sticky, let scroll = enclosingScroll,
+            let placement = scroll.placement(of: self)
+        else { return .zero }
 
-        // Everything in the scroll's coordinates, as laid out.
+        // Everything in the scroll's coordinates, as laid out: the content zoomed that many
+        // times shows that many times less of itself in the window.
+        let scale = placement.scale
+        let rect = LayoutRect(
+            x: placement.origin.x / scale,
+            y: placement.origin.y / scale,
+            width: frame.size.width,
+            height: frame.size.height
+        )
+        let view = LayoutPoint(x: view.x / scale, y: view.y / scale)
         let shift = LayoutPoint(
             x: rect.origin.x - frame.origin.x,
             y: rect.origin.y - frame.origin.y
@@ -283,7 +292,10 @@ open class Node: LayoutElement {
             width: sticky.bounds.size.width,
             height: sticky.bounds.size.height
         )
-        let size = scroll.frame.size
+        let size = LayoutSize(
+            width: scroll.frame.size.width / scale,
+            height: scroll.frame.size.height / scale
+        )
         return LayoutPoint(
             x: Node.stick(
                 rect.origin.x,
