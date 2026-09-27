@@ -412,7 +412,8 @@
     }
 
     /// An inbox of a dozen messages, in the scroll of the screen: swipe one aside for its
-    /// actions — delete it, flag it, mark it read.
+    /// actions — delete it, flag it, mark it read. Edit it to drag messages by their handles
+    /// to other places, or select some and delete them.
     @MainActor
     final class Inbox: Node {
         private let rows = NodeCache<Int, MailRow> { _ in MailRow() }
@@ -436,10 +437,24 @@
             [rows] mail in rows[mail.id].showing(mail)
         }
 
+        private(set) lazy var edit = Button("Edit") { [weak self] in self?.toggleEditing() }
+        private(set) lazy var deleteSelected = Button("Delete") { [weak self] in
+            self?.deleteSelection()
+        }
+
         override init() {
             super.init()
             table.appearance.cornerRadius = 12
             table.appearance.clipsContent = true
+            table.allowsMultipleSelectionDuringEditing = true
+            table.onSelectionChange = { [weak self] _ in self?.relabel() }
+            table.onMove = { [weak self] move in
+                guard let self, let from = mails.firstIndex(where: { $0.id == move.item }) else {
+                    return
+                }
+
+                mails.insert(mails.remove(at: from), at: move.to.index)
+            }
             table.trailingActions = { [weak self] mail in
                 [
                     SwipeAction("Delete", role: .destructive) { self?.delete(mail.id) },
@@ -463,6 +478,29 @@
             table.sections = [TableSection(id: "inbox", items: mails)]
         }
 
+        private func toggleEditing() {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                table.selection = []
+                table.isEditing.toggle()
+                relabel()
+            }
+        }
+
+        private func relabel() {
+            edit.title = table.isEditing ? "Done" : "Edit"
+            deleteSelected.title = "Delete \(table.selection.count)"
+            setNeedsLayout()
+        }
+
+        private func deleteSelection() {
+            let selected = table.selection
+            withAnimation(.easeInOut(duration: 0.3)) {
+                mails.removeAll { selected.contains($0.id) }
+                show()
+                relabel()
+            }
+        }
+
         private func delete(_ id: Int) {
             withAnimation(.easeInOut(duration: 0.3)) {
                 mails.removeAll { $0.id == id }
@@ -478,7 +516,15 @@
         }
 
         override func layoutSpec() -> LayoutSpec? {
-            FlexContainer(.column) { table }
+            FlexContainer(.column) {
+                FlexContainer(.row) {
+                    edit
+                    if table.isEditing && !table.selection.isEmpty { deleteSelected }
+                }
+                .gap(12)
+                table
+            }
+            .gap(12)
         }
     }
 
@@ -845,7 +891,8 @@
             "Resize the window: under 460 points a card turns into a column, and from 760 "
                 + "it spreads out. "
                 + "Tap a Follow badge, or rename Ada: the changes animate. Pull the list down "
-                + "to refresh. Swipe a message of the inbox aside for its actions. "
+                + "to refresh. Swipe a message of the inbox aside for its actions, or edit "
+                + "the inbox to move messages and delete several. "
                 + "The list scrolls, and so does the row of tiles; images, a grid and ten "
                 + "thousand lines are at its end.",
             style: TextStyle(size: 14, color: muted)

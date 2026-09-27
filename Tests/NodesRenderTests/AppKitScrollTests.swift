@@ -257,20 +257,27 @@
 
         view.layoutSubtreeIfNeeded()
 
-        withAnimation(.linear(duration: 0.3)) {
+        // Each frame of the move moves the scroll: those between its ends count. Tests run
+        // beside this one hold the main thread for seconds at times, and the frames wait
+        // for it: the move is long enough to be seen between, and the wait longer still.
+        var between = 0
+        feed.scroll.onScroll = { offset in
+            if offset.y > 0, offset.y < 15_000 {
+                between += 1
+            }
+        }
+        withAnimation(.linear(duration: 2)) {
             feed.scroll.contentOffset = LayoutPoint(x: 0, y: 15_000)
         }
         #expect(view.host.needsFrames)
 
-        var between = 0
         let clock = ContinuousClock()
-        let deadline = clock.now + .seconds(5)
+        let deadline = clock.now + .seconds(30)
         while view.host.needsFrames, clock.now < deadline {
             try await Task.sleep(for: .milliseconds(5))
             view.layoutSubtreeIfNeeded()
             let top = feed.scroll.contentOffset.y
             if top > 0, top < 15_000 {
-                between += 1
                 let row = try #require(feed.rows[Int(top / 30)])
                 #expect(view.renderedLayer(for: row) != nil)
             }

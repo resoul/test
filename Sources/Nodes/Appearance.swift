@@ -82,6 +82,14 @@ public struct Appearance: Sendable, Hashable {
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public var shadow: Shadow?
 
+    /// Where the box is drawn among its siblings, as CSS `z-index`: higher is drawn over
+    /// lower, and at the same one sticky boxes are over the rest, which keep their layout
+    /// order. Taps find the one drawn on top. A row lifted to be moved is drawn over the
+    /// others so.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var zIndex = 0
+
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public init() {}
 }

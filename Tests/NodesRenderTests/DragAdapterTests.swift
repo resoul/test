@@ -99,6 +99,32 @@
     }
 
     @Test @MainActor
+    func theMouseDragsARowAcrossAndNotAlongTheList() {
+        let list = List()
+        let view = view(of: list)
+        let row = list.rows[1]
+
+        view.mouseDown(at: LayoutPoint(x: 100, y: 50), time: 1)
+        // Too short to be a drag.
+        #expect(!view.mouseDragged(to: LayoutPoint(x: 98, y: 50), time: 1.01))
+        #expect(view.mouseDragged(to: LayoutPoint(x: 90, y: 51), time: 1.02))
+        #expect(view.mouseDragged(to: LayoutPoint(x: 80, y: 51), time: 1.03))
+        view.mouseUp(at: LayoutPoint(x: 80, y: 51))
+
+        #expect(row.drags.map(\.phase) == [.began, .changed, .changed, .ended])
+        #expect(row.drags.last?.translation == LayoutPoint(x: -20, y: 1))
+        // 10 points in a hundredth of a second.
+        #expect(abs((row.drags.last?.velocity.x ?? 0) + 1000) < 0.001)
+
+        // Down the list: no row is dragged that way.
+        view.mouseDown(at: LayoutPoint(x: 100, y: 50), time: 2)
+        #expect(!view.mouseDragged(to: LayoutPoint(x: 100, y: 70), time: 2.01))
+        view.mouseUp(at: LayoutPoint(x: 100, y: 70))
+        #expect(row.drags.count == 4)
+        view.host.detach()
+    }
+
+    @Test @MainActor
     func fingersAlongTheListScrollIt() {
         let list = List()
         let view = view(of: list)
