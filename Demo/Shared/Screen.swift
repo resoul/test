@@ -115,20 +115,41 @@
         override func layoutSpec() -> LayoutSpec? {
             let following = profile.isFollowing.value
             return FlexContainer(.column) {
-                Breakpoint(from: 460) {
-                    FlexContainer(.row) {
-                        avatar.size(56)
-                        FlexContainer(.column) {
-                            name; handle; bio
-                            if following { note }
+                Breakpoint([
+                    // Wide: the badge on the right, with the note under it.
+                    .from(760) {
+                        FlexContainer(.row) {
+                            avatar.size(56)
+                            FlexContainer(.column) {
+                                name; handle; bio
+                            }
+                            .gap(6)
+                            .flex(grow: 1, shrink: 1)
+                            FlexContainer(.column) {
+                                badge
+                                if following { note }
+                            }
+                            .alignItems(.end)
+                            .gap(8)
                         }
-                        .gap(4)
-                        .flex(grow: 1, shrink: 1)
-                        badge
-                    }
-                    .alignItems(.start)
-                    .gap(16)
-                } otherwise: {
+                        .alignItems(.center)
+                        .gap(24)
+                    },
+                    .from(460) {
+                        FlexContainer(.row) {
+                            avatar.size(56)
+                            FlexContainer(.column) {
+                                name; handle; bio
+                                if following { note }
+                            }
+                            .gap(4)
+                            .flex(grow: 1, shrink: 1)
+                            badge
+                        }
+                        .alignItems(.start)
+                        .gap(16)
+                    },
+                ]) {
                     FlexContainer(.column) {
                         avatar.size(56)
                         name
@@ -340,6 +361,321 @@
         }
     }
 
+    /// A message of the inbox.
+    struct Mail: Identifiable {
+        let id: Int
+        let sender: String
+        let subject: String
+        var isUnread = true
+        var isFlagged = false
+    }
+
+    /// A message's row: a dot while it is unread, the sender and the subject, and a flag.
+    @MainActor
+    final class MailRow: Node {
+        let dot = Node()
+        let sender = Text("", style: TextStyle(size: 15, weight: .semibold, color: ink))
+        let subject = Text("", style: TextStyle(size: 14, color: muted))
+        let flag = Node()
+
+        override init() {
+            super.init()
+            dot.appearance.background = accent
+            dot.appearance.cornerRadius = 4
+            flag.appearance.background = Color(red: 0.98, green: 0.62, blue: 0.10)
+            flag.appearance.cornerRadius = 3
+        }
+
+        func showing(_ mail: Mail) -> MailRow {
+            sender.text = mail.sender
+            subject.text = mail.subject
+            dot.appearance.opacity = mail.isUnread ? 1 : 0
+            flag.appearance.opacity = mail.isFlagged ? 1 : 0
+            return self
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.row) {
+                dot.size(width: 8, height: 8)
+                FlexContainer(.column) {
+                    sender
+                    subject
+                }
+                .gap(2)
+                .flex(grow: 1, shrink: 1)
+                flag.size(width: 6, height: 20)
+            }
+            .alignItems(.center)
+            .gap(12)
+            .padding(top: 10, leading: 16, bottom: 10, trailing: 16)
+        }
+    }
+
+    /// An inbox of a dozen messages, in the scroll of the screen: swipe one aside for its
+    /// actions — delete it, flag it, mark it read.
+    @MainActor
+    final class Inbox: Node {
+        private let rows = NodeCache<Int, MailRow> { _ in MailRow() }
+        private var mails: [Mail] = [
+            ("Ada Lovelace", "Notes on the Analytical Engine"),
+            ("Grace Hopper", "The first actual bug, taped in"),
+            ("Alan Turing", "On computable numbers"),
+            ("Katherine Johnson", "Trajectories for Friendship 7"),
+            ("Edsger Dijkstra", "Go to statement considered harmful"),
+            ("Barbara Liskov", "Data abstraction and hierarchy"),
+            ("Donald Knuth", "Volume 4B is out"),
+            ("Margaret Hamilton", "Priority displays, and why"),
+            ("Claude Shannon", "A mathematical theory of communication"),
+            ("Frances Allen", "Program optimization"),
+            ("John Backus", "Can programming be liberated?"),
+            ("Radia Perlman", "Algorhyme"),
+        ].enumerated().map { index, mail in
+            Mail(id: index, sender: mail.0, subject: mail.1, isUnread: index % 3 != 2)
+        }
+        private(set) lazy var table = Table<Mail>(scrolls: false, estimatedRowHeight: 60) {
+            [rows] mail in rows[mail.id].showing(mail)
+        }
+
+        override init() {
+            super.init()
+            table.appearance.cornerRadius = 12
+            table.appearance.clipsContent = true
+            table.trailingActions = { [weak self] mail in
+                [
+                    SwipeAction("Delete", role: .destructive) { self?.delete(mail.id) },
+                    SwipeAction(
+                        mail.isFlagged ? "Unflag" : "Flag",
+                        color: Color(red: 0.98, green: 0.62, blue: 0.10)
+                    ) { self?.change(mail.id) { $0.isFlagged.toggle() } },
+                ]
+            }
+            table.leadingActions = { [weak self] mail in
+                [
+                    SwipeAction(mail.isUnread ? "Read" : "Unread", color: accent) {
+                        self?.change(mail.id) { $0.isUnread.toggle() }
+                    }
+                ]
+            }
+            show()
+        }
+
+        private func show() {
+            table.sections = [TableSection(id: "inbox", items: mails)]
+        }
+
+        private func delete(_ id: Int) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                mails.removeAll { $0.id == id }
+                show()
+            }
+        }
+
+        private func change(_ id: Int, _ edit: (inout Mail) -> Void) {
+            guard let index = mails.firstIndex(where: { $0.id == id }) else { return }
+
+            edit(&mails[index])
+            show()
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { table }
+        }
+    }
+
+    /// A window onto a card that zooms up to four times: pinch it — on a Mac, pinch the
+    /// trackpad or double tap it with two fingers — or use the button.
+    @MainActor
+    final class Zoom: Node {
+        let scroll = Scroll(.vertical)
+        private(set) lazy var toggle = Button("Zoom in") { [weak self] in
+            guard let self else { return }
+
+            withAnimation(.spring(response: 0.4, dampingRatio: 1)) {
+                scroll.zoom(to: scroll.zoomScale > 1 ? 1 : 2.5)
+            }
+        }
+
+        override init() {
+            super.init()
+            scroll.content = Card()
+            scroll.zoomRange = 1...4
+            scroll.onScroll = { [weak self] _ in self?.relabel() }
+            scroll.appearance.background = Color(red: 0.90, green: 0.91, blue: 0.94)
+            scroll.appearance.cornerRadius = 12
+        }
+
+        private func relabel() {
+            toggle.title = scroll.zoomScale > 1 ? "Zoom out" : "Zoom in"
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                scroll.size(width: 300, height: 180)
+                FlexContainer(.row) { toggle }
+            }
+            .gap(12)
+        }
+
+        final class Card: Node {
+            let text = Text(
+                "Small print, sharp at any zoom: the text is drawn again for the pixels it "
+                    + "takes. Pinch to zoom in, and move around the card.",
+                style: TextStyle(size: 11, color: ink)
+            )
+            let dots = [
+                Color(red: 0.93, green: 0.45, blue: 0.35),
+                Color(red: 0.36, green: 0.62, blue: 0.95),
+                Color(red: 0.40, green: 0.75, blue: 0.50),
+            ].map { color in
+                let dot = Node()
+                dot.appearance.background = color
+                dot.appearance.cornerRadius = 8
+                return dot
+            }
+
+            override func layoutSpec() -> LayoutSpec? {
+                FlexContainer(.column) {
+                    text
+                    FlexContainer(.row) {
+                        for dot in dots { dot.size(width: 16, height: 16) }
+                    }
+                    .gap(6)
+                }
+                .gap(10)
+                .padding(16)
+            }
+        }
+    }
+
+    /// Four pages in a window of their width: a swipe turns one page, as a pager does.
+    @MainActor
+    final class Pages: Node {
+        private static let colors = [
+            Color(red: 0.93, green: 0.45, blue: 0.35),
+            Color(red: 0.36, green: 0.62, blue: 0.95),
+            Color(red: 0.40, green: 0.75, blue: 0.50),
+            Color(red: 0.55, green: 0.36, blue: 0.85),
+        ]
+
+        let scroll = Scroll(.horizontal)
+
+        override init() {
+            super.init()
+            scroll.content = Row()
+            scroll.isPaging = true
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.row) {
+                scroll.size(width: 300, height: 140)
+            }
+        }
+
+        final class Row: Node {
+            let pages = Pages.colors.enumerated().map { index, color in
+                Page(number: index + 1, color: color)
+            }
+
+            override func layoutSpec() -> LayoutSpec? {
+                FlexContainer(.row) {
+                    for page in pages { page }
+                }
+            }
+        }
+
+        final class Page: Node {
+            let label: Text
+
+            init(number: Int, color: Color) {
+                label = Text(
+                    "Page \(number) of 4",
+                    style: TextStyle(size: 20, weight: .bold, color: .white)
+                )
+                super.init()
+                appearance.background = color
+            }
+
+            override func layoutSpec() -> LayoutSpec? {
+                FlexContainer(.column) { label }
+                    .justifyContent(.center)
+                    .alignItems(.center)
+                    .size(width: 300, height: 140)
+            }
+        }
+    }
+
+    /// A button for each kind of transition: it takes the card out that way, or brings it
+    /// back.
+    @MainActor
+    final class Transitions: Node {
+        private static let kinds: [(name: String, transition: Transition)] = [
+            ("Fade", .opacity),
+            ("Scale", .scale),
+            ("Slide", .slide),
+            ("Move up", .move(edge: .bottom)),
+            ("Push", .push(from: .trailing)),
+            ("Turn", .rotation(degrees: 90)),
+            ("Flip", .flip()),
+            ("Pop", .pop),
+            ("Shrink and fade", .scale(0.5, anchor: .topLeading).combined(with: .opacity)),
+        ]
+
+        let card = Card()
+        let showsCard = State(true)
+        private(set) var buttons: [Button] = []
+
+        override init() {
+            super.init()
+            buttons = Transitions.kinds.map { kind in
+                Button(kind.name) { [weak self] in
+                    guard let self else { return }
+
+                    card.transition = kind.transition
+                    withAnimation(.easeInOut(duration: 0.5)) {
+                        showsCard.value.toggle()
+                    }
+                }
+            }
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                FlexContainer(.row) {
+                    for button in buttons { button }
+                }
+                .gap(8)
+                .wrap()
+                FlexContainer(.row) {
+                    if showsCard.value { card }
+                }
+                .height(.points(96))
+            }
+            .gap(16)
+        }
+
+        /// The card the transitions take out and bring back.
+        @MainActor
+        final class Card: Node {
+            let label = Text(
+                "Tap a transition",
+                style: TextStyle(size: 17, weight: .semibold, color: .white)
+            )
+
+            override init() {
+                super.init()
+                appearance.background = Color(red: 0.55, green: 0.36, blue: 0.85)
+                appearance.cornerRadius = 16
+            }
+
+            override func layoutSpec() -> LayoutSpec? {
+                FlexContainer(.column) { label }
+                    .justifyContent(.center)
+                    .alignItems(.center)
+                    .size(width: 220, height: 96)
+            }
+        }
+    }
+
     /// A section title on the screen's gray, so what scrolls under it does not show through.
     @MainActor
     final class SectionTitle: Node {
@@ -425,6 +761,14 @@
         let gallery = Gallery()
         let cards: [ProfileCard]
         let actions: Actions
+        let inboxTitle = SectionTitle("Inbox")
+        let inbox = Inbox()
+        let zoomTitle = SectionTitle("Zoom")
+        let zoom = Zoom()
+        let pagesTitle = SectionTitle("Pages")
+        let pages = Pages()
+        let transitionsTitle = SectionTitle("Transitions")
+        let transitions = Transitions()
         let gridTitle = SectionTitle("600 squares, four in a line")
         private let swatches = NodeCache<Int, Swatch> { _ in Swatch() }
         private(set) lazy var grid = LazyStack(
@@ -465,7 +809,15 @@
                 // with nothing to focus to the focus section under it.
                 images.margin(top: 0, leading: -24, bottom: -8, trailing: -24)
                 gallery
+                zoomTitle.margin(top: 0, leading: -24, bottom: -8, trailing: -24)
+                zoom
+                pagesTitle.margin(top: 0, leading: -24, bottom: -8, trailing: -24)
+                pages
+                transitionsTitle.margin(top: 0, leading: -24, bottom: -8, trailing: -24)
+                transitions
                 actions
+                inboxTitle.margin(top: 0, leading: -24, bottom: -8, trailing: -24)
+                inbox
                 gridTitle
                     .margin(top: 0, leading: -24, bottom: -8, trailing: -24)
                     .sticky(top: 0)
@@ -490,8 +842,10 @@
             style: TextStyle(size: 26, weight: .bold, color: ink)
         )
         let hint = Text(
-            "Resize the window: under 460 points a card turns into a column. "
-                + "Tap a Follow badge, or rename Ada: the changes animate. "
+            "Resize the window: under 460 points a card turns into a column, and from 760 "
+                + "it spreads out. "
+                + "Tap a Follow badge, or rename Ada: the changes animate. Pull the list down "
+                + "to refresh. Swipe a message of the inbox aside for its actions. "
                 + "The list scrolls, and so does the row of tiles; images, a grid and ten "
                 + "thousand lines are at its end.",
             style: TextStyle(size: 14, color: muted)
@@ -502,6 +856,9 @@
         init(profiles: [Profile], rename: @escaping @MainActor () -> Void) {
             cards = profiles.map { ProfileCard(profile: $0) }
             let feed = Scroll(.vertical)
+            // Pulled down past its top, it refreshes for a second and a half.
+            feed.refreshIndicator = RefreshSpinner()
+            feed.onRefresh = { try? await Task.sleep(for: .seconds(1.5)) }
             let toEnd = Button("To the last line") { [weak feed] in
                 guard let feed else { return }
 

@@ -1378,3 +1378,80 @@ func theEntriesOfAListHoldTheElementsOfItsItemsLaidOut() throws {
     #expect(items == host.accessibilityItems())
     host.detach()
 }
+
+// MARK: - Zoomed
+
+@Test @MainActor
+func zoomedAnItemScrolledToIsWhereItAsked() {
+    // Items 45 long, drawn 90 long at twice the size, in a window of 150.
+    for (alignment, at) in [(ScrollAlignment.start, 0.0), (.center, 30), (.end, 60)] {
+        let feed = Feed(count: 1000, length: 45)
+        feed.scroll.zoomRange = 1...2
+        let host = host(feed)
+        feed.scroll.zoom(to: 2, around: .zero)
+        host.layoutIfNeeded()
+
+        #expect(feed.stack.scroll(to: 500, at: alignment))
+        host.layoutIfNeeded()
+
+        #expect(shown(feed.cells[500], in: feed.scroll) == at, "\(alignment)")
+        #expect(feed.scroll.frame(of: feed.cells[500])?.size.height == 90)
+        host.detach()
+    }
+}
+
+@Test @MainActor
+func zoomedAnItemScrolledToShowsBelowTheTitleAsDrawn() {
+    let feed = TitledFeed()
+    feed.scroll.zoomRange = 1...2
+    let host = host(feed)
+    feed.scroll.zoom(to: 2, around: .zero)
+    host.layoutIfNeeded()
+
+    #expect(feed.stack.scroll(to: 100))
+    host.layoutIfNeeded()
+
+    // The 40-point title is drawn 80 long over the window's top.
+    #expect(shown(feed.cells[100], in: feed.scroll) == 80)
+    host.detach()
+}
+
+@Test @MainActor
+func zoomedAnItemOfARowRightToLeftAtTheEndIsAtTheLeft() {
+    let strip = Strip()
+    strip.scroll.zoomRange = 1...2
+    let host = NodeHost(root: strip, size: LayoutSize(width: 200, height: 40))
+    host.direction = .rightToLeft
+    host.layoutIfNeeded()
+    strip.scroll.zoom(to: 2, around: .zero)
+    host.layoutIfNeeded()
+
+    #expect(strip.stack.scroll(to: 50, at: .end))
+    host.layoutIfNeeded()
+
+    // Drawn twice the size, item 50 starts at -9800: at the end its left edge is the
+    // window's.
+    #expect(strip.scroll.frame(of: strip.cells[50])?.origin.x == -9800)
+    #expect(strip.scroll.contentOffset.x == -9800)
+    host.detach()
+}
+
+@Test @MainActor
+func zoomedItemsAddedBeforeTheWindowDoNotMoveWhatShows() {
+    let feed = Feed(count: 100)
+    feed.scroll.zoomRange = 1...2
+    let host = host(feed)
+    feed.scroll.zoom(to: 2, around: .zero)
+    feed.scroll.contentOffset = LayoutPoint(x: 0, y: 1200)
+    host.layoutIfNeeded()
+    let top = feed.cells[20]
+    #expect(shown(top, in: feed.scroll) == 0)
+
+    feed.stack.items.insert(contentsOf: [Entry(id: 1000), Entry(id: 1001)], at: 0)
+    host.layoutIfNeeded()
+
+    // Two items 30 long are drawn 120 long before it.
+    #expect(shown(top, in: feed.scroll) == 0)
+    #expect(feed.scroll.contentOffset.y == 1320)
+    host.detach()
+}

@@ -321,20 +321,24 @@ public final class LazyStack<Item: Identifiable>: Node {
 
         var start = -Double.infinity
         var end = Double.infinity
-        // Where the stack's box starts in the box of `node`.
-        var position = 0.0
+        // Where the stack's box is in the box of `node`.
+        var placement = Placement.identity
+        /// Keeps to the part of the stack within a box `length` long it is placed in.
+        func clip(to length: Double) {
+            start = max(start, -along(placement.origin) / placement.scale)
+            end = min(end, (length - along(placement.origin)) / placement.scale)
+        }
         var node: Node = self
         while let supernode = node.supernode {
-            position += along(node.shownOrigin) - along(supernode.contentOrigin)
+            placement = placement.moved(into: supernode, from: node.shownOrigin)
             if supernode.appearance.clipsContent {
-                start = max(start, -position)
-                end = min(end, along(supernode.frame.size) - position)
+                clip(to: along(supernode.frame.size))
             }
             node = supernode
         }
-        position += along(node.frame.origin)
-        start = max(start, -position)
-        end = min(end, along(host.size) - position)
+        placement.origin.x += node.frame.origin.x
+        placement.origin.y += node.frame.origin.y
+        clip(to: along(host.size))
         guard isReversed else { return (start, end) }
 
         // A row laid out from the right starts at its right edge.
@@ -411,12 +415,14 @@ public final class LazyStack<Item: Identifiable>: Node {
         at alignment: ScrollAlignment,
         in scroll: Scroll
     ) -> LayoutPoint? {
-        guard isMounted, let box = scroll.frame(of: self) else { return nil }
+        guard isMounted, let placement = scroll.placement(of: self) else { return nil }
 
         updateStarts()
+        let box = placement.rect(LayoutRect(origin: .zero, size: frame.size))
+        // Where the line is along the stack, as drawn: zoomed, the offset is too.
         let line = index / perLine
-        let start = starts[line]
-        let length = end(of: line) - start
+        let start = starts[line] * placement.scale
+        let length = (end(of: line) - starts[line]) * placement.scale
         let window = axis == .vertical ? scroll.frame.size.height : scroll.frame.size.width
         // How far into the window the line starts.
         func lead(covered: Double) -> Double {

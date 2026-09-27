@@ -30,4 +30,34 @@ final class ListAccessibilityTests: XCTestCase {
         )
         XCTAssertTrue(line.isHittable)
     }
+
+    @MainActor
+    func testATransitionTakesTheCardOutAndBringsItBack() {
+        let app = XCUIApplication()
+        app.launch()
+        let flip = app.buttons["Flip"]
+        XCTAssertTrue(flip.waitForExistence(timeout: 20))
+        for _ in 0..<12 where !flip.isHittable {
+            app.swipeUp(velocity: .slow)
+        }
+        // A tap on content still gliding only stops it: wait for the list to come to rest.
+        var last = flip.frame
+        for _ in 0..<20 {
+            Thread.sleep(forTimeInterval: 0.25)
+            let now = flip.frame
+            if now == last { break }
+            last = now
+        }
+        let card = app.staticTexts["Tap a transition"]
+        XCTAssertTrue(card.exists)
+        let place = card.frame
+
+        flip.tap()
+        XCTAssertTrue(card.waitForNonExistence(timeout: 5))
+
+        // Back where it was: the flip turns the layer, not the node's frame.
+        flip.tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertEqual(card.frame, place)
+    }
 }

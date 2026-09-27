@@ -498,7 +498,7 @@
                 // A mouse wheel counts lines.
                 delta = LayoutPoint(x: delta.x * NodeNSView.line, y: delta.y * NodeNSView.line)
             }
-            if !scroll(by: delta, at: point(of: event), phase: phase) {
+            if !scroll(by: delta, at: point(of: event), phase: phase, time: event.timestamp) {
                 super.scrollWheel(with: event)
             }
         }
@@ -527,19 +527,54 @@
         private var pulled: (scroll: Scroll, by: Double)?
         /// The glide reached an end and bounced: the rest of it is spent.
         private var glideIsSpent = false
+        /// Where the paging scrolls of the gesture were when it began.
+        private var pageStarts: [(scroll: Scroll, offset: LayoutPoint)] = []
+        /// How fast the fingers moved the content, in points a second, and when last.
+        private var fingerSpeed = LayoutPoint.zero
+        private var lastTouch: Double?
+        /// When a mouse wheel last turned a page: the wheel keeps turning for a while, and
+        /// one turn is one page.
+        private var lastWheelPage: Double?
+        /// Where the gesture began, until its first move tells whether it drags a node.
+        private var dragAt: LayoutPoint?
+        /// How far the fingers moved a node's drag under way.
+        private var dragTranslation: LayoutPoint?
 
         /// Moves the scrolls under `point` by `delta`, in the view's points, and returns
         /// whether it took the event.
         @discardableResult
-        func scroll(by delta: LayoutPoint, at point: LayoutPoint, phase: WheelPhase = .wheel)
-            -> Bool
-        {
+        func scroll(
+            by delta: LayoutPoint,
+            at point: LayoutPoint,
+            phase: WheelPhase = .wheel,
+            time: Double = 0
+        ) -> Bool {
             switch phase {
             case .wheel, .began:
                 latched = nil
                 glideIsSpent = false
                 springBack()
-            case .released, .glideEnded:
+            case .released:
+                if let moved = dragTranslation {
+                    // The fingers move the other way from the content.
+                    host.dragEnded(
+                        by: moved,
+                        velocity: LayoutPoint(x: -fingerSpeed.x, y: -fingerSpeed.y)
+                    )
+                    dragTranslation = nil
+                    glideIsSpent = true
+                    pageStarts = []
+                    return true
+                }
+                if let pull = pulled, pull.scroll.platformDidRelease() {
+                    // Pulled far enough to refresh: it opens the room rather than springing
+                    // back.
+                    pulled = nil
+                }
+                springBack()
+                turnPages()
+                return latched.map { !$0.isEmpty } ?? false
+            case .glideEnded:
                 springBack()
                 return latched.map { !$0.isEmpty } ?? false
             case .gliding where glideIsSpent:
@@ -550,6 +585,47 @@
             let scrolls = latched ?? host.scrolls(at: point)
             latched = scrolls
             var left = LayoutPoint(x: delta.x / factor, y: delta.y / factor)
+            if phase == .began {
+                dragAt = point
+                dragTranslation = nil
+                pageStarts = scrolls.filter(\.isPaging).map { ($0, $0.contentOffset) }
+                fingerSpeed = .zero
+                lastTouch = time
+            } else if phase == .touching, let last = lastTouch, time > last {
+                // The speed of the last moves, the older ones counting less.
+                let speed = LayoutPoint(x: left.x / (time - last), y: left.y / (time - last))
+                fingerSpeed = LayoutPoint(
+                    x: fingerSpeed.x * 0.4 + speed.x * 0.6,
+                    y: fingerSpeed.y * 0.4 + speed.y * 0.6
+                )
+                lastTouch = time
+            }
+            if phase == .touching, let at = dragAt, left != .zero {
+                // The first move tells the way: a node dragged along it takes the gesture.
+                dragAt = nil
+                let axis: ScrollAxis = abs(left.x) > abs(left.y) ? .horizontal : .vertical
+                if host.dragBegan(at: at, along: axis) {
+                    dragTranslation = .zero
+                }
+            }
+            if phase == .touching, let moved = dragTranslation {
+                let now = LayoutPoint(x: moved.x - left.x, y: moved.y - left.y)
+                dragTranslation = now
+                host.dragMoved(by: now)
+                return true
+            }
+            if phase == .wheel,
+                let pager = scrolls.first(where: { $0.isPaging && along($0.axis, left) != 0 })
+            {
+                // A mouse wheel turns a pager a page at a time.
+                if lastWheelPage.map({ time - $0 > NodeNSView.wheelPageInterval }) ?? true {
+                    lastWheelPage = time
+                    withAnimation(NodeNSView.pageTurn) {
+                        pager.scroll(toPage: pager.page + (along(pager.axis, left) > 0 ? 1 : -1))
+                    }
+                }
+                return true
+            }
             var moved = false
             // Moving back, a scroll pulled past its end first takes the pull back.
             if let pull = pulled {
@@ -561,12 +637,24 @@
                     moved = true
                 }
             }
-            for scroll in scrolls where along(scroll.axis, left) != 0 {
+            for scroll in scrolls where moves(scroll, left) {
+                if phase == .gliding && scroll.isPaging {
+                    // The pager came to rest on its page when the fingers left: it takes the
+                    // glide along its axis without moving.
+                    left = setting(scroll.axis, of: left, to: 0)
+                    continue
+                }
                 let before = scroll.contentOffset
                 var offset = before
-                switch scroll.axis {
-                case .vertical: offset.y += left.y
-                case .horizontal: offset.x += left.x
+                if scroll.isZoomable {
+                    // Zoomable content moves both ways.
+                    offset.x += left.x
+                    offset.y += left.y
+                } else {
+                    switch scroll.axis {
+                    case .vertical: offset.y += left.y
+                    case .horizontal: offset.x += left.x
+                    }
                 }
                 scroll.contentOffset = offset
                 let now = scroll.contentOffset
@@ -588,6 +676,94 @@
                 }
             }
             return moved
+        }
+
+        /// Whether `delta` goes the way `scroll` moves.
+        private func moves(_ scroll: Scroll, _ delta: LayoutPoint) -> Bool {
+            scroll.isZoomable ? delta != .zero : along(scroll.axis, delta) != 0
+        }
+
+        /// A trackpad pinch zooms the innermost zoomable scroll under the pointer, about the
+        /// pointer.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func magnify(with event: NSEvent) {
+            if !pinch(by: Double(event.magnification), at: point(of: event)) {
+                super.magnify(with: event)
+            }
+        }
+
+        /// A double tap with two fingers zooms the scroll under the pointer in to twice its
+        /// smallest size, or back out to it.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func smartMagnify(with event: NSEvent) {
+            if !smartZoom(at: point(of: event)) {
+                super.smartMagnify(with: event)
+            }
+        }
+
+        /// Zooms the scroll under `point` by `magnification` — 0.1 a tenth bigger — about the
+        /// point; returns whether there was one.
+        @discardableResult
+        func pinch(by magnification: Double, at point: LayoutPoint) -> Bool {
+            guard let (scroll, at) = zoomableScroll(at: point) else { return false }
+
+            scroll.zoom(to: scroll.zoomScale * (1 + magnification), around: at)
+            return true
+        }
+
+        /// Zooms the scroll under `point` in or back out, as a double tap does; returns
+        /// whether there was one.
+        @discardableResult
+        func smartZoom(at point: LayoutPoint) -> Bool {
+            guard let (scroll, at) = zoomableScroll(at: point) else { return false }
+
+            let smallest = scroll.zoomRange.lowerBound
+            withAnimation(NodeNSView.pageTurn) {
+                scroll.zoom(to: scroll.zoomScale > smallest ? smallest : smallest * 2, around: at)
+            }
+            return true
+        }
+
+        /// The innermost scroll under `point` that zooms, and the point in its box.
+        func zoomableScroll(at point: LayoutPoint) -> (Scroll, LayoutPoint)? {
+            host.scrollItems().last { item in
+                let frame = item.frame
+                return item.scroll.isZoomable && point.x >= frame.origin.x
+                    && point.y >= frame.origin.y
+                    && point.x < frame.origin.x + frame.size.width
+                    && point.y < frame.origin.y + frame.size.height
+            }
+            .map { item in
+                (
+                    item.scroll,
+                    LayoutPoint(x: point.x - item.frame.origin.x, y: point.y - item.frame.origin.y)
+                )
+            }
+        }
+
+        /// How long a mouse wheel's turn goes on turning one page, in seconds.
+        private static let wheelPageInterval = 0.35
+        /// How a pager comes to rest on its page.
+        private static let pageTurn = Animation.spring(response: 0.35, dampingRatio: 1)
+
+        /// Fingers left a gesture that moved pagers: each comes to rest on the page the
+        /// gesture's end picks.
+        private func turnPages() {
+            let starts = pageStarts
+            pageStarts = []
+            lastTouch = nil
+            for (scroll, start) in starts {
+                let target = scroll.pagingTarget(
+                    from: start,
+                    at: scroll.contentOffset,
+                    velocity: fingerSpeed
+                )
+                withAnimation(NodeNSView.pageTurn) {
+                    scroll.contentOffset = target
+                }
+            }
         }
 
         /// Shows `scroll` pulled `amount` points past its end, with resistance: the further
@@ -724,7 +900,10 @@
         /// constant, so the nonisolated press can read it without touching `self`'s state.
         private let press: @MainActor @Sendable () -> Bool
 
+        private weak var host: NodeHost?
+
         init(parent: NodeNSView, node: NodeID) {
+            host = parent.host
             press = { [weak host = parent.host] in
                 host?.activate(node) ?? false
             }
@@ -734,8 +913,26 @@
             setAccessibilityParent(parent)
         }
 
+        /// The names of the actions shown, so that they are made again only when they change.
+        private var actionNames: [String] = []
+
         /// Shows what `item` says, at `frame` in its parent's space.
         func update(_ item: AccessibilityItem, frame: CGRect) {
+            if item.actions != actionNames {
+                actionNames = item.actions
+                let id = item.node
+                let host = host
+                setAccessibilityCustomActions(
+                    item.actions.enumerated().map { index, name in
+                        NSAccessibilityCustomAction(name: name) { [weak host] in
+                            // AppKit calls it on the main thread; `assumeIsolated` checks.
+                            MainActor.assumeIsolated {
+                                host?.performAccessibilityAction(index, of: id) ?? false
+                            }
+                        }
+                    }
+                )
+            }
             setAccessibilityLabel(item.label)
             setAccessibilityValue(item.value)
             setAccessibilityHelp(item.hint)

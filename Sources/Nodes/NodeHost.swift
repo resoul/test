@@ -171,6 +171,8 @@ public final class NodeHost {
     /// Nodes of the layout being solved in the background that are not mounted yet.
     private var pending: [Node] = []
     private var pressed: Node?
+    /// The node a drag under way moves.
+    private var dragged: Node?
     private var generation: UInt64 = 0
     private var solving: Task<Void, Never>?
     private var solverThread: Thread?
@@ -695,6 +697,80 @@ public final class NodeHost {
         target.pressChanged(false)
     }
 
+    // MARK: - Drag
+
+    /// For platform adapters: whether a drag starting at `point`, in the root's coordinates,
+    /// along `axis` has a node to take it.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func canDrag(at point: LayoutPoint, along axis: ScrollAxis) -> Bool {
+        dragTarget(at: point, along: axis) != nil
+    }
+
+    /// For platform adapters: a drag along `axis` began at `point`. Returns whether a node
+    /// takes it — it is told, and a press under way is let go without a tap.
+    ///
+    /// Ownership: remembers the dragged node until the drag ends. Isolation: MainActor.
+    /// Errors: none. Cancellation: `dragCancelled()`.
+    @discardableResult
+    public func dragBegan(at point: LayoutPoint, along axis: ScrollAxis) -> Bool {
+        dragCancelled()
+        guard let target = dragTarget(at: point, along: axis) else { return false }
+
+        pointerCancelled()
+        dragged = target
+        target.onDrag?(Drag(phase: .began, translation: .zero))
+        return true
+    }
+
+    /// For platform adapters: the drag moved `translation` points since it began.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func dragMoved(by translation: LayoutPoint) {
+        dragged?.onDrag?(Drag(phase: .changed, translation: translation))
+    }
+
+    /// For platform adapters: the pointer let the drag go, `translation` points from where it
+    /// began, moving at `velocity` points a second.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func dragEnded(by translation: LayoutPoint, velocity: LayoutPoint) {
+        let target = dragged
+        dragged = nil
+        target?.onDrag?(Drag(phase: .ended, translation: translation, velocity: velocity))
+    }
+
+    /// For platform adapters: the system took the drag away.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func dragCancelled() {
+        let target = dragged
+        dragged = nil
+        target?.onDrag?(Drag(phase: .cancelled, translation: .zero))
+    }
+
+    /// The innermost node under `point` dragged along `axis`.
+    private func dragTarget(at point: LayoutPoint, along axis: ScrollAxis) -> Node? {
+        var node = root.hitTest(point)
+        while let current = node, current.onDrag == nil || current.dragAxis != axis {
+            node = current.supernode
+        }
+        return node
+    }
+
+    /// Does the accessibility action at `index` of the node with `id` (`AccessibilityItem
+    /// .actions`); returns whether it did.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    @discardableResult
+    public func performAccessibilityAction(_ index: Int, of id: NodeID) -> Bool {
+        guard let node = node(id), node.accessibilityActions.indices.contains(index) else {
+            return false
+        }
+
+        return node.accessibilityActions[index].perform()
+    }
+
     /// The mounted node with `id`, or `nil`.
     ///
     /// Ownership: returns a node of the tree. Isolation: MainActor. Errors: none.
@@ -712,9 +788,9 @@ public final class NodeHost {
     /// Errors: none. Cancellation: not applicable.
     public func scrollItems() -> [ScrollItem] {
         var items: [ScrollItem] = []
-        root.walkVisible(from: .zero) { node, origin in
+        root.walkVisible(from: .identity) { node, placement in
             if let scroll = node as? Scroll {
-                items.append(ScrollItem(scroll: scroll, frame: scroll.frame(from: origin)))
+                items.append(ScrollItem(scroll: scroll, frame: scroll.frame(in: placement)))
             }
             return true
         }
@@ -788,7 +864,7 @@ public final class NodeHost {
     /// applicable.
     public func focusItems() -> [FocusItem] {
         var items: [FocusItem] = []
-        collectFocus(root, origin: .zero, into: &items)
+        collectFocus(root, placement: .identity, into: &items)
         return items
     }
 
@@ -798,7 +874,7 @@ public final class NodeHost {
     /// applicable.
     public func focusSections() -> [FocusSection] {
         var sections: [FocusSection] = []
-        collectSections(root, origin: .zero, into: &sections)
+        collectSections(root, placement: .identity, into: &sections)
         return sections
     }
 
@@ -954,14 +1030,18 @@ public final class NodeHost {
         target.onTap?()
     }
 
-    private func collectFocus(_ node: Node, origin: LayoutPoint, into items: inout [FocusItem]) {
-        node.walkVisible(from: origin) { node, origin in
+    private func collectFocus(
+        _ node: Node,
+        placement: Placement,
+        into items: inout [FocusItem]
+    ) {
+        node.walkVisible(from: placement) { node, placement in
             guard node.canBecomeFocused else { return true }
 
             items.append(
                 FocusItem(
                     node: node.id,
-                    frame: node.frame(from: origin),
+                    frame: node.frame(in: placement),
                     cornerRadius: node.appearance.cornerRadius
                 )
             )
@@ -971,18 +1051,18 @@ public final class NodeHost {
 
     private func collectSections(
         _ node: Node,
-        origin: LayoutPoint,
+        placement: Placement,
         into sections: inout [FocusSection]
     ) {
-        node.walkVisible(from: origin) { node, origin in
+        node.walkVisible(from: placement) { node, placement in
             if node.isFocusSection {
                 var items: [FocusItem] = []
-                collectFocus(node, origin: origin, into: &items)
+                collectFocus(node, placement: placement, into: &items)
                 if !items.isEmpty {
                     sections.append(
                         FocusSection(
                             node: node.id,
-                            frame: node.frame(from: origin),
+                            frame: node.frame(in: placement),
                             items: items.map(\.node)
                         )
                     )
@@ -1000,7 +1080,7 @@ public final class NodeHost {
     /// applicable.
     public func accessibilityItems() -> [AccessibilityItem] {
         var items: [AccessibilityItem] = []
-        collect(root, origin: .zero, into: &items)
+        collect(root, placement: .identity, into: &items)
         return items
     }
 
@@ -1046,14 +1126,7 @@ public final class NodeHost {
             return nil
         }
 
-        let origin = originInRoot(of: stack)
-        let item = accessible.expectedFrame(ofItem: index)
-        return LayoutRect(
-            x: origin.x + item.origin.x,
-            y: origin.y + item.origin.y,
-            width: item.size.width,
-            height: item.size.height
-        )
+        return placementInRoot(of: stack).rect(accessible.expectedFrame(ofItem: index))
     }
 
     /// Scrolls the list at `list` to the item at `index` and lays the tree out, so that the
@@ -1072,34 +1145,29 @@ public final class NodeHost {
     }
 
     /// Where `node`'s box shows, in the root's coordinates.
-    private func originInRoot(of node: Node) -> LayoutPoint {
-        var origin = node.shownOrigin
-        var current = node
-        while let supernode = current.supernode {
-            let shown = supernode.shownOrigin
-            origin.x += shown.x - supernode.contentOrigin.x
-            origin.y += shown.y - supernode.contentOrigin.y
-            current = supernode
-        }
-        return origin
+    private func placementInRoot(of node: Node) -> Placement {
+        var placement = node.placement(in: root) ?? .identity
+        placement.origin.x += root.shownOrigin.x
+        placement.origin.y += root.shownOrigin.y
+        return placement
     }
 
     /// The part of `node` that shows within the nodes around it that clip their content, in
     /// the root's coordinates; `nil` when none of it shows.
     private func shownFrame(of node: Node) -> LayoutRect? {
-        let origin = originInRoot(of: node)
-        var minX = origin.x
-        var minY = origin.y
-        var maxX = origin.x + node.frame.size.width
-        var maxY = origin.y + node.frame.size.height
+        let own = frameInRoot(of: node)
+        var minX = own.origin.x
+        var minY = own.origin.y
+        var maxX = own.origin.x + own.size.width
+        var maxY = own.origin.y + own.size.height
         var current = node.supernode
         while let clipping = current {
             if clipping.appearance.clipsContent {
-                let box = originInRoot(of: clipping)
-                minX = max(minX, box.x)
-                minY = max(minY, box.y)
-                maxX = min(maxX, box.x + clipping.frame.size.width)
-                maxY = min(maxY, box.y + clipping.frame.size.height)
+                let box = frameInRoot(of: clipping)
+                minX = max(minX, box.origin.x)
+                minY = max(minY, box.origin.y)
+                maxX = min(maxX, box.origin.x + box.size.width)
+                maxY = min(maxY, box.origin.y + box.size.height)
             }
             current = clipping.supernode
         }
@@ -1109,13 +1177,7 @@ public final class NodeHost {
     }
 
     private func frameInRoot(of node: Node) -> LayoutRect {
-        let origin = originInRoot(of: node)
-        return LayoutRect(
-            x: origin.x,
-            y: origin.y,
-            width: node.frame.size.width,
-            height: node.frame.size.height
-        )
+        placementInRoot(of: node).rect(LayoutRect(origin: .zero, size: node.frame.size))
     }
 
     /// The item of a list laid out by where it shows that `node` is in, if any: the nearest
@@ -1141,14 +1203,14 @@ public final class NodeHost {
     /// applicable.
     public func accessibilityEntries() -> [AccessibilityEntry] {
         var entries: [AccessibilityEntry] = []
-        root.walkVisible(from: .zero) { node, origin in
+        root.walkVisible(from: .identity) { node, placement in
             if node is any AccessibleList, let list = accessibilityList(node.id) {
                 var items: [AccessibilityItem] = []
-                collect(node, origin: origin, into: &items)
+                collect(node, placement: placement, into: &items)
                 entries.append(.list(list, items))
                 return false
             }
-            guard let item = accessibilityItem(node, origin: origin) else { return true }
+            guard let item = accessibilityItem(node, placement: placement) else { return true }
 
             entries.append(.element(item))
             return false
@@ -1156,18 +1218,22 @@ public final class NodeHost {
         return entries
     }
 
-    private func collect(_ node: Node, origin: LayoutPoint, into items: inout [AccessibilityItem]) {
-        node.walkVisible(from: origin) { node, origin in
-            guard let item = accessibilityItem(node, origin: origin) else { return true }
+    private func collect(
+        _ node: Node,
+        placement: Placement,
+        into items: inout [AccessibilityItem]
+    ) {
+        node.walkVisible(from: placement) { node, placement in
+            guard let item = accessibilityItem(node, placement: placement) else { return true }
 
             items.append(item)
             return false
         }
     }
 
-    /// The element `node` makes, at `origin`, or `nil` when it is not one — its subnodes may
-    /// be.
-    private func accessibilityItem(_ node: Node, origin: LayoutPoint) -> AccessibilityItem? {
+    /// The element `node` makes, where `placement` puts its frame, or `nil` when it is not
+    /// one — its subnodes may be.
+    private func accessibilityItem(_ node: Node, placement: Placement) -> AccessibilityItem? {
         let settings = node.accessibility
         let ownLabel = settings.label ?? node.accessibilityContentLabel
         let isElement =
@@ -1182,12 +1248,13 @@ public final class NodeHost {
         }
         return AccessibilityItem(
             node: node.id,
-            frame: node.frame(from: origin),
+            frame: node.frame(in: placement),
             label: ownLabel ?? spokenText(inside: node),
             value: settings.value,
             hint: settings.hint,
             traits: traits,
-            listItem: listItem(of: node)
+            listItem: listItem(of: node),
+            actions: node.accessibilityActions.map(\.name)
         )
     }
 
@@ -1195,7 +1262,7 @@ public final class NodeHost {
     /// of several nodes.
     private func spokenText(inside node: Node) -> String {
         var parts: [String] = []
-        node.walkVisible(from: .zero) { inner, _ in
+        node.walkVisible(from: .identity) { inner, _ in
             // The node itself only leads to its subnodes.
             guard inner !== node else { return true }
             guard inner.accessibility.isElement != false else { return false }

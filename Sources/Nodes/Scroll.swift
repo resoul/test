@@ -1,6 +1,20 @@
 import LayoutCore
 import StateCore
 
+/// A node that shows a vertical scroll's pull to refresh: the scroll places it over the
+/// top of its content, where the pull opens room, and tells it how far the pull goes.
+///
+/// Ownership: the scroll keeps its indicator. Isolation: MainActor. Errors: none.
+/// Cancellation: not applicable.
+public protocol RefreshIndicator: AnyObject {
+    /// Shows how far the scroll is pulled toward a refresh — 0 not at all, 1 far enough
+    /// that letting go refreshes — and whether it refreshes now.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    @MainActor
+    func showRefresh(pull: Double, isRefreshing: Bool)
+}
+
 /// Where in a scroll's window a scroll to an item puts it, along the scroll's axis.
 ///
 /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
@@ -83,6 +97,114 @@ public final class Scroll: Node {
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public private(set) var overscroll = LayoutPoint.zero
+
+    // MARK: - Pull to refresh
+
+    /// What a pull to refresh does: set, pulling a vertical scroll down past its top by
+    /// `refreshDistance` and letting go calls it, and the scroll holds `refreshSpace` open
+    /// over its content, where `refreshIndicator` shows, until it returns. `nil`, the
+    /// default, pulls with no refresh.
+    ///
+    /// Ownership: the scroll keeps the closure; it must not keep the scroll. Isolation:
+    /// MainActor. Errors: none. Cancellation: not applicable; the scroll does not cancel it.
+    public var onRefresh: (@MainActor () async -> Void)? {
+        didSet { setNeedsLayout() }
+    }
+
+    /// The node over the top of the content that shows the pull and the refresh; it is told
+    /// how far the pull goes if it is a `RefreshIndicator`. `refreshSpace` high, across the
+    /// scroll's width.
+    ///
+    /// Ownership: the scroll keeps the node. Isolation: MainActor. Errors: none.
+    /// Cancellation: not applicable.
+    public var refreshIndicator: Node? {
+        didSet { if refreshIndicator !== oldValue { setNeedsLayout() } }
+    }
+
+    /// Whether a refresh goes on: the room over the content stays open.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public private(set) var isRefreshing = false
+
+    /// Points the pull must reach past the top, at any time while held, for letting go to
+    /// refresh — as far as the room it opens.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public static let refreshDistance = 56.0
+
+    /// The pull held now reached `refreshDistance`: letting go refreshes, even if it eased
+    /// off since — as with the system's refresh control.
+    private var pullReachedRefresh = false
+
+    /// Points of room over the content while it refreshes.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public static let refreshSpace = 56.0
+
+    /// Whether the scroll refreshes when pulled: vertical, with `onRefresh`.
+    private var refreshes: Bool { axis == .vertical && onRefresh != nil }
+
+    /// Starts a refresh, as a pull let go does: the scroll opens the room over its content,
+    /// with the animation of `withAnimation` or a short spring, and closes it when
+    /// `onRefresh` returns. Nothing happens while one goes on or without `onRefresh`.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func beginRefresh() {
+        guard refreshes, !isRefreshing, let onRefresh else { return }
+
+        isRefreshing = true
+        showRefresh()
+        withAnimation(Animation.current ?? Scroll.refreshMove) {
+            // At the top, the room shows; further down, the content stays where it is.
+            if contentOffset.y <= offsetRange.lowest.y + Scroll.refreshSpace {
+                place(at: offsetRange.lowest)
+            }
+            host?.setNeedsRender()
+        }
+        Task { @MainActor [weak self] in
+            await onRefresh()
+            self?.endRefresh()
+        }
+    }
+
+    /// For platform adapters: the finger or the fingers let the scroll go. Returns whether
+    /// that starts a refresh — the pull reached `refreshDistance` — so that the platform's
+    /// scrolling comes to rest at `contentOffset`, with the room open, rather than at the top.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    @discardableResult
+    public func platformDidRelease() -> Bool {
+        let reached = pullReachedRefresh
+        pullReachedRefresh = false
+        guard refreshes, !isRefreshing, reached else { return false }
+
+        beginRefresh()
+        return true
+    }
+
+    private func endRefresh() {
+        guard isRefreshing else { return }
+
+        withAnimation(Scroll.refreshMove) {
+            isRefreshing = false
+            requestedOffset.value = offsetRange.clamp(requestedOffset.value)
+            host?.setNeedsRender()
+            host?.viewportMoved()
+        }
+        onScroll?(contentOffset)
+        showRefresh()
+    }
+
+    /// How the room over the content opens and closes.
+    private static let refreshMove = Animation.spring(response: 0.35, dampingRatio: 1)
+
+    /// Tells the indicator how far the pull goes.
+    private func showRefresh() {
+        guard refreshes, let indicator = refreshIndicator as? any RefreshIndicator else { return }
+
+        let pull = isRefreshing ? 1 : min(max(-overscroll.y / Scroll.refreshDistance, 0), 1)
+        indicator.showRefresh(pull: pull, isRefreshing: isRefreshing)
+    }
 
     /// A scroll of `content` along `axis`.
     ///
@@ -262,6 +384,10 @@ public final class Scroll: Node {
         overscroll = past
         if movedPast {
             host?.setNeedsScrollRender(self)
+            if -past.y >= Scroll.refreshDistance {
+                pullReachedRefresh = true
+            }
+            showRefresh()
         }
     }
 
@@ -274,11 +400,13 @@ public final class Scroll: Node {
         var minY = 0.0
         var maxX = frame.size.width
         var maxY = frame.size.height
-        for subnode in subnodes where !subnode.isHidden {
-            minX = min(minX, subnode.frame.origin.x)
-            minY = min(minY, subnode.frame.origin.y)
-            maxX = max(maxX, subnode.frame.origin.x + subnode.frame.size.width)
-            maxY = max(maxY, subnode.frame.origin.y + subnode.frame.size.height)
+        // Zoomed, the content is drawn that many times bigger from its origin.
+        let scale = zoomScale
+        for subnode in subnodes where !subnode.isHidden && subnode !== refreshIndicator {
+            minX = min(minX, subnode.frame.origin.x * scale)
+            minY = min(minY, subnode.frame.origin.y * scale)
+            maxX = max(maxX, (subnode.frame.origin.x + subnode.frame.size.width) * scale)
+            maxY = max(maxY, (subnode.frame.origin.y + subnode.frame.size.height) * scale)
         }
         return LayoutRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
     }
@@ -294,10 +422,20 @@ public final class Scroll: Node {
             x: content.origin.x + content.size.width - frame.size.width,
             y: content.origin.y + content.size.height - frame.size.height
         )
+        // Zoomable content moves both ways.
+        if isZoomable {
+            let room = axis == .vertical && isRefreshing ? Scroll.refreshSpace : 0
+            return ScrollRange(
+                lowest: LayoutPoint(x: lowest.x, y: lowest.y - room),
+                highest: LayoutPoint(x: max(lowest.x, highest.x), y: max(lowest.y, highest.y))
+            )
+        }
         switch axis {
         case .vertical:
+            // While it refreshes, the room over the content is in reach.
+            let room = isRefreshing ? Scroll.refreshSpace : 0
             return ScrollRange(
-                lowest: LayoutPoint(x: 0, y: lowest.y),
+                lowest: LayoutPoint(x: 0, y: lowest.y - room),
                 highest: LayoutPoint(x: 0, y: highest.y)
             )
         case .horizontal:
@@ -355,24 +493,18 @@ public final class Scroll: Node {
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public func frame(of node: Node) -> LayoutRect? {
-        var origin = LayoutPoint.zero
-        var current = node
-        while current !== self {
-            guard let supernode = current.supernode else { return nil }
+        placement(of: node)?.rect(LayoutRect(origin: .zero, size: node.frame.size))
+    }
 
-            origin.x += current.frame.origin.x - supernode.contentOrigin.x
-            origin.y += current.frame.origin.y - supernode.contentOrigin.y
-            current = supernode
-        }
-        // The loop took this scroll's own offset out too: frames here are as laid out.
-        origin.x += contentOrigin.x
-        origin.y += contentOrigin.y
-        return LayoutRect(
-            x: origin.x,
-            y: origin.y,
-            width: node.frame.size.width,
-            height: node.frame.size.height
-        )
+    /// Where the box of `node` is in the scroll's coordinates, as laid out, and how many
+    /// times bigger it is drawn there: the zoom, when it is in the content.
+    func placement(of node: Node) -> Placement? {
+        guard var placement = node.placement(in: self, shown: false) else { return nil }
+
+        // That took this scroll's own offset out too: frames here are as laid out.
+        placement.origin.x += contentOrigin.x
+        placement.origin.y += contentOrigin.y
+        return placement
     }
 
     /// How far into the window from where it starts along `axis` — its top, or its leading
@@ -387,37 +519,237 @@ public final class Scroll: Node {
             if !(node is Scroll) {
                 pending.append(contentsOf: node.subnodes)
             }
-            guard let sticky = node.sticky, let rect = frame(of: node) else { continue }
+            guard let sticky = node.sticky, let placement = placement(of: node) else { continue }
 
+            let rect = placement.rect(LayoutRect(origin: .zero, size: node.frame.size))
+            // The offset and the insets are as laid out: drawn, they are zoomed too.
+            let scale = placement.scale
             let shift = node.stickyOffset(showing: offset)
             switch axis {
             case .vertical:
                 guard let top = sticky.top else { continue }
 
-                let start = rect.origin.y + shift.y
+                let start = rect.origin.y + shift.y * scale
                 let end = start + rect.size.height
-                if start <= offset.y + top, end > offset.y {
+                if start <= offset.y + top * scale, end > offset.y {
                     covered = max(covered, end - offset.y)
                 }
             case .horizontal where host?.direction == .rightToLeft:
                 guard let right = sticky.right else { continue }
 
                 let windowEnd = offset.x + frame.size.width
-                let start = rect.origin.x + shift.x
-                if start + rect.size.width >= windowEnd - right, start < windowEnd {
+                let start = rect.origin.x + shift.x * scale
+                if start + rect.size.width >= windowEnd - right * scale, start < windowEnd {
                     covered = max(covered, windowEnd - start)
                 }
             case .horizontal:
                 guard let left = sticky.left else { continue }
 
-                let start = rect.origin.x + shift.x
+                let start = rect.origin.x + shift.x * scale
                 let end = start + rect.size.width
-                if start <= offset.x + left, end > offset.x {
+                if start <= offset.x + left * scale, end > offset.x {
                     covered = max(covered, end - offset.x)
                 }
             }
         }
         return covered
+    }
+
+    // MARK: - Zoom
+
+    /// The scales the content can be zoomed to, pinching it or with `zoom(to:around:)`: at
+    /// 2 it is drawn twice as big from its top left corner, and the scroll moves across it
+    /// both ways. The default, 1…1, does not zoom. The content keeps its layout; taps,
+    /// focus and accessibility follow what is drawn.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var zoomRange: ClosedRange<Double> = 1...1 {
+        didSet {
+            guard zoomRange != oldValue else { return }
+
+            let scale = min(max(zoomScale, zoomRange.lowerBound), zoomRange.upperBound)
+            if scale != zoomScale {
+                zoom(to: scale)
+            }
+            host?.setNeedsRender()
+        }
+    }
+
+    /// How many times bigger than laid out the content is drawn.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public private(set) var zoomScale = 1.0
+
+    /// Whether the content can be zoomed: `zoomRange` is more than one scale.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var isZoomable: Bool { zoomRange.lowerBound < zoomRange.upperBound }
+
+    /// Zooms the content to `scale`, kept within `zoomRange`, keeping the point of it at
+    /// `point` — in the scroll's box, the window's center by default — where it is. At once,
+    /// or with the animation of `withAnimation`.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func zoom(to scale: Double, around point: LayoutPoint? = nil) {
+        let scale = min(max(scale, zoomRange.lowerBound), zoomRange.upperBound)
+        let anchor =
+            point ?? LayoutPoint(x: frame.size.width / 2, y: frame.size.height / 2)
+        let shown = shownOffset
+        // The point of the content under the anchor, as laid out.
+        let content = LayoutPoint(
+            x: (anchor.x + shown.x) / zoomScale,
+            y: (anchor.y + shown.y) / zoomScale
+        )
+        setZoom(
+            scale,
+            offset: LayoutPoint(x: content.x * scale - anchor.x, y: content.y * scale - anchor.y)
+        )
+    }
+
+    /// For platform adapters: the platform's pinch zoomed the content to `scale`, with the
+    /// offset at `offset` — which, as `platformDidScroll(to:)` takes it, may be past the
+    /// ends while it bounces.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func platformDidZoom(to scale: Double, offset: LayoutPoint) {
+        guard scale != zoomScale else {
+            platformDidScroll(to: offset)
+            return
+        }
+
+        zoomScale = scale
+        requestedOffset.value = offset
+        platformDidScroll(to: offset)
+        host?.setNeedsRender()
+        host?.viewportMoved()
+    }
+
+    private func setZoom(_ scale: Double, offset: LayoutPoint) {
+        guard scale != zoomScale else {
+            contentOffset = offset
+            return
+        }
+
+        move = nil
+        zoomScale = scale
+        overscroll = .zero
+        requestedOffset.value = offsetRange.clamp(offset)
+        host?.setNeedsRender()
+        host?.viewportMoved()
+        onScroll?(contentOffset)
+    }
+
+    override var contentScale: Double { zoomScale }
+
+    // MARK: - Paging
+
+    /// Whether the scroll comes to rest only where a page starts: a page is the window's
+    /// length along `axis`, counted from the content's start — its leading edge in a row laid
+    /// out from the right — and the last one ends at the content's end. A swipe goes one page
+    /// at most, as a pager does; a slow drag goes to the page nearest where it is let go.
+    /// Code still sets any offset.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var isPaging = false {
+        didSet { if isPaging != oldValue { host?.setNeedsRender() } }
+    }
+
+    /// The page that shows, from 0: the one whose start is nearest the offset.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var page: Int {
+        let length = pageLength
+        guard length > 0 else { return 0 }
+
+        return min(
+            max(0, Int((distanceFromStart(of: contentOffset) / length).rounded())),
+            pageCount - 1
+        )
+    }
+
+    /// How many pages the content takes: the last one may be shorter than the window.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var pageCount: Int {
+        let length = pageLength
+        guard length > 0 else { return 1 }
+
+        let travel = along(offsetRange.highest) - along(offsetRange.lowest)
+        return Int((travel / length - 0.001).rounded(.up)) + 1
+    }
+
+    /// Scrolls to where page `page` starts — at once, or with the animation of
+    /// `withAnimation` — the last page ending at the content's end.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: another move of
+    /// the scroll, or the platform moving it, stops the move.
+    public func scroll(toPage page: Int) {
+        contentOffset = offset(ofPage: page)
+    }
+
+    /// For platform adapters: where a drag that started at `start` and is let go at
+    /// `current`, moving at `velocity` points a second, comes to rest when the scroll pages.
+    /// A swipe goes one page on from the page it started on, in its direction; a slow drag
+    /// goes to the page nearest where it is let go, but not beyond the next.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func pagingTarget(
+        from start: LayoutPoint,
+        at current: LayoutPoint,
+        velocity: LayoutPoint
+    ) -> LayoutPoint {
+        let length = pageLength
+        guard length > 0 else { return offsetRange.clamp(current) }
+
+        let first = (distanceFromStart(of: start) / length).rounded()
+        let now = distanceFromStart(of: current) / length
+        // Toward the content's end is forward, whichever way the offset goes for it.
+        let speed = along(velocity) * (startsAtHighest ? -1 : 1)
+        var target: Double
+        if abs(speed) > Scroll.swipeSpeed {
+            target = speed > 0 ? now.rounded(.up) : now.rounded(.down)
+        } else {
+            target = now.rounded()
+        }
+        target = min(max(target, first - 1), first + 1)
+        return offset(ofPage: Int(target))
+    }
+
+    /// Points a second a finger must move for its lift to go on to the next page.
+    private static let swipeSpeed = 300.0
+
+    private var pageLength: Double {
+        axis == .vertical ? frame.size.height : frame.size.width
+    }
+
+    /// A row laid out from the right starts at its right: at the highest offset.
+    private var startsAtHighest: Bool {
+        axis == .horizontal && host?.direction == .rightToLeft
+    }
+
+    private func along(_ point: LayoutPoint) -> Double {
+        axis == .vertical ? point.y : point.x
+    }
+
+    /// How far `offset` is from the content's start, along `axis`.
+    private func distanceFromStart(of offset: LayoutPoint) -> Double {
+        let range = offsetRange
+        return startsAtHighest
+            ? along(range.highest) - along(offset) : along(offset) - along(range.lowest)
+    }
+
+    /// The offset where page `page` starts, kept within the content.
+    private func offset(ofPage page: Int) -> LayoutPoint {
+        let range = offsetRange
+        let distance = Double(max(0, page)) * pageLength
+        let value =
+            startsAtHighest ? along(range.highest) - distance : along(range.lowest) + distance
+        var offset = contentOffset
+        switch axis {
+        case .vertical: offset.y = value
+        case .horizontal: offset.x = value
+        }
+        return range.clamp(offset)
     }
 
     /// Scrolls by one window toward the content's end, or its start, and returns the page
@@ -477,6 +809,12 @@ public final class Scroll: Node {
         let spec = FlexContainer(axis == .vertical ? .column : .row) {
             if let content {
                 content.flex(grow: 1, shrink: 0)
+            }
+            if refreshes, let refreshIndicator {
+                // Over the content's top, in the room a pull opens.
+                refreshIndicator
+                    .absolute(top: -Scroll.refreshSpace, leading: 0, trailing: 0)
+                    .height(.points(Scroll.refreshSpace))
             }
         }
         // The scroll's base size stays its content's, so a size set where it is placed works
