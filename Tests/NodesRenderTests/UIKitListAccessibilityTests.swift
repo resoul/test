@@ -341,3 +341,105 @@
         view.host.detach()
     }
 #endif
+
+#if canImport(UIKit)
+    import LayoutCore
+    import Nodes
+    import Testing
+    import UIKit
+
+    @testable import NodesUIKit
+
+    /// A 30-point line that reads `label`, tapped when `tappable`.
+    @MainActor
+    private final class Line: Node {
+        init(_ label: String, tappable: Bool = false) {
+            super.init()
+            accessibility.label = label
+            if tappable {
+                onTap = {}
+            }
+        }
+
+        override var layoutContent: LeafContent? { .size(LayoutSize(width: 100, height: 30)) }
+    }
+
+    /// A title 30 points high on a box 50 points high, sticking to the top of a scroll, over
+    /// tappable lines.
+    @MainActor
+    private final class Section: Node {
+        let title = Line("Title")
+        let lines = (0..<10).map { Line("Line \($0)", tappable: true) }
+        lazy var scroll = Scroll(.vertical, content: Column(title: title, lines: lines))
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { scroll }
+        }
+    }
+
+    /// A box around the title, 20 points longer than it.
+    @MainActor
+    private final class Header: Node {
+        let title: Line
+
+        init(_ title: Line) {
+            self.title = title
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { title }
+                .padding(top: 0, leading: 0, bottom: 20, trailing: 0)
+        }
+    }
+
+    @MainActor
+    private final class Column: Node {
+        let header: Header
+        let lines: [Line]
+
+        init(title: Line, lines: [Line]) {
+            header = Header(title)
+            self.lines = lines
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                header.sticky(top: 0)
+                for line in lines { line }
+            }
+        }
+    }
+
+    @Test @MainActor
+    func anElementIsFoundWhereATouchReachesItsNodeNotUnderANodeOverIt() throws {
+        guard #available(iOS 18, tvOS 18, *) else { return }
+
+        let section = Section()
+        let view = NodeView(root: section)
+        view.zoom = 1
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 150)
+        view.layoutIfNeeded()
+        // The first line goes under the title; the second shows from 30 to 60, its top under
+        // the title's box, which ends at 50.
+        section.scroll.contentOffset = LayoutPoint(x: 0, y: 50)
+        view.layoutIfNeeded()
+
+        func label(at y: Double) -> String? {
+            (view.accessibilityHitTest(CGPoint(x: 20, y: y), event: nil) as? UIAccessibilityElement)?
+                .accessibilityLabel
+        }
+        func tapped(at y: Double) -> Bool {
+            defer { view.host.pointerCancelled() }
+            return view.host.pointerDown(at: LayoutPoint(x: 20, y: y))
+        }
+
+        // The middle of the second line is under the title's box: neither a touch nor an
+        // element reaches it there.
+        #expect(!tapped(at: 45))
+        #expect(label(at: 45) == nil)
+        #expect(tapped(at: 55))
+        #expect(label(at: 55) == "Line 1")
+        #expect(label(at: 15) == "Title")
+        view.host.detach()
+    }
+#endif
