@@ -61,6 +61,13 @@ public struct Appearance: Sendable, Hashable {
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public var scale: Double = 1
 
+    /// Turns a second the drawn box keeps turning by, clockwise about its center — a
+    /// spinner's — for as long as it is set; 0, the default, does not turn. Nothing else
+    /// sees the turn.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public var spin: Double = 0
+
     /// A shadow under the box; `nil` for none.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.

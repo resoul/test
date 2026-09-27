@@ -133,4 +133,46 @@
         #expect(pager.scroll.contentOffset == LayoutPoint(x: 0, y: 100))
         view.host.detach()
     }
+
+    /// A 300-point window onto 600 points, refreshing.
+    @MainActor
+    private final class Feed: Node {
+        lazy var scroll = Scroll(.vertical, content: Tall())
+
+        override init() {
+            super.init()
+            scroll.refreshIndicator = RefreshSpinner()
+            scroll.onRefresh = { try? await Task.sleep(for: .seconds(60)) }
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { scroll }
+        }
+
+        final class Tall: Node {
+            override var layoutContent: LeafContent? {
+                .size(LayoutSize(width: 100, height: 600))
+            }
+        }
+    }
+
+    @Test @MainActor
+    func fingersLettingGoFarEnoughPastTheTopRefresh() {
+        for (pull, refreshes) in [(-200.0, true), (-60.0, false)] {
+            let feed = Feed()
+            let view = NodeNSView(root: feed)
+            view.zoom = 1
+            view.frame = CGRect(x: 0, y: 0, width: 100, height: 300)
+            view.layout()
+
+            view.scroll(by: .zero, at: inside, phase: .began, time: 1)
+            view.scroll(by: LayoutPoint(x: 0, y: pull), at: inside, phase: .touching, time: 1.1)
+            view.scroll(by: .zero, at: inside, phase: .released, time: 1.2)
+
+            // The resistance shows 80 of 200 points: past the 56 it takes. 60 show 30.
+            #expect(feed.scroll.isRefreshing == refreshes, "\(pull)")
+            #expect(feed.scroll.shownOffset.y == (refreshes ? -56 : 0), "\(pull)")
+            view.host.detach()
+        }
+    }
 #endif

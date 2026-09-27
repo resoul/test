@@ -628,7 +628,8 @@
         )
         let hint = Text(
             "Resize the window: under 460 points a card turns into a column. "
-                + "Tap a Follow badge, or rename Ada: the changes animate. "
+                + "Tap a Follow badge, or rename Ada: the changes animate. Pull the list down "
+                + "to refresh. "
                 + "The list scrolls, and so does the row of tiles; images, a grid and ten "
                 + "thousand lines are at its end.",
             style: TextStyle(size: 14, color: muted)
@@ -639,6 +640,9 @@
         init(profiles: [Profile], rename: @escaping @MainActor () -> Void) {
             cards = profiles.map { ProfileCard(profile: $0) }
             let feed = Scroll(.vertical)
+            // Pulled down past its top, it refreshes for a second and a half.
+            feed.refreshIndicator = RefreshSpinner()
+            feed.onRefresh = { try? await Task.sleep(for: .seconds(1.5)) }
             let toEnd = Button("To the last line") { [weak feed] in
                 guard let feed else { return }
 

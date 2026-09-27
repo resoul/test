@@ -958,6 +958,7 @@
                 appearance.scale == 1
                 ? CATransform3DIdentity
                 : CATransform3DMakeScale(CGFloat(appearance.scale), CGFloat(appearance.scale), 1)
+            applySpin(appearance.spin, to: layer)
             if let shadow = appearance.shadow {
                 layer.shadowColor = cgColor(shadow.color)
                 layer.shadowOpacity = Float(shadow.opacity)
@@ -967,6 +968,28 @@
                 // The color and geometry stay, so a shadow that goes away fades out in place.
                 layer.shadowOpacity = 0
             }
+        }
+
+        /// Keeps `layer` turning `spin` times a second, or stops it. The turn is added to the
+        /// layer's transform rather than set, so a scale or a transition moves it as well.
+        private func applySpin(_ spin: Double, to layer: CALayer) {
+            let key = "spin"
+            guard spin != 0 else {
+                layer.removeAnimation(forKey: key)
+                return
+            }
+
+            let duration = 1 / abs(spin)
+            if let running = layer.animation(forKey: key), running.duration == duration {
+                return
+            }
+            let turn = CABasicAnimation(keyPath: "transform.rotation.z")
+            turn.fromValue = 0
+            turn.toValue = spin > 0 ? 2 * Double.pi : -2 * Double.pi
+            turn.duration = duration
+            turn.repeatCount = .infinity
+            turn.isAdditive = true
+            layer.add(turn, forKey: key)
         }
 
         private func cgColor(_ color: Color) -> CGColor {

@@ -551,6 +551,11 @@
                 glideIsSpent = false
                 springBack()
             case .released:
+                if let pull = pulled, pull.scroll.platformDidRelease() {
+                    // Pulled far enough to refresh: it opens the room rather than springing
+                    // back.
+                    pulled = nil
+                }
                 springBack()
                 turnPages()
                 return latched.map { !$0.isEmpty } ?? false

@@ -1,6 +1,20 @@
 import LayoutCore
 import StateCore
 
+/// A node that shows a vertical scroll's pull to refresh: the scroll places it over the
+/// top of its content, where the pull opens room, and tells it how far the pull goes.
+///
+/// Ownership: the scroll keeps its indicator. Isolation: MainActor. Errors: none.
+/// Cancellation: not applicable.
+public protocol RefreshIndicator: AnyObject {
+    /// Shows how far the scroll is pulled toward a refresh — 0 not at all, 1 far enough
+    /// that letting go refreshes — and whether it refreshes now.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    @MainActor
+    func showRefresh(pull: Double, isRefreshing: Bool)
+}
+
 /// Where in a scroll's window a scroll to an item puts it, along the scroll's axis.
 ///
 /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
@@ -83,6 +97,114 @@ public final class Scroll: Node {
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public private(set) var overscroll = LayoutPoint.zero
+
+    // MARK: - Pull to refresh
+
+    /// What a pull to refresh does: set, pulling a vertical scroll down past its top by
+    /// `refreshDistance` and letting go calls it, and the scroll holds `refreshSpace` open
+    /// over its content, where `refreshIndicator` shows, until it returns. `nil`, the
+    /// default, pulls with no refresh.
+    ///
+    /// Ownership: the scroll keeps the closure; it must not keep the scroll. Isolation:
+    /// MainActor. Errors: none. Cancellation: not applicable; the scroll does not cancel it.
+    public var onRefresh: (@MainActor () async -> Void)? {
+        didSet { setNeedsLayout() }
+    }
+
+    /// The node over the top of the content that shows the pull and the refresh; it is told
+    /// how far the pull goes if it is a `RefreshIndicator`. `refreshSpace` high, across the
+    /// scroll's width.
+    ///
+    /// Ownership: the scroll keeps the node. Isolation: MainActor. Errors: none.
+    /// Cancellation: not applicable.
+    public var refreshIndicator: Node? {
+        didSet { if refreshIndicator !== oldValue { setNeedsLayout() } }
+    }
+
+    /// Whether a refresh goes on: the room over the content stays open.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public private(set) var isRefreshing = false
+
+    /// Points the pull must reach past the top, at any time while held, for letting go to
+    /// refresh — as far as the room it opens.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public static let refreshDistance = 56.0
+
+    /// The pull held now reached `refreshDistance`: letting go refreshes, even if it eased
+    /// off since — as with the system's refresh control.
+    private var pullReachedRefresh = false
+
+    /// Points of room over the content while it refreshes.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public static let refreshSpace = 56.0
+
+    /// Whether the scroll refreshes when pulled: vertical, with `onRefresh`.
+    private var refreshes: Bool { axis == .vertical && onRefresh != nil }
+
+    /// Starts a refresh, as a pull let go does: the scroll opens the room over its content,
+    /// with the animation of `withAnimation` or a short spring, and closes it when
+    /// `onRefresh` returns. Nothing happens while one goes on or without `onRefresh`.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func beginRefresh() {
+        guard refreshes, !isRefreshing, let onRefresh else { return }
+
+        isRefreshing = true
+        showRefresh()
+        withAnimation(Animation.current ?? Scroll.refreshMove) {
+            // At the top, the room shows; further down, the content stays where it is.
+            if contentOffset.y <= offsetRange.lowest.y + Scroll.refreshSpace {
+                place(at: offsetRange.lowest)
+            }
+            host?.setNeedsRender()
+        }
+        Task { @MainActor [weak self] in
+            await onRefresh()
+            self?.endRefresh()
+        }
+    }
+
+    /// For platform adapters: the finger or the fingers let the scroll go. Returns whether
+    /// that starts a refresh — the pull reached `refreshDistance` — so that the platform's
+    /// scrolling comes to rest at `contentOffset`, with the room open, rather than at the top.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    @discardableResult
+    public func platformDidRelease() -> Bool {
+        let reached = pullReachedRefresh
+        pullReachedRefresh = false
+        guard refreshes, !isRefreshing, reached else { return false }
+
+        beginRefresh()
+        return true
+    }
+
+    private func endRefresh() {
+        guard isRefreshing else { return }
+
+        withAnimation(Scroll.refreshMove) {
+            isRefreshing = false
+            requestedOffset.value = offsetRange.clamp(requestedOffset.value)
+            host?.setNeedsRender()
+            host?.viewportMoved()
+        }
+        onScroll?(contentOffset)
+        showRefresh()
+    }
+
+    /// How the room over the content opens and closes.
+    private static let refreshMove = Animation.spring(response: 0.35, dampingRatio: 1)
+
+    /// Tells the indicator how far the pull goes.
+    private func showRefresh() {
+        guard refreshes, let indicator = refreshIndicator as? any RefreshIndicator else { return }
+
+        let pull = isRefreshing ? 1 : min(max(-overscroll.y / Scroll.refreshDistance, 0), 1)
+        indicator.showRefresh(pull: pull, isRefreshing: isRefreshing)
+    }
 
     /// A scroll of `content` along `axis`.
     ///
@@ -262,6 +384,10 @@ public final class Scroll: Node {
         overscroll = past
         if movedPast {
             host?.setNeedsScrollRender(self)
+            if -past.y >= Scroll.refreshDistance {
+                pullReachedRefresh = true
+            }
+            showRefresh()
         }
     }
 
@@ -274,7 +400,7 @@ public final class Scroll: Node {
         var minY = 0.0
         var maxX = frame.size.width
         var maxY = frame.size.height
-        for subnode in subnodes where !subnode.isHidden {
+        for subnode in subnodes where !subnode.isHidden && subnode !== refreshIndicator {
             minX = min(minX, subnode.frame.origin.x)
             minY = min(minY, subnode.frame.origin.y)
             maxX = max(maxX, subnode.frame.origin.x + subnode.frame.size.width)
@@ -296,8 +422,10 @@ public final class Scroll: Node {
         )
         switch axis {
         case .vertical:
+            // While it refreshes, the room over the content is in reach.
+            let room = isRefreshing ? Scroll.refreshSpace : 0
             return ScrollRange(
-                lowest: LayoutPoint(x: 0, y: lowest.y),
+                lowest: LayoutPoint(x: 0, y: lowest.y - room),
                 highest: LayoutPoint(x: 0, y: highest.y)
             )
         case .horizontal:
@@ -588,6 +716,12 @@ public final class Scroll: Node {
         let spec = FlexContainer(axis == .vertical ? .column : .row) {
             if let content {
                 content.flex(grow: 1, shrink: 0)
+            }
+            if refreshes, let refreshIndicator {
+                // Over the content's top, in the room a pull opens.
+                refreshIndicator
+                    .absolute(top: -Scroll.refreshSpace, leading: 0, trailing: 0)
+                    .height(.points(Scroll.refreshSpace))
             }
         }
         // The scroll's base size stays its content's, so a size set where it is placed works

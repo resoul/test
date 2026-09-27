@@ -834,6 +834,12 @@
         /// How fast the glide after a finger slows down.
         var decelerationRate: UIScrollView.DecelerationRate { physics.decelerationRate }
 
+        /// How far the physics lets the offset go before the content's origin.
+        var contentInset: UIEdgeInsets { physics.contentInset }
+
+        /// Where the physics has the content.
+        var physicsOffset: CGPoint { physics.contentOffset }
+
         /// Moving with the finger, or on its own after it: a touch then stops it.
         var isGliding: Bool { physics.isDecelerating && !isPastTheEnds }
 
@@ -864,19 +870,28 @@
             // A pager comes to rest quickly, on the page the drag's end picks.
             physics.decelerationRate = scroll.isPaging ? .fast : .normal
             let content = scroll.contentBounds
-            // The content may start before the scroll's origin (a row laid out from the
-            // right); the insets let the offset go there.
-            physics.contentInset = UIEdgeInsets(
-                top: CGFloat(-content.origin.y * factor),
-                left: CGFloat(-content.origin.x * factor),
-                bottom: 0,
-                right: 0
-            )
+            // The offset first: a refresh that ends takes its room away, and with the insets
+            // gone first the scroll view would put its offset back itself before this moves
+            // it by as much again.
+            follow(factor: factor)
+            applyInsets(of: scroll, factor: factor)
             physics.contentSize = CGSize(
                 width: (content.origin.x + content.size.width) * factor,
                 height: (content.origin.y + content.size.height) * factor
             )
-            follow(factor: factor)
+        }
+
+        /// The content may start before the scroll's origin (a row laid out from the right),
+        /// and a refresh opens room over it: the insets let the offset go there.
+        private func applyInsets(of scroll: Scroll, factor: Double) {
+            let content = scroll.contentBounds
+            let lowest = scroll.offsetRange.lowest
+            physics.contentInset = UIEdgeInsets(
+                top: CGFloat(-min(content.origin.y, lowest.y) * factor),
+                left: CGFloat(-min(content.origin.x, lowest.x) * factor),
+                bottom: 0,
+                right: 0
+            )
         }
 
         /// Moves the scroll view to the scroll's offset, when code moved the scroll rather
@@ -892,7 +907,10 @@
             let offset = scroll.shownOffset
             if physics.isTracking || physics.isDecelerating {
                 catchUp(to: offset, factor: factor)
-            } else {
+            } else if offset != synced {
+                // Only where code moved the scroll: what the physics moved it to — a pull
+                // past the end, a bounce back from it — is its own, and setting its offset
+                // would stop the bounce.
                 physics.contentOffset = CGPoint(x: offset.x * factor, y: offset.y * factor)
             }
             synced = offset
@@ -934,7 +952,18 @@
             withVelocity velocity: CGPoint,
             targetContentOffset: UnsafeMutablePointer<CGPoint>
         ) {
-            guard let scroll, scroll.isPaging else { return }
+            guard let scroll else { return }
+
+            if scroll.platformDidRelease() {
+                // Pulled far enough to refresh: the glide comes to rest with the room open.
+                isFollowing = true
+                applyInsets(of: scroll, factor: factor)
+                isFollowing = false
+                let offset = scroll.contentOffset
+                targetContentOffset.pointee = CGPoint(x: offset.x * factor, y: offset.y * factor)
+                return
+            }
+            guard scroll.isPaging else { return }
 
             // The velocity comes in points a millisecond.
             let target = scroll.pagingTarget(
