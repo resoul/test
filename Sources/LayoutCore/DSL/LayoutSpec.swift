@@ -40,8 +40,9 @@ public struct LayoutSpec: LayoutSpecConvertible {
     enum Content {
         case element(any LayoutElement)
         case container([LayoutSpec])
-        /// `wide` from `threshold` on, `narrow` below it — both stand in the parent's list.
-        case alternatives(threshold: BreakpointWidth, wide: [LayoutSpec], narrow: [LayoutSpec])
+        /// Each case from its threshold up to the next one's, `otherwise` below them all —
+        /// all stand in the parent's list.
+        case alternatives(cases: [BreakpointCase], otherwise: [LayoutSpec])
     }
 
     struct StylePatch {
@@ -90,7 +91,32 @@ public struct LayoutSpec: LayoutSpecConvertible {
         @LayoutBuilder _ wide: () -> [LayoutSpec],
         @LayoutBuilder otherwise narrow: () -> [LayoutSpec]
     ) {
-        content = .alternatives(threshold: threshold, wide: wide(), narrow: narrow())
+        content = .alternatives(
+            cases: [BreakpointCase(threshold: threshold, items: wide())],
+            otherwise: narrow()
+        )
+        managesVisibility = true
+    }
+
+    /// Structure for several widths: each case from its threshold up to the next wider
+    /// one's, `narrow` below them all. Their order does not matter. An element may appear in
+    /// several branches: it is the same element, moved. When the width is not known yet,
+    /// `narrow` is used.
+    ///
+    ///     Breakpoint([
+    ///         .from(.lg) { FlexContainer(.row) { sidebar; list; details } },
+    ///         .from(.md) { FlexContainer(.row) { sidebar; list } },
+    ///     ]) {
+    ///         FlexContainer(.column) { list }
+    ///     }
+    ///
+    /// Ownership: a value borrowing the elements of all branches. Isolation: MainActor.
+    /// Errors: none. Cancellation: not applicable.
+    public init(
+        _ cases: [BreakpointCase],
+        @LayoutBuilder otherwise narrow: () -> [LayoutSpec]
+    ) {
+        content = .alternatives(cases: cases, otherwise: narrow())
         managesVisibility = true
     }
 
@@ -128,6 +154,28 @@ public typealias FlexContainer = LayoutSpec
 /// Structure that depends on width: `Breakpoint(from: .sm) { … } otherwise: { … }` builds a
 /// `LayoutSpec`.
 public typealias Breakpoint = LayoutSpec
+
+/// One branch of a `Breakpoint` of several: `.from(.md) { … }` is shown from 600 points of
+/// width up to the next wider branch's threshold.
+///
+/// Ownership: a value borrowing the elements it mentions. Isolation: MainActor. Errors:
+/// none. Cancellation: not applicable.
+@MainActor
+public struct BreakpointCase {
+    let threshold: BreakpointWidth
+    let items: [LayoutSpec]
+
+    /// The branch shown from `threshold` on, up to the next wider one's.
+    ///
+    /// Ownership: a value borrowing the elements of `content`. Isolation: MainActor.
+    /// Errors: none. Cancellation: not applicable.
+    public static func from(
+        _ threshold: BreakpointWidth,
+        @LayoutBuilder _ content: () -> [LayoutSpec]
+    ) -> BreakpointCase {
+        BreakpointCase(threshold: threshold, items: content())
+    }
+}
 
 /// Collects the items of a container: elements and specs, with `if`, `if let`, `switch`,
 /// `for`, and optional elements (a `nil` element is skipped).

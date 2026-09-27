@@ -115,20 +115,41 @@
         override func layoutSpec() -> LayoutSpec? {
             let following = profile.isFollowing.value
             return FlexContainer(.column) {
-                Breakpoint(from: 460) {
-                    FlexContainer(.row) {
-                        avatar.size(56)
-                        FlexContainer(.column) {
-                            name; handle; bio
-                            if following { note }
+                Breakpoint([
+                    // Wide: the badge on the right, with the note under it.
+                    .from(760) {
+                        FlexContainer(.row) {
+                            avatar.size(56)
+                            FlexContainer(.column) {
+                                name; handle; bio
+                            }
+                            .gap(6)
+                            .flex(grow: 1, shrink: 1)
+                            FlexContainer(.column) {
+                                badge
+                                if following { note }
+                            }
+                            .alignItems(.end)
+                            .gap(8)
                         }
-                        .gap(4)
-                        .flex(grow: 1, shrink: 1)
-                        badge
-                    }
-                    .alignItems(.start)
-                    .gap(16)
-                } otherwise: {
+                        .alignItems(.center)
+                        .gap(24)
+                    },
+                    .from(460) {
+                        FlexContainer(.row) {
+                            avatar.size(56)
+                            FlexContainer(.column) {
+                                name; handle; bio
+                                if following { note }
+                            }
+                            .gap(4)
+                            .flex(grow: 1, shrink: 1)
+                            badge
+                        }
+                        .alignItems(.start)
+                        .gap(16)
+                    },
+                ]) {
                     FlexContainer(.column) {
                         avatar.size(56)
                         name
@@ -696,7 +717,8 @@
             style: TextStyle(size: 26, weight: .bold, color: ink)
         )
         let hint = Text(
-            "Resize the window: under 460 points a card turns into a column. "
+            "Resize the window: under 460 points a card turns into a column, and from 760 "
+                + "it spreads out. "
                 + "Tap a Follow badge, or rename Ada: the changes animate. Pull the list down "
                 + "to refresh. "
                 + "The list scrolls, and so does the row of tiles; images, a grid and ten "

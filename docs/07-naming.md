@@ -56,6 +56,7 @@ AGENTS.md Trellis).
 | `Scroll.zoomRange`, `zoomScale`, `zoom(to:around:)`, `isZoomable` — по образцу `UIScrollView.zoomScale`/`minimumZoomScale` | реализовано (2026-09-27); имена — предложено |
 | `Scroll.onRefresh`, `refreshIndicator`, `isRefreshing`, `beginRefresh()`, `RefreshIndicator`, `RefreshSpinner`, `Appearance.spin` — по образцу `.refreshable` SwiftUI и `UIRefreshControl` | реализовано (2026-09-27); имена — предложено |
 | `Scroll.isPaging`, `page`, `pageCount`, `scroll(toPage:)` — по образцу `UIScrollView.isPagingEnabled` | реализовано (2026-09-27); имена — предложено |
+| `Breakpoint([.from(.lg) { … }, .from(.md) { … }]) { … }`, `BreakpointCase.from(_:_:)` — список порогов вместо вложенных `Breakpoint` | реализовано (2026-09-27); имена — предложено |
 | `Transition` (`.opacity`, `.identity`, `.scale`, `.move(edge:)`, `.offset`, `.slide`, `.push(from:)`, `.rotation`, `.flip`, `.pop`, `.asymmetric`, `.combined(with:)`, `.animation(_:)`), `Transition.Effect`, `Node.transition` — по образцу `AnyTransition` SwiftUI | реализовано (2026-09-27); имена — предложено |
 | `NodeHost.accessibilityEntries()`, `AccessibilityEntry`, `AccessibilityList`, `revealItem(_:in:)` — порядок чтения со списками; по образцу `accessibilityItems()` | реализовано (2026-09-26); имена — предложено |
 | `ScrollAlignment` (`.start`, `.center`, `.end`), `scroll(to:at:)` — где в окне встаёт элемент; по образцу `UICollectionView.ScrollPosition` и `anchor` у `ScrollViewProxy.scrollTo` | реализовано (2026-09-27); имена — предложено |

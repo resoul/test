@@ -450,6 +450,132 @@ func breakpointInsideAContainerUsesTheWidthItsParentGives() {
 
 @MainActor
 @Test
+func aBreakpointInsideABranchShowsOnlyOnThatBranchsSide() {
+    let wide = Box(10, 10)
+    let middle = Box(10, 10)
+    let narrow = Box(10, 10)
+    func spec() -> LayoutSpec {
+        Breakpoint(from: 400) {
+            wide
+        } otherwise: {
+            Breakpoint(from: 200) {
+                middle
+            } otherwise: {
+                narrow
+            }
+        }
+    }
+
+    for (width, shown) in [(500.0, "wide"), (300, "middle"), (100, "narrow")] {
+        spec().apply(in: LayoutRect(x: 0, y: 0, width: width, height: 50))
+        let visible = [("wide", wide), ("middle", middle), ("narrow", narrow)]
+            .filter { $0.1.isVisible == true }
+            .map(\.0)
+        #expect(visible == [shown], "at \(width)")
+    }
+}
+
+@MainActor
+@Test
+func aBreakpointOfSeveralCasesShowsTheOneForTheWidth() {
+    let list = Box(50, 10)
+    let sidebar = Box(30, 10)
+    let details = Box(40, 10)
+    func spec(_ cases: [BreakpointCase]) -> LayoutSpec {
+        Breakpoint(cases) {
+            FlexContainer(.column) { list }.alignItems(.start)
+        }
+    }
+    let wideFirst = [
+        BreakpointCase.from(.lg) {
+            FlexContainer(.row) {
+                sidebar; list; details
+            }.alignItems(.start)
+        },
+        .from(.md) {
+            FlexContainer(.row) {
+                sidebar; list
+            }.alignItems(.start)
+        },
+    ]
+
+    // Their order does not matter.
+    for cases in [wideFirst, wideFirst.reversed()] {
+        spec(cases).apply(in: LayoutRect(x: 0, y: 0, width: 900, height: 50))
+        #expect(sidebar.isVisible == true)
+        #expect(details.isVisible == true)
+        #expect(list.frame?.minX == 30)
+
+        spec(cases).apply(in: LayoutRect(x: 0, y: 0, width: 700, height: 50))
+        #expect(sidebar.isVisible == true)
+        #expect(details.isVisible == false)
+        #expect(list.frame?.minX == 30)
+
+        spec(cases).apply(in: LayoutRect(x: 0, y: 0, width: 300, height: 50))
+        #expect(sidebar.isVisible == false)
+        #expect(details.isVisible == false)
+        // The same list, moved into the column.
+        #expect(list.frame == LayoutRect(x: 0, y: 0, width: 50, height: 10))
+        #expect(list.isVisible == true)
+    }
+}
+
+@MainActor
+@Test
+func aBreakpointOfSeveralCasesWithoutAWidthShowsTheNarrowOne() {
+    let large = Box(10, 10)
+    let medium = Box(10, 10)
+    let small = Box(10, 10)
+    // The inner row sizes itself to its content: no width to go by.
+    FlexContainer(.row) {
+        FlexContainer(.row) {
+            Breakpoint([.from(.lg) { large }, .from(.md) { medium }]) { small }
+        }
+    }
+    .alignItems(.start)
+    .apply(in: LayoutRect(x: 0, y: 0, width: 1000, height: 20))
+
+    #expect(large.isVisible == false)
+    #expect(medium.isVisible == false)
+    #expect(small.isVisible == true)
+}
+
+@MainActor
+@Test
+func aBreakpointInsideACaseShowsWithinThatCasesWidths() {
+    let wide = Box(10, 10)
+    let tablet = Box(10, 10)
+    let bigTablet = Box(10, 10)
+    let phone = Box(10, 10)
+    func spec() -> LayoutSpec {
+        Breakpoint([
+            .from(.lg) { wide },
+            .from(.md) {
+                // Up to .lg only, though its own threshold is past it.
+                Breakpoint(from: 1000) {
+                    bigTablet
+                } otherwise: {
+                    tablet
+                }
+            },
+        ]) {
+            phone
+        }
+    }
+
+    for (width, shown) in [(1200.0, "wide"), (700, "tablet"), (300, "phone")] {
+        spec().apply(in: LayoutRect(x: 0, y: 0, width: width, height: 50))
+        let visible = [
+            ("wide", wide), ("tablet", tablet), ("bigTablet", bigTablet), ("phone", phone),
+        ]
+        .filter { $0.1.isVisible == true }
+        .map(\.0)
+        #expect(visible == [shown], "at \(width)")
+    }
+}
+
+@MainActor
+@Test
 func valuesFromAWidthOnApplyInOrder() {
     let a = Box(10, 10)
     let b = Box(10, 10)
