@@ -166,7 +166,7 @@
                     entry.drawing,
                     of: entry.node,
                     into: entry.layer,
-                    scale: scale,
+                    scale: scale * LayerRenderer.zoom(of: entry.node),
                     animation: animation
                 )
             }
@@ -307,6 +307,16 @@
             )
             layer.position = LayerRenderer.position(of: node)
             apply(node.appearance, to: layer)
+            if let scroll = node.supernode as? Scroll, scroll.zoomScale != 1 {
+                // Zoomed content is drawn bigger from the content's origin: its center moves
+                // out as far as it grows.
+                let zoom = CGFloat(scroll.zoomScale)
+                layer.position = CGPoint(x: layer.position.x * zoom, y: layer.position.y * zoom)
+                layer.transform = CATransform3DConcat(
+                    layer.transform,
+                    CATransform3DMakeScale(zoom, zoom, 1)
+                )
+            }
             let wasHidden = layer.isHidden
             let startsHiding = applyVisibility(of: node, to: layer, isNew: isNew, pass: pass)
             if let drawing = node as? any LayerDrawing {
@@ -370,6 +380,18 @@
                 subnodes: node.subnodesInDrawingOrder,
                 subnodesAreNew: isNew || cameBack
             )
+        }
+
+        /// How many times bigger than laid out the scrolls around `node` draw it: content
+        /// zoomed in is drawn for as many more pixels, so that text stays sharp.
+        private static func zoom(of node: Node) -> Double {
+            var zoom = 1.0
+            var current = node.supernode
+            while let supernode = current {
+                zoom *= (supernode as? Scroll)?.zoomScale ?? 1
+                current = supernode.supernode
+            }
+            return zoom
         }
 
         /// The center of the node's layer in its supernode's: its frame's, moved by where it

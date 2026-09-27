@@ -606,7 +606,7 @@
                     moved = true
                 }
             }
-            for scroll in scrolls where along(scroll.axis, left) != 0 {
+            for scroll in scrolls where moves(scroll, left) {
                 if phase == .gliding && scroll.isPaging {
                     // The pager came to rest on its page when the fingers left: it takes the
                     // glide along its axis without moving.
@@ -615,9 +615,15 @@
                 }
                 let before = scroll.contentOffset
                 var offset = before
-                switch scroll.axis {
-                case .vertical: offset.y += left.y
-                case .horizontal: offset.x += left.x
+                if scroll.isZoomable {
+                    // Zoomable content moves both ways.
+                    offset.x += left.x
+                    offset.y += left.y
+                } else {
+                    switch scroll.axis {
+                    case .vertical: offset.y += left.y
+                    case .horizontal: offset.x += left.x
+                    }
                 }
                 scroll.contentOffset = offset
                 let now = scroll.contentOffset
@@ -639,6 +645,71 @@
                 }
             }
             return moved
+        }
+
+        /// Whether `delta` goes the way `scroll` moves.
+        private func moves(_ scroll: Scroll, _ delta: LayoutPoint) -> Bool {
+            scroll.isZoomable ? delta != .zero : along(scroll.axis, delta) != 0
+        }
+
+        /// A trackpad pinch zooms the innermost zoomable scroll under the pointer, about the
+        /// pointer.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func magnify(with event: NSEvent) {
+            if !pinch(by: Double(event.magnification), at: point(of: event)) {
+                super.magnify(with: event)
+            }
+        }
+
+        /// A double tap with two fingers zooms the scroll under the pointer in to twice its
+        /// smallest size, or back out to it.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func smartMagnify(with event: NSEvent) {
+            if !smartZoom(at: point(of: event)) {
+                super.smartMagnify(with: event)
+            }
+        }
+
+        /// Zooms the scroll under `point` by `magnification` — 0.1 a tenth bigger — about the
+        /// point; returns whether there was one.
+        @discardableResult
+        func pinch(by magnification: Double, at point: LayoutPoint) -> Bool {
+            guard let (scroll, at) = zoomableScroll(at: point) else { return false }
+
+            scroll.zoom(to: scroll.zoomScale * (1 + magnification), around: at)
+            return true
+        }
+
+        /// Zooms the scroll under `point` in or back out, as a double tap does; returns
+        /// whether there was one.
+        @discardableResult
+        func smartZoom(at point: LayoutPoint) -> Bool {
+            guard let (scroll, at) = zoomableScroll(at: point) else { return false }
+
+            let smallest = scroll.zoomRange.lowerBound
+            withAnimation(NodeNSView.pageTurn) {
+                scroll.zoom(to: scroll.zoomScale > smallest ? smallest : smallest * 2, around: at)
+            }
+            return true
+        }
+
+        /// The innermost scroll under `point` that zooms, and the point in its box.
+        func zoomableScroll(at point: LayoutPoint) -> (Scroll, LayoutPoint)? {
+            host.scrollItems().last { item in
+                let frame = item.frame
+                return item.scroll.isZoomable && point.x >= frame.origin.x
+                    && point.y >= frame.origin.y
+                    && point.x < frame.origin.x + frame.size.width
+                    && point.y < frame.origin.y + frame.size.height
+            }
+            .map { item in
+                (
+                    item.scroll,
+                    LayoutPoint(x: point.x - item.frame.origin.x, y: point.y - item.frame.origin.y)
+                )
+            }
         }
 
         /// How long a mouse wheel's turn goes on turning one page, in seconds.

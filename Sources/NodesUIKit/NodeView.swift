@@ -823,6 +823,15 @@
     final class ScrollDriver: NSObject, UIScrollViewDelegate {
         private(set) weak var scroll: Scroll?
         private let physics = UIScrollView()
+        /// What the scroll view zooms, when the scroll zooms: an empty view the size of the
+        /// content as laid out; the tree's layers draw the zoom.
+        private let zoomTarget = UIView()
+        /// The scroll view's own gestures before it zooms; the ones it adds when it does — its
+        /// pinch, where there is one — go to the node view, as the pan does. Told apart by
+        /// that rather than by type: a TV has no pinch type at all.
+        private var ownGestures: [ObjectIdentifier] = []
+        /// The zooming gestures taken to the node view.
+        private(set) var zoomGestures: [UIGestureRecognizer] = []
         /// Set while the driver moves the scroll view itself, so it does not hear itself.
         private var isFollowing = false
         private var factor = 1.0
@@ -837,8 +846,9 @@
         /// How far the physics lets the offset go before the content's origin.
         var contentInset: UIEdgeInsets { physics.contentInset }
 
-        /// Where the physics has the content.
+        /// Where the physics has the content, and how far it goes.
         var physicsOffset: CGPoint { physics.contentOffset }
+        var contentSize: CGSize { physics.contentSize }
 
         /// Moving with the finger, or on its own after it: a touch then stops it.
         var isGliding: Bool { physics.isDecelerating && !isPastTheEnds }
@@ -855,6 +865,48 @@
             physics.alwaysBounceHorizontal = scroll.axis == .horizontal
             view.addSubview(physics)
             view.addGestureRecognizer(physics.panGestureRecognizer)
+            zoomTarget.isUserInteractionEnabled = false
+            physics.addSubview(zoomTarget)
+            ownGestures = (physics.gestureRecognizers ?? []).map(ObjectIdentifier.init)
+        }
+
+        func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+            scroll?.isZoomable == true ? zoomTarget : nil
+        }
+
+        func scrollViewDidZoom(_ scrollView: UIScrollView) {
+            guard !isFollowing, let scroll else { return }
+
+            reportZoom(of: scroll)
+        }
+
+        /// Tells the scroll where the pinch has the content.
+        private func reportZoom(of scroll: Scroll) {
+            let offset = physics.contentOffset
+            scroll.platformDidZoom(
+                to: Double(physics.zoomScale),
+                offset: LayoutPoint(x: Double(offset.x) / factor, y: Double(offset.y) / factor)
+            )
+            synced = scroll.shownOffset
+        }
+
+        /// The zoom range and the pinch that goes with it; the scale code set.
+        private func applyZoom(of scroll: Scroll, in view: UIView?) {
+            let range = scroll.zoomRange
+            physics.minimumZoomScale = CGFloat(range.lowerBound)
+            physics.maximumZoomScale = CGFloat(range.upperBound)
+            if scroll.isZoomable, let view {
+                for gesture in physics.gestureRecognizers ?? []
+                where !ownGestures.contains(ObjectIdentifier(gesture)) {
+                    view.addGestureRecognizer(gesture)
+                    zoomGestures.append(gesture)
+                }
+            }
+            if !physics.isZooming, !physics.isZoomBouncing,
+                physics.zoomScale != CGFloat(scroll.zoomScale)
+            {
+                physics.zoomScale = CGFloat(scroll.zoomScale)
+            }
         }
 
         /// Puts the scroll view over the scroll's frame, `frame` in the node view's points,
@@ -869,6 +921,24 @@
             physics.frame = frame
             // A pager comes to rest quickly, on the page the drag's end picks.
             physics.decelerationRate = scroll.isPaging ? .fast : .normal
+            if scroll.isZoomable {
+                // The content as laid out; the scroll view scales it itself.
+                // Its transform is the scroll view's: it reads the scale from it.
+                let base = scroll.contentBounds
+                let zoom = scroll.zoomScale
+                let size = CGSize(
+                    width: (base.origin.x + base.size.width) / zoom * factor,
+                    height: (base.origin.y + base.size.height) / zoom * factor
+                )
+                if zoomTarget.bounds.size != size, !physics.isZooming {
+                    zoomTarget.bounds = CGRect(origin: .zero, size: size)
+                    zoomTarget.center = CGPoint(
+                        x: size.width * physics.zoomScale / 2,
+                        y: size.height * physics.zoomScale / 2
+                    )
+                }
+                applyZoom(of: scroll, in: physics.panGestureRecognizer.view)
+            }
             let content = scroll.contentBounds
             // The offset first: a refresh that ends takes its room away, and with the insets
             // gone first the scroll view would put its offset back itself before this moves
@@ -933,7 +1003,16 @@
 
         func remove() {
             physics.panGestureRecognizer.view?.removeGestureRecognizer(physics.panGestureRecognizer)
+            for gesture in zoomGestures {
+                gesture.view?.removeGestureRecognizer(gesture)
+            }
             physics.removeFromSuperview()
+        }
+
+        /// How much the scroll view zooms, for tests.
+        var physicsZoomScale: CGFloat { physics.zoomScale }
+        var physicsZoomRange: ClosedRange<CGFloat> {
+            physics.minimumZoomScale...physics.maximumZoomScale
         }
 
         private var isPastTheEnds: Bool {
@@ -984,6 +1063,10 @@
             isFollowing = true
             catchUp(to: scroll.shownOffset, factor: factor)
             isFollowing = false
+            if scroll.isZoomable, Double(physics.zoomScale) != scroll.zoomScale {
+                reportZoom(of: scroll)
+                return
+            }
             let offset = scrollView.contentOffset
             scroll.platformDidScroll(
                 to: LayoutPoint(x: Double(offset.x) / factor, y: Double(offset.y) / factor)

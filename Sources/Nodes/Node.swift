@@ -385,29 +385,29 @@ open class Node: LayoutElement {
 
         var low = LayoutPoint.zero
         var high = LayoutPoint(x: frame.size.width, y: frame.size.height)
-        // Where this node's box starts in the box of `node`.
-        var position = LayoutPoint.zero
+        // Where this node's box is in the box of `node`.
+        var placement = Placement.identity
+        /// Keeps to the part of this node's box that shows within a box of `size` it is placed
+        /// in by `placement`.
+        func clip(to size: LayoutSize) {
+            low.x = max(low.x, -placement.origin.x / placement.scale)
+            low.y = max(low.y, -placement.origin.y / placement.scale)
+            high.x = min(high.x, (size.width - placement.origin.x) / placement.scale)
+            high.y = min(high.y, (size.height - placement.origin.y) / placement.scale)
+        }
         var node: Node = self
         while let supernode = node.supernode {
             guard !supernode.isHidden, supernode.appearance.opacity > 0 else { return nil }
 
-            let shown = node.shownOrigin
-            position.x += shown.x - supernode.contentOrigin.x
-            position.y += shown.y - supernode.contentOrigin.y
+            placement = placement.moved(into: supernode, from: node.shownOrigin)
             if supernode.appearance.clipsContent {
-                low.x = max(low.x, -position.x)
-                low.y = max(low.y, -position.y)
-                high.x = min(high.x, supernode.frame.size.width - position.x)
-                high.y = min(high.y, supernode.frame.size.height - position.y)
+                clip(to: supernode.frame.size)
             }
             node = supernode
         }
-        position.x += node.frame.origin.x
-        position.y += node.frame.origin.y
-        low.x = max(low.x, -position.x)
-        low.y = max(low.y, -position.y)
-        high.x = min(high.x, host.size.width - position.x)
-        high.y = min(high.y, host.size.height - position.y)
+        placement.origin.x += node.frame.origin.x
+        placement.origin.y += node.frame.origin.y
+        clip(to: host.size)
         guard low.x < high.x, low.y < high.y else { return nil }
 
         return LayoutRect(x: low.x, y: low.y, width: high.x - low.x, height: high.y - low.y)
@@ -458,9 +458,10 @@ open class Node: LayoutElement {
                 let subnode = levels[top].subnodes[levels[top].next]
                 levels[top].next -= 1
                 let origin = subnode.shownOrigin
+                let scale = node.contentScale
                 let local = LayoutPoint(
-                    x: levels[top].point.x - origin.x + node.contentOrigin.x,
-                    y: levels[top].point.y - origin.y + node.contentOrigin.y
+                    x: (levels[top].point.x + node.contentOrigin.x) / scale - origin.x,
+                    y: (levels[top].point.y + node.contentOrigin.y) / scale - origin.y
                 )
                 if let level = enter(subnode, at: local) {
                     levels.append(level)
@@ -474,23 +475,19 @@ open class Node: LayoutElement {
         return nil
     }
 
-    /// Visits this node and the visible ones under it in pre-order, each with the origin of
-    /// its supernode's frame (the first gets `origin`); `visit` returns whether to go into the
-    /// node's subnodes. Hidden and fully transparent nodes, and all under them, are skipped.
-    /// A loop over an explicit stack, so that a tree deeper than the main thread's stack does
-    /// not crash it.
-    func walkVisible(from origin: LayoutPoint, _ visit: (Node, LayoutPoint) -> Bool) {
-        var pending: [(node: Node, origin: LayoutPoint)] = [(self, origin)]
-        while let (node, origin) = pending.popLast() {
-            guard !node.isHidden, node.appearance.opacity > 0, visit(node, origin) else {
+    /// Visits this node and the visible ones under it in pre-order, each with where the
+    /// coordinates of its frame — its supernode's content — are (the first gets `placement`);
+    /// `visit` returns whether to go into the node's subnodes. Hidden and fully transparent
+    /// nodes, and all under them, are skipped. A loop over an explicit stack, so that a tree
+    /// deeper than the main thread's stack does not crash it.
+    func walkVisible(from placement: Placement, _ visit: (Node, Placement) -> Bool) {
+        var pending: [(node: Node, placement: Placement)] = [(self, placement)]
+        while let (node, placement) = pending.popLast() {
+            guard !node.isHidden, node.appearance.opacity > 0, visit(node, placement) else {
                 continue
             }
 
-            let shown = node.shownOrigin
-            let inner = LayoutPoint(
-                x: origin.x + shown.x - node.contentOrigin.x,
-                y: origin.y + shown.y - node.contentOrigin.y
-            )
+            let inner = placement.inside(node)
             // Pushed last to first, so the first subnode is visited next.
             for subnode in node.subnodes.reversed() {
                 pending.append((subnode, inner))
@@ -498,19 +495,34 @@ open class Node: LayoutElement {
         }
     }
 
-    /// The point of the node's own coordinates shown at its top left corner: its subnodes
-    /// are drawn moved back by it. Zero, except where a scroll moved its content.
+    /// The point of the node's box shown at its top left corner: its subnodes are drawn
+    /// moved back by it. Zero, except where a scroll moved its content.
     var contentOrigin: LayoutPoint { .zero }
 
-    /// The frame in the coordinates `origin` is given in.
-    func frame(from origin: LayoutPoint) -> LayoutRect {
-        let shown = shownOrigin
-        return LayoutRect(
-            x: origin.x + shown.x,
-            y: origin.y + shown.y,
-            width: frame.size.width,
-            height: frame.size.height
-        )
+    /// How many times bigger than laid out the node's content is drawn, from the content's
+    /// origin. 1, except where a scroll is zoomed.
+    var contentScale: Double { 1 }
+
+    /// The frame where `placement` puts the coordinates it is laid out in.
+    func frame(in placement: Placement) -> LayoutRect {
+        placement.rect(LayoutRect(origin: shownOrigin, size: frame.size))
+    }
+
+    /// Where this node's box is in the box of `ancestor` — by the frames as laid out, or as
+    /// shown, moved where they stick; `nil` when `ancestor` is not around it.
+    func placement(in ancestor: Node, shown: Bool = true) -> Placement? {
+        var placement = Placement.identity
+        var node: Node = self
+        while node !== ancestor {
+            guard let supernode = node.supernode else { return nil }
+
+            placement = placement.moved(
+                into: supernode,
+                from: shown ? node.shownOrigin : node.frame.origin
+            )
+            node = supernode
+        }
+        return placement
     }
 
     /// Whether `ancestor` is this node or one of its supernodes.
@@ -606,5 +618,55 @@ open class Node: LayoutElement {
         layoutObserver?.cancel()
         layoutObserver = nil
         if wasMounted { mountedChanged(false) }
+    }
+}
+
+/// Where one node's coordinates are in another's: the point `p` is at `origin + p * scale`.
+struct Placement: Equatable {
+    var origin: LayoutPoint
+    var scale: Double
+
+    static let identity = Placement(origin: .zero, scale: 1)
+
+    func point(_ point: LayoutPoint) -> LayoutPoint {
+        LayoutPoint(x: origin.x + point.x * scale, y: origin.y + point.y * scale)
+    }
+
+    func rect(_ rect: LayoutRect) -> LayoutRect {
+        let at = point(rect.origin)
+        return LayoutRect(
+            x: at.x,
+            y: at.y,
+            width: rect.size.width * scale,
+            height: rect.size.height * scale
+        )
+    }
+
+    /// For the content of `node`, whose frame is in the coordinates this places: its
+    /// subnodes' frames are in that content, drawn `contentScale` times bigger and moved back
+    /// by `contentOrigin`.
+    @MainActor
+    func inside(_ node: Node) -> Placement {
+        let shown = node.shownOrigin
+        let back = node.contentOrigin
+        return Placement(
+            origin: point(LayoutPoint(x: shown.x - back.x, y: shown.y - back.y)),
+            scale: scale * node.contentScale
+        )
+    }
+
+    /// This placement of a box inside a node, taken one level out: into the box of
+    /// `supernode`, the node's frame starting at `at` in its content.
+    @MainActor
+    func moved(into supernode: Node, from at: LayoutPoint) -> Placement {
+        let zoom = supernode.contentScale
+        let back = supernode.contentOrigin
+        return Placement(
+            origin: LayoutPoint(
+                x: (at.x + origin.x) * zoom - back.x,
+                y: (at.y + origin.y) * zoom - back.y
+            ),
+            scale: scale * zoom
+        )
     }
 }

@@ -53,6 +53,7 @@ AGENTS.md Trellis).
 | `Node.tracksScreen`, `isOnScreen`, `screenChanged(_:)` — видна ли нода; по образцу `isMounted`/`mountedChanged` | реализовано (2026-09-26); имена — предложено |
 | `ListAccessibilityElement`, `ListRowAccessibilityElement`, `ShowableAccessibilityElement` (AppKit) — по образцу ролей `.list`, `.row` и действия scroll-to-visible | реализовано (2026-09-27); имена — предложено |
 | `AccessibilityList.rowCount`, `columnCount`, `position(ofItem:)`, `item(row:column:)` — по образцу `UIAccessibilityContainerDataTable` | реализовано (2026-09-27); имена — предложено |
+| `Scroll.zoomRange`, `zoomScale`, `zoom(to:around:)`, `isZoomable` — по образцу `UIScrollView.zoomScale`/`minimumZoomScale` | реализовано (2026-09-27); имена — предложено |
 | `Scroll.onRefresh`, `refreshIndicator`, `isRefreshing`, `beginRefresh()`, `RefreshIndicator`, `RefreshSpinner`, `Appearance.spin` — по образцу `.refreshable` SwiftUI и `UIRefreshControl` | реализовано (2026-09-27); имена — предложено |
 | `Scroll.isPaging`, `page`, `pageCount`, `scroll(toPage:)` — по образцу `UIScrollView.isPagingEnabled` | реализовано (2026-09-27); имена — предложено |
 | `Transition` (`.opacity`, `.identity`, `.scale`, `.move(edge:)`, `.offset`, `.slide`, `.push(from:)`, `.rotation`, `.flip`, `.pop`, `.asymmetric`, `.combined(with:)`, `.animation(_:)`), `Transition.Effect`, `Node.transition` — по образцу `AnyTransition` SwiftUI | реализовано (2026-09-27); имена — предложено |

@@ -400,11 +400,13 @@ public final class Scroll: Node {
         var minY = 0.0
         var maxX = frame.size.width
         var maxY = frame.size.height
+        // Zoomed, the content is drawn that many times bigger from its origin.
+        let scale = zoomScale
         for subnode in subnodes where !subnode.isHidden && subnode !== refreshIndicator {
-            minX = min(minX, subnode.frame.origin.x)
-            minY = min(minY, subnode.frame.origin.y)
-            maxX = max(maxX, subnode.frame.origin.x + subnode.frame.size.width)
-            maxY = max(maxY, subnode.frame.origin.y + subnode.frame.size.height)
+            minX = min(minX, subnode.frame.origin.x * scale)
+            minY = min(minY, subnode.frame.origin.y * scale)
+            maxX = max(maxX, (subnode.frame.origin.x + subnode.frame.size.width) * scale)
+            maxY = max(maxY, (subnode.frame.origin.y + subnode.frame.size.height) * scale)
         }
         return LayoutRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
     }
@@ -420,6 +422,14 @@ public final class Scroll: Node {
             x: content.origin.x + content.size.width - frame.size.width,
             y: content.origin.y + content.size.height - frame.size.height
         )
+        // Zoomable content moves both ways.
+        if isZoomable {
+            let room = axis == .vertical && isRefreshing ? Scroll.refreshSpace : 0
+            return ScrollRange(
+                lowest: LayoutPoint(x: lowest.x, y: lowest.y - room),
+                highest: LayoutPoint(x: max(lowest.x, highest.x), y: max(lowest.y, highest.y))
+            )
+        }
         switch axis {
         case .vertical:
             // While it refreshes, the room over the content is in reach.
@@ -483,24 +493,12 @@ public final class Scroll: Node {
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public func frame(of node: Node) -> LayoutRect? {
-        var origin = LayoutPoint.zero
-        var current = node
-        while current !== self {
-            guard let supernode = current.supernode else { return nil }
+        guard var placement = node.placement(in: self, shown: false) else { return nil }
 
-            origin.x += current.frame.origin.x - supernode.contentOrigin.x
-            origin.y += current.frame.origin.y - supernode.contentOrigin.y
-            current = supernode
-        }
-        // The loop took this scroll's own offset out too: frames here are as laid out.
-        origin.x += contentOrigin.x
-        origin.y += contentOrigin.y
-        return LayoutRect(
-            x: origin.x,
-            y: origin.y,
-            width: node.frame.size.width,
-            height: node.frame.size.height
-        )
+        // That took this scroll's own offset out too: frames here are as laid out.
+        placement.origin.x += contentOrigin.x
+        placement.origin.y += contentOrigin.y
+        return placement.rect(LayoutRect(origin: .zero, size: node.frame.size))
     }
 
     /// How far into the window from where it starts along `axis` — its top, or its leading
@@ -547,6 +545,92 @@ public final class Scroll: Node {
         }
         return covered
     }
+
+    // MARK: - Zoom
+
+    /// The scales the content can be zoomed to, pinching it or with `zoom(to:around:)`: at
+    /// 2 it is drawn twice as big from its top left corner, and the scroll moves across it
+    /// both ways. The default, 1…1, does not zoom. The content keeps its layout; taps,
+    /// focus and accessibility follow what is drawn.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var zoomRange: ClosedRange<Double> = 1...1 {
+        didSet {
+            guard zoomRange != oldValue else { return }
+
+            let scale = min(max(zoomScale, zoomRange.lowerBound), zoomRange.upperBound)
+            if scale != zoomScale {
+                zoom(to: scale)
+            }
+            host?.setNeedsRender()
+        }
+    }
+
+    /// How many times bigger than laid out the content is drawn.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public private(set) var zoomScale = 1.0
+
+    /// Whether the content can be zoomed: `zoomRange` is more than one scale.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var isZoomable: Bool { zoomRange.lowerBound < zoomRange.upperBound }
+
+    /// Zooms the content to `scale`, kept within `zoomRange`, keeping the point of it at
+    /// `point` — in the scroll's box, the window's center by default — where it is. At once,
+    /// or with the animation of `withAnimation`.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func zoom(to scale: Double, around point: LayoutPoint? = nil) {
+        let scale = min(max(scale, zoomRange.lowerBound), zoomRange.upperBound)
+        let anchor =
+            point ?? LayoutPoint(x: frame.size.width / 2, y: frame.size.height / 2)
+        let shown = shownOffset
+        // The point of the content under the anchor, as laid out.
+        let content = LayoutPoint(
+            x: (anchor.x + shown.x) / zoomScale,
+            y: (anchor.y + shown.y) / zoomScale
+        )
+        setZoom(
+            scale,
+            offset: LayoutPoint(x: content.x * scale - anchor.x, y: content.y * scale - anchor.y)
+        )
+    }
+
+    /// For platform adapters: the platform's pinch zoomed the content to `scale`, with the
+    /// offset at `offset` — which, as `platformDidScroll(to:)` takes it, may be past the
+    /// ends while it bounces.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func platformDidZoom(to scale: Double, offset: LayoutPoint) {
+        guard scale != zoomScale else {
+            platformDidScroll(to: offset)
+            return
+        }
+
+        zoomScale = scale
+        requestedOffset.value = offset
+        platformDidScroll(to: offset)
+        host?.setNeedsRender()
+        host?.viewportMoved()
+    }
+
+    private func setZoom(_ scale: Double, offset: LayoutPoint) {
+        guard scale != zoomScale else {
+            contentOffset = offset
+            return
+        }
+
+        move = nil
+        zoomScale = scale
+        overscroll = .zero
+        requestedOffset.value = offsetRange.clamp(offset)
+        host?.setNeedsRender()
+        host?.viewportMoved()
+        onScroll?(contentOffset)
+    }
+
+    override var contentScale: Double { zoomScale }
 
     // MARK: - Paging
 

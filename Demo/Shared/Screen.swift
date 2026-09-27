@@ -340,6 +340,71 @@
         }
     }
 
+    /// A window onto a card that zooms up to four times: pinch it — on a Mac, pinch the
+    /// trackpad or double tap it with two fingers — or use the button.
+    @MainActor
+    final class Zoom: Node {
+        let scroll = Scroll(.vertical)
+        private(set) lazy var toggle = Button("Zoom in") { [weak self] in
+            guard let self else { return }
+
+            withAnimation(.spring(response: 0.4, dampingRatio: 1)) {
+                scroll.zoom(to: scroll.zoomScale > 1 ? 1 : 2.5)
+            }
+        }
+
+        override init() {
+            super.init()
+            scroll.content = Card()
+            scroll.zoomRange = 1...4
+            scroll.onScroll = { [weak self] _ in self?.relabel() }
+            scroll.appearance.background = Color(red: 0.90, green: 0.91, blue: 0.94)
+            scroll.appearance.cornerRadius = 12
+        }
+
+        private func relabel() {
+            toggle.title = scroll.zoomScale > 1 ? "Zoom out" : "Zoom in"
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                scroll.size(width: 300, height: 180)
+                FlexContainer(.row) { toggle }
+            }
+            .gap(12)
+        }
+
+        final class Card: Node {
+            let text = Text(
+                "Small print, sharp at any zoom: the text is drawn again for the pixels it "
+                    + "takes. Pinch to zoom in, and move around the card.",
+                style: TextStyle(size: 11, color: ink)
+            )
+            let dots = [
+                Color(red: 0.93, green: 0.45, blue: 0.35),
+                Color(red: 0.36, green: 0.62, blue: 0.95),
+                Color(red: 0.40, green: 0.75, blue: 0.50),
+            ].map { color in
+                let dot = Node()
+                dot.appearance.background = color
+                dot.appearance.cornerRadius = 8
+                return dot
+            }
+
+            override func layoutSpec() -> LayoutSpec? {
+                FlexContainer(.column) {
+                    text
+                    FlexContainer(.row) {
+                        for dot in dots { dot.size(width: 16, height: 16) }
+                    }
+                    .gap(6)
+                }
+                .gap(10)
+                .padding(16)
+            }
+        }
+    }
+
     /// Four pages in a window of their width: a swipe turns one page, as a pager does.
     @MainActor
     final class Pages: Node {
@@ -554,6 +619,8 @@
         let gallery = Gallery()
         let cards: [ProfileCard]
         let actions: Actions
+        let zoomTitle = SectionTitle("Zoom")
+        let zoom = Zoom()
         let pagesTitle = SectionTitle("Pages")
         let pages = Pages()
         let transitionsTitle = SectionTitle("Transitions")
@@ -598,6 +665,8 @@
                 // with nothing to focus to the focus section under it.
                 images.margin(top: 0, leading: -24, bottom: -8, trailing: -24)
                 gallery
+                zoomTitle.margin(top: 0, leading: -24, bottom: -8, trailing: -24)
+                zoom
                 pagesTitle.margin(top: 0, leading: -24, bottom: -8, trailing: -24)
                 pages
                 transitionsTitle.margin(top: 0, leading: -24, bottom: -8, trailing: -24)
