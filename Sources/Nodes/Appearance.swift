@@ -1,33 +1,5 @@
 import LayoutCore
-
-/// A color in sRGB, components from 0 to 1.
-///
-/// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-public struct Color: Sendable, Hashable {
-    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public var red: Double
-    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public var green: Double
-    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public var blue: Double
-    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public var alpha: Double
-
-    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public init(red: Double, green: Double, blue: Double, alpha: Double = 1) {
-        self.red = red
-        self.green = green
-        self.blue = blue
-        self.alpha = alpha
-    }
-
-    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public static let clear = Color(red: 0, green: 0, blue: 0, alpha: 0)
-    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public static let black = Color(red: 0, green: 0, blue: 0)
-    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public static let white = Color(red: 1, green: 1, blue: 1)
-}
+import ThemeCore
 
 /// How a node's box looks. Changing it redraws the node without laying anything out.
 ///

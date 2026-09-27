@@ -2,6 +2,7 @@
     import Foundation
     import LayoutCore
     import Nodes
+    import ThemeCore
 
     /// An action a table row offers when swiped aside, as a button behind it.
     ///
@@ -23,16 +24,19 @@
 
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public var title: String
+        /// The fill of the action's button; `nil` for the theme's: its destructive color for a
+        /// destructive action, its secondary text color otherwise.
+        ///
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
-        public var color: Color
+        public var color: Color?
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public var role: Role
         /// Ownership: the action keeps the closure; it must not keep the table. Isolation:
         /// MainActor. Errors: none. Cancellation: not applicable.
         public var perform: @MainActor () -> Void
 
-        /// An action showing `title` on `color` — red for a destructive one, gray otherwise,
-        /// by default.
+        /// An action showing `title` on `color` — by default the theme's destructive color
+        /// for a destructive one, its secondary text color otherwise.
         ///
         /// Ownership: keeps `perform`. Isolation: MainActor. Errors: none. Cancellation: not
         /// applicable.
@@ -44,11 +48,7 @@
         ) {
             self.title = title
             self.role = role
-            self.color =
-                color
-                ?? (role == .destructive
-                    ? Color(red: 0.92, green: 0.26, blue: 0.24)
-                    : Color(red: 0.56, green: 0.57, blue: 0.60))
+            self.color = color
             self.perform = perform
         }
     }
@@ -1129,12 +1129,26 @@
         let handle = MoveHandle()
         private let separator = Node()
 
+        /// The theme's colors for the cell, as last read.
+        private var surface = Color.white
+        private var pressedFill = Color.white
+        private var selectedFill = Color.white
+
         override init() {
             super.init()
-            appearance.background = .white
-            separator.appearance.background = Color(red: 0.85, green: 0.86, blue: 0.88)
             // One element, the content's text read as one, with the actions of the row.
             accessibility.isElement = true
+        }
+
+        /// Follows the theme: the surface, and over it the pressed and selected fills, opaque —
+        /// the action buttons are behind the cell.
+        override func update() {
+            let theme = self.theme
+            surface = theme.color(.surface)
+            pressedFill = surface.mixed(with: theme.color(.primaryText), amount: 0.08)
+            selectedFill = surface.mixed(with: theme.color(.accent), amount: 0.12)
+            separator.appearance.background = theme.color(.separator)
+            appearance.background = background(pressed: false)
         }
 
         override func layoutSpec() -> LayoutSpec? {
@@ -1153,8 +1167,8 @@
         }
 
         private func background(pressed: Bool) -> Color {
-            if pressed { return Color(red: 0.90, green: 0.91, blue: 0.93) }
-            return editing?.isSelected ?? false ? Color(red: 0.91, green: 0.95, blue: 1) : .white
+            if pressed { return pressedFill }
+            return editing?.isSelected ?? false ? selectedFill : surface
         }
     }
 
@@ -1184,7 +1198,7 @@
 
         @MainActor
         final class Circle: Node {
-            private let check = Text("✓", style: TextStyle(size: 14, weight: .bold, color: .white))
+            private let check = Text("✓", style: TextStyle(size: 14, weight: .bold))
 
             var isSelected = false {
                 didSet {
@@ -1199,13 +1213,20 @@
                 super.init()
                 check.accessibility.isElement = false
                 appearance.cornerRadius = 11
+            }
+
+            override func update() {
                 look()
             }
 
+            /// The theme's accent when selected, with its color for text on it; a ring in its
+            /// separator color when not.
             private func look() {
-                appearance.background = isSelected ? Color(red: 0, green: 0.48, blue: 1) : nil
+                let theme = self.theme
+                appearance.background = isSelected ? theme.color(.accent) : nil
                 appearance.borderWidth = isSelected ? 0 : 1.5
-                appearance.borderColor = Color(red: 0.78, green: 0.79, blue: 0.82)
+                appearance.borderColor = theme.color(.separator)
+                check.style.color = theme.color(.onAccent)
             }
 
             override func layoutSpec() -> LayoutSpec? {
@@ -1231,8 +1252,14 @@
             isFocusable = false
             accessibility.isElement = false
             for line in lines {
-                line.appearance.background = Color(red: 0.70, green: 0.71, blue: 0.74)
                 line.appearance.cornerRadius = 1
+            }
+        }
+
+        override func update() {
+            let color = theme.color(.secondaryText)
+            for line in lines {
+                line.appearance.background = color
             }
         }
 
@@ -1252,8 +1279,9 @@
     /// technologies itself.
     @MainActor
     final class ActionButton: Node {
-        let label = Text("", style: TextStyle(size: 15, weight: .semibold, color: .white))
+        let label = Text("", style: TextStyle(.button))
         private var action: (@MainActor () -> Void)?
+        private var swipe: SwipeAction?
 
         override init() {
             super.init()
@@ -1266,9 +1294,27 @@
 
         func show(_ swipe: SwipeAction, perform: @escaping @MainActor () -> Void) {
             label.text = swipe.title
-            appearance.background = swipe.color
+            self.swipe = swipe
             action = perform
             onTap = perform
+            look()
+        }
+
+        override func update() {
+            look()
+        }
+
+        /// The action's own fill, or the theme's for its role, with the theme's color for text
+        /// on it.
+        private func look() {
+            let theme = self.theme
+            let fill =
+                swipe.flatMap { $0.color }
+                ?? theme.color(
+                    swipe?.role == .destructive ? .destructive : .secondaryText
+                )
+            appearance.background = fill
+            label.style.color = theme.color(.onAccent)
         }
 
         /// Does the action, as a tap does.
@@ -1286,14 +1332,7 @@
     /// A section's title over its rows.
     @MainActor
     final class SectionHeader: Node {
-        let label = Text(
-            "",
-            style: TextStyle(
-                size: 13,
-                weight: .semibold,
-                color: Color(red: 0.45, green: 0.47, blue: 0.52)
-            )
-        )
+        let label = Text("", style: TextStyle(.caption, colorRole: .secondaryText))
 
         var title: String {
             get { label.text }
@@ -1304,8 +1343,12 @@
 
         override init() {
             super.init()
-            appearance.background = Color(red: 0.96, green: 0.96, blue: 0.97)
             label.accessibility.traits.insert(.header)
+        }
+
+        /// The theme's background behind it.
+        override func update() {
+            appearance.background = theme.color(.background)
         }
 
         override func layoutSpec() -> LayoutSpec? {

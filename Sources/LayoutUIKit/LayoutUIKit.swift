@@ -1,5 +1,6 @@
 #if canImport(UIKit)
     import LayoutCore
+    import ThemeCore
     import UIKit
     import os
 
@@ -91,6 +92,7 @@
                 direction: layoutDirection,
                 scale: layoutScale,
                 spacing: layoutSpacing,
+                breakpoints: layoutBreakpoints,
                 reporting: reporting
             )
         }
@@ -106,7 +108,8 @@
             let measured = spec.measure(
                 width: limited ? .definite(Double(size.width)) : .maxContent,
                 direction: layoutDirection,
-                spacing: layoutSpacing
+                spacing: layoutSpacing,
+                breakpoints: layoutBreakpoints
             )
             return CGSize(measured)
         }
@@ -127,12 +130,36 @@
     ///
     /// Ownership: owns its subviews like any view. Isolation: MainActor. Errors: none.
     /// Cancellation: not applicable.
-    open class LayoutView: UIView, LayoutSpecProviding {
+    open class LayoutView: UIView, ThemedLayout {
         /// The layout of this view's subviews; `nil` lays out nothing.
         ///
         /// Ownership: returns a value borrowing the subviews. Isolation: MainActor.
         /// Errors: none. Cancellation: none.
         open func layoutSpec() -> LayoutSpec? { nil }
+
+        /// The theme whose spacing steps and breakpoints the layout uses — and which the app
+        /// can read for the view's colors and fonts. Setting it lays the view out again.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not
+        /// applicable.
+        public var layoutTheme: Theme = .standard {
+            didSet {
+                if layoutTheme != oldValue {
+                    setNeedsLayout()
+                    invalidateIntrinsicContentSize()
+                }
+            }
+        }
+
+        /// The points of the spacing steps: the theme's, unless a subclass gives its own.
+        ///
+        /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
+        open var layoutSpacing: SpacingScale { layoutTheme.spacing }
+
+        /// The points of the named breakpoints: the theme's, unless a subclass gives its own.
+        ///
+        /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
+        open var layoutBreakpoints: BreakpointScale { layoutTheme.breakpoints }
 
         /// Receives a report after every layout of the spec. In a `DEBUG` build it writes
         /// problems and a requested trace to the unified log (subsystem `Layout`, category
@@ -233,7 +260,11 @@
                 let spec = provider.layoutSpec()
                 let constraint = limit == nil ? AvailableSpace.maxContent : .minContent
                 return Double(
-                    spec?.measure(width: constraint, spacing: provider.layoutSpacing).width ?? 0
+                    spec?.measure(
+                        width: constraint,
+                        spacing: provider.layoutSpacing,
+                        breakpoints: provider.layoutBreakpoints
+                    ).width ?? 0
                 )
             }
 
@@ -250,7 +281,11 @@
             if let provider = view as? LayoutSpecProviding {
                 let spec = provider.layoutSpec()
                 return Double(
-                    spec?.measure(width: .definite(width), spacing: provider.layoutSpacing).height
+                    spec?.measure(
+                        width: .definite(width),
+                        spacing: provider.layoutSpacing,
+                        breakpoints: provider.layoutBreakpoints
+                    ).height
                         ?? 0
                 )
             }

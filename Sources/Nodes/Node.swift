@@ -1,5 +1,6 @@
 import LayoutCore
 import StateCore
+import ThemeCore
 
 /// Identity of a node for as long as it lives; never reused.
 ///
@@ -602,6 +603,50 @@ open class Node: LayoutElement {
         return nil
     }
 
+    /// The theme of this part of the tree, in the conditions it is shown in: the host's
+    /// theme, changed by the `themeOverride` of the node and of the nodes around it. Read in
+    /// `update()` or `layoutSpec()`, the node follows it: a change of the theme, of the
+    /// conditions or of an override runs them again.
+    ///
+    ///     override func update() {
+    ///         appearance.background = theme.color(.surface)
+    ///     }
+    ///
+    /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    public var theme: ResolvedTheme {
+        let host = self.host ?? pendingHost ?? NodeHost.preparing
+        var resolved =
+            host?.resolvedTheme ?? ResolvedTheme(theme: .standard, conditions: .standard)
+        var overrides: [ThemeOverride] = []
+        var node: Node? = self
+        while let current = node {
+            if let override = current.themeOverride {
+                overrides.append(override)
+            }
+            node = current.supernode
+        }
+        for override in overrides.reversed() {
+            resolved = override.applied(to: resolved)
+        }
+        if supernode == nil, hostOfRoot == nil {
+            // Read before the node is in the tree: an override around it counts once it is.
+            readThemeAway = true
+        }
+        return resolved
+    }
+
+    /// A change of the theme for this node and the nodes inside it — its color scheme, its
+    /// contrast, any of its values; the rest comes from around, also when that changes later.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var themeOverride: ThemeOverride? {
+        didSet { (host ?? pendingHost)?.themeOverridesChanged() }
+    }
+
+    /// The node read its theme while it was not in the tree.
+    private var readThemeAway = false
+
     /// Asks for a new layout of the tree: call it when something `layoutContent` depends on
     /// changes (text, an image). State read in `layoutSpec()` does this by itself.
     ///
@@ -653,6 +698,18 @@ open class Node: LayoutElement {
         isMounted = true
         self.supernode = supernode
         self.subnodes = subnodes
+        if readThemeAway, supernode != nil {
+            readThemeAway = false
+            var node: Node? = supernode
+            while let current = node {
+                if current.themeOverride != nil {
+                    // It read the tree's theme, and an override around it changes that.
+                    host?.themeOverridesChanged()
+                    break
+                }
+                node = current.supernode
+            }
+        }
         prepare()
         if !wasMounted { mountedChanged(true) }
     }

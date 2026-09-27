@@ -1,5 +1,6 @@
 #if canImport(QuartzCore)
     import LayoutCore
+    import ThemeCore
     import Nodes
     import NodesRender
     import QuartzCore

@@ -22,6 +22,11 @@
 		AA00000000000000000037 /* Nodes in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000036 /* Nodes */; };
 		AA00000000000000000039 /* NodesRender in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000038 /* NodesRender */; };
 		AA0000000000000000003B /* NodesUIKit in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000003A /* NodesUIKit */; };
+		AA00000000000000000051 /* ThemeCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000050 /* ThemeCore */; };
+		AA00000000000000000053 /* ThemeCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000052 /* ThemeCore */; };
+		AA00000000000000000055 /* ThemeCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000054 /* ThemeCore */; };
+		AA00000000000000000057 /* LayoutUIKit in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000056 /* LayoutUIKit */; };
+		AA00000000000000000059 /* LayoutUIKit in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000058 /* LayoutUIKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -77,6 +82,7 @@
 				AA00000000000000000015 /* Nodes in Frameworks */,
 				AA00000000000000000017 /* NodesRender in Frameworks */,
 				AA00000000000000000019 /* NodesAppKit in Frameworks */,
+				AA00000000000000000051 /* ThemeCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -89,6 +95,8 @@
 				AA00000000000000000026 /* Nodes in Frameworks */,
 				AA00000000000000000028 /* NodesRender in Frameworks */,
 				AA0000000000000000002A /* NodesUIKit in Frameworks */,
+				AA00000000000000000059 /* LayoutUIKit in Frameworks */,
+				AA00000000000000000053 /* ThemeCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -101,6 +109,8 @@
 				AA00000000000000000037 /* Nodes in Frameworks */,
 				AA00000000000000000039 /* NodesRender in Frameworks */,
 				AA0000000000000000003B /* NodesUIKit in Frameworks */,
+				AA00000000000000000057 /* LayoutUIKit in Frameworks */,
+				AA00000000000000000055 /* ThemeCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -180,6 +190,7 @@
 				A900000000000000000014 /* Nodes */,
 				A900000000000000000016 /* NodesRender */,
 				A900000000000000000018 /* NodesAppKit */,
+				A900000000000000000050 /* ThemeCore */,
 			);
 			productName = LayoutDemoMac;
 			productReference = A40000000000000000000A /* LayoutDemoMac.app */;
@@ -207,6 +218,8 @@
 				A900000000000000000025 /* Nodes */,
 				A900000000000000000027 /* NodesRender */,
 				A900000000000000000029 /* NodesUIKit */,
+				A900000000000000000058 /* LayoutUIKit */,
+				A900000000000000000052 /* ThemeCore */,
 			);
 			productName = LayoutDemoiOS;
 			productReference = A40000000000000000001B /* LayoutDemoiOS.app */;
@@ -234,6 +247,8 @@
 				A900000000000000000036 /* Nodes */,
 				A900000000000000000038 /* NodesRender */,
 				A90000000000000000003A /* NodesUIKit */,
+				A900000000000000000056 /* LayoutUIKit */,
+				A900000000000000000054 /* ThemeCore */,
 			);
 			productName = LayoutDemoTV;
 			productReference = A40000000000000000002C /* LayoutDemoTV.app */;
@@ -849,6 +864,31 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = NodesUIKit;
+		};
+		A900000000000000000050 /* ThemeCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = ThemeCore;
+		};
+		A900000000000000000052 /* ThemeCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = ThemeCore;
+		};
+		A900000000000000000054 /* ThemeCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = ThemeCore;
+		};
+		A900000000000000000056 /* LayoutUIKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = LayoutUIKit;
+		};
+		A900000000000000000058 /* LayoutUIKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = LayoutUIKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

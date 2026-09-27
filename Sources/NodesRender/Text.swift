@@ -4,6 +4,7 @@
     import os
     import LayoutCore
     import Nodes
+    import ThemeCore
     import QuartzCore
 
     /// How text looks.
@@ -26,23 +27,14 @@
         /// Stroke weight of the system font.
         ///
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-        public enum Weight: Sendable, Hashable {
-            case regular
-            case medium
-            case semibold
-            case bold
+        public typealias Weight = FontWeight
 
-            /// The Core Text weight trait, from -1 (thinnest) to 1 (heaviest).
-            var trait: Double {
-                switch self {
-                case .regular: 0
-                case .medium: 0.23
-                case .semibold: 0.3
-                case .bold: 0.4
-                }
-            }
-        }
-
+        /// A font of the theme: when set, the font's name, size, weight and line spacing come
+        /// from the theme of the text's node, at the reader's text size, instead of the
+        /// style's own.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public var role: FontRole?
         /// A font by its PostScript name; `nil` for the system font in `weight`.
         ///
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
@@ -53,8 +45,14 @@
         ///
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         public var weight: Weight = .regular
+        /// The color of the text; `nil` for the theme's color for `colorRole`.
+        ///
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-        public var color: Color = .black
+        public var color: Color?
+        /// The theme's color the text takes when it has no `color` of its own.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public var colorRole: ColorRole = .primaryText
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         public var alignment: Alignment = .leading
         /// Extra space between lines, in points.
@@ -72,12 +70,54 @@
             fontName: String? = nil,
             size: Double = 17,
             weight: Weight = .regular,
-            color: Color = .black
+            color: Color? = nil,
+            colorRole: ColorRole = .primaryText
         ) {
             self.fontName = fontName
             self.size = size
             self.weight = weight
             self.color = color
+            self.colorRole = colorRole
+        }
+
+        /// Text in the theme's font for `role`, in `color` — the theme's color for
+        /// `colorRole` when `nil`.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public init(_ role: FontRole, color: Color? = nil, colorRole: ColorRole = .primaryText) {
+            self.role = role
+            self.color = color
+            self.colorRole = colorRole
+        }
+
+        /// The style with the theme's values in: the font of `role`, if any, and the color.
+        ///
+        /// Ownership: returns a value. Isolation: none. Errors: none. Cancellation: not
+        /// applicable.
+        public func resolved(in theme: ResolvedTheme) -> TextStyle {
+            var style = self
+            if let role {
+                let font = theme.font(role)
+                style.fontName = font.name
+                style.size = font.size
+                style.weight = font.weight
+                style.lineSpacing = font.lineSpacing
+                style.role = nil
+            }
+            style.color = color ?? theme.color(colorRole)
+            return style
+        }
+    }
+
+    extension FontWeight {
+        /// The Core Text weight trait, from -1 (thinnest) to 1 (heaviest).
+        var trait: Double {
+            switch self {
+            case .regular: 0
+            case .medium: 0.23
+            case .semibold: 0.3
+            case .bold: 0.4
+            }
         }
     }
 
@@ -97,8 +137,11 @@
 
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public var style: TextStyle {
-            didSet { if style != oldValue { contentChanged() } }
+            didSet { if style != oldValue { restyle() } }
         }
+
+        /// `style` with the values of the node's theme in: what is measured and drawn.
+        private(set) var shown: TextStyle
 
         /// Grows with the text and the style, and changes with the host's direction, which
         /// moves `leading` text to the other edge.
@@ -119,18 +162,44 @@
         public init(_ text: String = "", style: TextStyle = TextStyle()) {
             self.text = text
             self.style = style
+            shown = style.resolved(in: Theme.standard.resolved(for: .standard))
             super.init()
+        }
+
+        /// Follows the node's theme: its fonts and colors, at the reader's text size.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func update() {
+            restyle()
+        }
+
+        /// Takes the theme's values into the shown style: a new font lays the text out
+        /// again, a new color only draws it again.
+        private func restyle() {
+            let now = style.resolved(in: theme)
+            guard now != shown else { return }
+
+            var sameMetrics = now
+            sameMetrics.color = shown.color
+            let onlyColor = sameMetrics == shown
+            shown = now
+            if onlyColor {
+                revision &+= 1
+                host?.setNeedsRender()
+            } else {
+                contentChanged()
+            }
         }
 
         /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
         public override var layoutContent: LeafContent? {
-            .measured(TextMeasurer(text: text, style: style, measurements: measurements))
+            .measured(TextMeasurer(text: text, style: shown, measurements: measurements))
         }
 
         /// Ownership: draws into `context`. Isolation: MainActor. Errors: none.
         /// Cancellation: none.
         public func draw(in context: CGContext, size: CGSize) {
-            TextLayout(text: text, style: style, rightToLeft: isRightToLeft)
+            TextLayout(text: text, style: shown, rightToLeft: isRightToLeft)
                 .draw(in: context, size: size)
         }
 
@@ -268,10 +337,10 @@
                 }
             }
             let color = CGColor(
-                red: CGFloat(style.color.red),
-                green: CGFloat(style.color.green),
-                blue: CGFloat(style.color.blue),
-                alpha: CGFloat(style.color.alpha)
+                red: CGFloat((style.color ?? .black).red),
+                green: CGFloat((style.color ?? .black).green),
+                blue: CGFloat((style.color ?? .black).blue),
+                alpha: CGFloat((style.color ?? .black).alpha)
             )
             let attributes: [CFString: Any] = [
                 kCTFontAttributeName: font,

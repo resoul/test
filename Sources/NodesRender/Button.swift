@@ -1,9 +1,11 @@
 #if canImport(CoreText)
     import LayoutCore
     import Nodes
+    import ThemeCore
 
     /// A tappable label on a filled, rounded box, dimmed while pressed, lifted (bigger, with a
-    /// shadow) while focused on a TV.
+    /// shadow) while focused on a TV. By default it takes the theme's accent, its color for
+    /// text on the accent, its button font and its medium corner radius.
     ///
     ///     let follow = Button("Follow") { profile.isFollowing.value.toggle() }
     ///
@@ -21,14 +23,36 @@
         /// Errors: none. Cancellation: not applicable.
         public init(
             _ title: String,
-            style: TextStyle = TextStyle(size: 15, weight: .semibold, color: .white),
+            style: TextStyle = TextStyle(.button),
             action: @escaping @MainActor () -> Void
         ) {
             label = Text(title, style: style)
+            titleColor = style.color
             super.init()
             onTap = action
-            appearance.background = Color(red: 0.16, green: 0.42, blue: 0.95)
-            appearance.cornerRadius = 8
+        }
+
+        /// The fill of the box; `nil` for the theme's accent.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var fill: Color? {
+            didSet { if fill != oldValue { update() } }
+        }
+
+        /// The color of the title as the style gave it; `nil` takes the theme's color for text
+        /// on the accent.
+        private let titleColor: Color?
+
+        /// Follows the theme: the accent, the color on it, the medium corner radius.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func update() {
+            let theme = self.theme
+            appearance.background = fill ?? theme.color(.accent)
+            appearance.cornerRadius = theme.radius(.medium)
+            if titleColor == nil {
+                label.style.color = theme.color(.onAccent)
+            }
         }
 
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.

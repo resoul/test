@@ -2,7 +2,9 @@
 // Rename button, the select button presses the focused one, and Play/Pause brings the focus
 // back to Ada's badge: the `LayoutDemoTV` scheme of `Demo.xcodeproj`, on an Apple TV
 // simulator.
+import LayoutUIKit
 import NodesUIKit
+import ThemeCore
 import UIKit
 
 @main
@@ -47,7 +49,7 @@ final class ScreenController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = UIColor(red: 0.96, green: 0.96, blue: 0.97, alpha: 1)
+        view.backgroundColor = UIColor(Palette.standard.background)
         // The screen is made for a phone; on a TV a node view shows it twice as big by
         // itself (`zoom`).
         screen.host.solvesInBackground = true

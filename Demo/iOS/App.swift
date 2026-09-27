@@ -2,8 +2,10 @@
 // `LayoutDemoiOS` scheme of `Demo.xcodeproj`. SwiftUI is used only here, as the app's shell:
 // the screen itself is made of nodes, whose `Text`, `Color` and `Button` would clash with
 // SwiftUI's names in one file.
+import LayoutUIKit
 import NodesUIKit
 import SwiftUI
+import ThemeCore
 
 @main
 struct LayoutDemoApp: App {
@@ -11,7 +13,7 @@ struct LayoutDemoApp: App {
         WindowGroup {
             DemoScreenView()
                 // The screen's own gray, under the status bar and the home indicator too.
-                .background(Color(red: 0.96, green: 0.96, blue: 0.97).ignoresSafeArea())
+                .background(SwiftUI.Color(uiColor: UIColor(Palette.standard.background)).ignoresSafeArea())
         }
     }
 }

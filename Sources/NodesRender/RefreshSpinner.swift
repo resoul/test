@@ -1,6 +1,7 @@
 #if canImport(QuartzCore)
     import LayoutCore
     import Nodes
+    import ThemeCore
     import QuartzCore
 
     /// The refresh indicator a scroll uses by default: an arc that grows as the scroll is
@@ -16,9 +17,16 @@
     public final class RefreshSpinner: Node, LayerDrawing, RefreshIndicator {
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not
         /// applicable.
-        public var color: Color {
-            didSet { if color != oldValue { redraw() } }
+        /// The ring's color; `nil` for the theme's secondary text color.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not
+        /// applicable.
+        public var color: Color? {
+            didSet { if color != oldValue { update() } }
         }
+
+        /// The color the ring is drawn in.
+        private(set) var shownColor = Color.black
 
         /// How much of the ring shows: the pull, up to three quarters.
         private(set) var sweep = 0.0
@@ -26,7 +34,7 @@
 
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not
         /// applicable.
-        public init(color: Color = Color(red: 0.45, green: 0.47, blue: 0.52)) {
+        public init(color: Color? = nil) {
             self.color = color
             super.init()
             accessibility.label = "Refreshing"
@@ -67,10 +75,10 @@
             let start = CGFloat.pi / 2
             context.setStrokeColor(
                 CGColor(
-                    red: CGFloat(color.red),
-                    green: CGFloat(color.green),
-                    blue: CGFloat(color.blue),
-                    alpha: CGFloat(color.alpha)
+                    red: CGFloat(shownColor.red),
+                    green: CGFloat(shownColor.green),
+                    blue: CGFloat(shownColor.blue),
+                    alpha: CGFloat(shownColor.alpha)
                 )
             )
             context.setLineWidth(2.5)
@@ -83,6 +91,17 @@
                 clockwise: true
             )
             context.strokePath()
+        }
+
+        /// Follows the theme when the ring has no color of its own.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func update() {
+            let now = color ?? theme.color(.secondaryText)
+            guard now != shownColor else { return }
+
+            shownColor = now
+            redraw()
         }
 
         private func redraw() {

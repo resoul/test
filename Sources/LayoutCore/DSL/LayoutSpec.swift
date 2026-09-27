@@ -128,17 +128,20 @@ public struct LayoutSpec: LayoutSpecConvertible {
         return false
     }
 
-    /// The base style and the width variants, with spacing steps resolved by `scale`.
-    func resolvedStyle(_ scale: SpacingScale) -> (base: FlexStyle, variants: [StyleVariant]) {
+    /// The base style and the width variants, with spacing steps resolved by `scale` and
+    /// named widths by `breakpoints`.
+    func resolvedStyle(_ scale: SpacingScale, _ breakpoints: BreakpointScale)
+        -> (base: FlexStyle, variants: [StyleVariant])
+    {
         var base = initial
         for patch in patches where patch.from == nil {
             patch.apply(&base, scale)
         }
 
-        let thresholds = Set(patches.compactMap { $0.from?.points }).sorted()
+        let thresholds = Set(patches.compactMap { $0.from.map(breakpoints.points) }).sorted()
         let variants = thresholds.map { threshold in
             var style = initial
-            for patch in patches where (patch.from?.points ?? 0) <= threshold {
+            for patch in patches where (patch.from.map(breakpoints.points) ?? 0) <= threshold {
                 patch.apply(&style, scale)
             }
             return StyleVariant(minWidth: threshold, style: style)

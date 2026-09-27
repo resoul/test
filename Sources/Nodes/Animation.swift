@@ -1,5 +1,6 @@
 import Foundation
 import StateCore
+import ThemeCore
 
 /// How the screen moves from what it shows to what it shows after a change: frames,
 /// appearance, nodes coming in (they fade in) and going out (they fade out).
@@ -232,5 +233,32 @@ extension Animation {
         let slow = -frequency * (damping - root)
         let fast = -frequency * (damping + root)
         return 1 - (fast * exp(slow * t) - slow * exp(fast * t)) / (fast - slow)
+    }
+}
+
+extension Animation {
+    /// The animation of a move of the theme.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public init(_ motion: Motion) {
+        switch motion.curve {
+        case .linear: self = .linear(duration: motion.duration)
+        case .easeIn: self = .easeIn(duration: motion.duration)
+        case .easeOut: self = .easeOut(duration: motion.duration)
+        case .easeInOut: self = .easeInOut(duration: motion.duration)
+        case let .spring(response, dampingRatio):
+            self = .spring(response: response, dampingRatio: dampingRatio)
+        }
+    }
+}
+
+extension ResolvedTheme {
+    /// The animation for `role`, or `nil` where motion is reduced — `withAnimation(nil)`
+    /// shows the change at once.
+    ///
+    /// Ownership: returns a value. Isolation: none. Errors: none. Cancellation: not
+    /// applicable.
+    public func animation(_ role: MotionRole) -> Animation? {
+        motion(role).map(Animation.init)
     }
 }

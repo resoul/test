@@ -7,12 +7,15 @@ import PackageDescription
 // that framework they build as empty modules. StateCore is synchronous main-actor state with
 // dependency tracking; StateAsyncRay connects it to AsyncRay streams, the package's dependency.
 // Nodes is the tree of nodes laid out by LayoutCore and driven by StateCore; NodesRender draws
-// it into CALayers (Apple platforms), NodesUIKit and NodesAppKit put it into views.
+// it into CALayers (Apple platforms), NodesUIKit and NodesAppKit put it into views. ThemeCore
+// holds the theme — colors, text, radii, motion, spacing and breakpoints — for nodes and for
+// plain views alike; it depends on LayoutCore only, so it builds on Linux too.
 let package = Package(
     name: "Espalier",
     platforms: [.macOS(.v14), .iOS(.v16), .tvOS(.v16)],
     products: [
         .library(name: "LayoutCore", targets: ["LayoutCore"]),
+        .library(name: "ThemeCore", targets: ["ThemeCore"]),
         .library(name: "LayoutUIKit", targets: ["LayoutUIKit"]),
         .library(name: "LayoutAppKit", targets: ["LayoutAppKit"]),
         .library(name: "StateCore", targets: ["StateCore"]),
@@ -27,23 +30,39 @@ let package = Package(
     ],
     targets: [
         .target(name: "LayoutCore"),
-        .target(name: "LayoutUIKit", dependencies: ["LayoutCore"]),
-        .target(name: "LayoutAppKit", dependencies: ["LayoutCore"]),
+        .target(name: "ThemeCore", dependencies: ["LayoutCore"]),
+        .target(name: "LayoutUIKit", dependencies: ["LayoutCore", "ThemeCore"]),
+        .target(name: "LayoutAppKit", dependencies: ["LayoutCore", "ThemeCore"]),
         .target(name: "StateCore"),
-        .target(name: "Nodes", dependencies: ["LayoutCore", "StateCore"]),
-        .target(name: "NodesRender", dependencies: ["Nodes", "LayoutCore", "StateCore"]),
-        .target(name: "NodesUIKit", dependencies: ["Nodes", "NodesRender", "LayoutCore"]),
-        .target(name: "NodesAppKit", dependencies: ["Nodes", "NodesRender", "LayoutCore"]),
+        .target(name: "Nodes", dependencies: ["LayoutCore", "StateCore", "ThemeCore"]),
+        .target(
+            name: "NodesRender",
+            dependencies: ["Nodes", "LayoutCore", "StateCore", "ThemeCore"]
+        ),
+        .target(
+            name: "NodesUIKit",
+            dependencies: ["Nodes", "NodesRender", "LayoutCore", "LayoutUIKit", "ThemeCore"]
+        ),
+        .target(
+            name: "NodesAppKit",
+            dependencies: ["Nodes", "NodesRender", "LayoutCore", "LayoutAppKit", "ThemeCore"]
+        ),
         .target(
             name: "StateAsyncRay",
             dependencies: ["StateCore", .product(name: "AsyncRay", package: "asyncray")]
         ),
         .testTarget(name: "LayoutCoreTests", dependencies: ["LayoutCore"]),
+        .testTarget(name: "ThemeCoreTests", dependencies: ["ThemeCore", "LayoutCore"]),
         .testTarget(name: "StateCoreTests", dependencies: ["StateCore"]),
-        .testTarget(name: "NodesTests", dependencies: ["Nodes", "LayoutCore", "StateCore"]),
+        .testTarget(
+            name: "NodesTests",
+            dependencies: ["Nodes", "LayoutCore", "StateCore", "ThemeCore"]
+        ),
         .testTarget(
             name: "NodesRenderTests",
-            dependencies: ["Nodes", "NodesRender", "NodesUIKit", "NodesAppKit", "LayoutCore"]
+            dependencies: [
+                "Nodes", "NodesRender", "NodesUIKit", "NodesAppKit", "LayoutCore", "ThemeCore",
+            ]
         ),
         .testTarget(
             name: "StateAsyncRayTests",
@@ -51,7 +70,7 @@ let package = Package(
         ),
         .testTarget(
             name: "LayoutAdapterTests",
-            dependencies: ["LayoutCore", "LayoutUIKit", "LayoutAppKit"]
+            dependencies: ["LayoutCore", "LayoutUIKit", "LayoutAppKit", "ThemeCore"]
         ),
     ]
 )
