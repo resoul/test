@@ -229,7 +229,7 @@
 | `Node.hitTest`, `Node.onTap`, `pressChanged` | нажатия: ближайшая нода с действием, засчитывается над той же нодой | как `UIButton` (touch up inside) |
 | `NodeHost.pointerDown/Up/Cancelled` | платформо-нейтральный путь событий; адаптер только передаёт точку | тестируется на Linux |
 | `Button` (`NodesRender`) | текст на фоне, затемнение при нажатии | демо |
-| `NodeCache`, `NodeHost.passGeneration` | нода на id модели; ушедшие отпускаются на следующем проходе | [04](04-conditionals-and-responsive.md#7-кэш-нод-для-динамических-списков) |
+| `NodeCache`, `NodeCache.reserve`, `clearReserve()`, `NodeHost.passGeneration` | нода на id модели; ушедшие отпускаются на следующем проходе или ждут в запасе | [04](04-conditionals-and-responsive.md#7-кэш-нод-для-динамических-списков) |
 | `LayoutSpec.prepare`, `PreparedLayout` | подготовка (MainActor) / расчёт (где угодно) / применение (MainActor) | фоновый расчёт |
 | `ContentMeasurer.requiresMainThread` | view меряются только на главном: такая раскладка решается там | `ViewMeasurer` |
 | `NodeHost.mainThreadStackBudget`, `SolveOutcome`, `reject`; `LayoutReport.Stack` | проход не поместился в стек главного — на поток хоста или отклонён | дефект #124 |
@@ -316,5 +316,5 @@
 | `ThemeCore`: `Theme`, `Palette`, `ThemeColor`, `Typography`, `ThemeFont`, `Radii`, `MotionSet`, `DisplayConditions`, `ResolvedTheme`, `ThemeOverride`, `ThemedLayout`, `Color` | тема и её разрешение для условий отображения | [09](09-theme.md) |
 | `BreakpointWidth` (имя или число), `BreakpointScale`, `LayoutSpec.resolvedStyle(_:_:)`, `LayoutTree.branches(... breakpoints:)` | пороги — токены до подготовки раскладки | [09](09-theme.md#пороги) |
 | `NodeHost.theme`, `conditions`, `resolvedTheme`; `Node.theme`, `themeOverride`; `Animation(Motion)` | тема в дереве нод, переопределения поддерева | [09](09-theme.md#распространение-по-дереву) |
-| `TextStyle.role`, `colorRole`, `resolved(in:)`; `Text.restyle`; `Button.fill`; тема в `Table`, `RefreshSpinner` | компоненты по теме | [09](09-theme.md) |
+| `TextStyle.role`, `colorRole`, `scalesWithText`, `resolved(in:)`; `Text.restyle`; `Button.fill`; тема в `Table`, `RefreshSpinner` | компоненты по теме | [09](09-theme.md) |
 | `DisplayConditions(UITraitCollection/NSAppearance)`, `UIColor/NSColor(ThemeColor)`, `UIFont/NSFont.themed`; `NodeView/NodeNSView.updateConditions`; `LayoutView/LayoutNSView.layoutTheme` | условия системы и тема для обычных view | [09](09-theme.md#обычные-view); дефект #202 |

@@ -408,10 +408,11 @@ private final class Row: Node {
 @MainActor
 private final class List: Node {
     let keys: State<[Int]>
-    let rows = NodeCache<Int, Row> { Row(key: $0) }
+    let rows: NodeCache<Int, Row>
 
-    init(keys: [Int]) {
+    init(keys: [Int], reserve: Int = 0) {
         self.keys = State(keys)
+        rows = NodeCache(reserve: reserve) { Row(key: $0) }
     }
 
     override func layoutSpec() -> LayoutSpec? {
@@ -451,6 +452,65 @@ func nodesNoLongerAskedForAreReleasedAtTheNextPass() {
 
     #expect(list.rows.count == 2)
     #expect(removed == nil)
+    host.detach()
+}
+
+@Test @MainActor
+func aReleasedNodeWaitsInTheReserveOutOfTheTreeAndComesBack() {
+    let list = List(keys: [1, 2, 3], reserve: 1)
+    let host = host(list)
+    let third = list.rows[3]
+
+    list.keys.value = [1, 2]
+    host.layoutIfNeeded()
+    list.keys.value = [2, 1]
+    host.layoutIfNeeded()
+
+    // Out of the tree, and not counted with the nodes the layout asks for.
+    #expect(!third.isMounted)
+    #expect(list.rows.count == 2)
+    #expect(list.rows.reservedCount == 1)
+
+    list.keys.value = [3, 2, 1]
+    host.layoutIfNeeded()
+    #expect(list.rows[3] === third)
+    #expect(third.isMounted)
+    #expect(list.rows.reservedCount == 0)
+    host.detach()
+}
+
+@Test @MainActor
+func theReserveKeepsTheLastReleasedAndCanBeEmptied() {
+    let list = List(keys: [1, 2, 3, 4], reserve: 2)
+    let host = host(list)
+    let (first, second, third) = (list.rows[1], list.rows[2], list.rows[3])
+
+    list.keys.value = [2, 3, 4]
+    host.layoutIfNeeded()
+    list.keys.value = [3, 4]
+    host.layoutIfNeeded()
+    list.keys.value = [4]
+    host.layoutIfNeeded()
+    list.keys.value = [4, 5]
+    host.layoutIfNeeded()
+
+    // Released in turn 1, 2, 3: the reserve of two lost the first.
+    #expect(list.rows.reservedCount == 2)
+    list.keys.value = [1, 2, 3, 4, 5]
+    host.layoutIfNeeded()
+    #expect(list.rows[1] !== first)
+    #expect(list.rows[2] === second)
+    #expect(list.rows[3] === third)
+
+    list.keys.value = [4, 5]
+    host.layoutIfNeeded()
+    list.keys.value = [5, 4]
+    host.layoutIfNeeded()
+    #expect(list.rows.reservedCount == 2)
+    list.rows.reserve = 1
+    #expect(list.rows.reservedCount == 1)
+    list.rows.clearReserve()
+    #expect(list.rows.reservedCount == 0)
     host.detach()
 }
 
