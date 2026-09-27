@@ -316,5 +316,5 @@
 | `ThemeCore`: `Theme`, `Palette`, `ThemeColor`, `Typography`, `ThemeFont`, `Radii`, `MotionSet`, `DisplayConditions`, `ResolvedTheme`, `ThemeOverride`, `ThemedLayout`, `Color` | тема и её разрешение для условий отображения | [09](09-theme.md) |
 | `BreakpointWidth` (имя или число), `BreakpointScale`, `LayoutSpec.resolvedStyle(_:_:)`, `LayoutTree.branches(... breakpoints:)` | пороги — токены до подготовки раскладки | [09](09-theme.md#пороги) |
 | `NodeHost.theme`, `conditions`, `resolvedTheme`; `Node.theme`, `themeOverride`; `Animation(Motion)` | тема в дереве нод, переопределения поддерева | [09](09-theme.md#распространение-по-дереву) |
-| `TextStyle.role`, `colorRole`, `resolved(in:)`; `Text.restyle`; `Button.fill`; тема в `Table`, `RefreshSpinner` | компоненты по теме | [09](09-theme.md) |
+| `TextStyle.role`, `colorRole`, `scalesWithText`, `resolved(in:)`; `Text.restyle`; `Button.fill`; тема в `Table`, `RefreshSpinner` | компоненты по теме | [09](09-theme.md) |
 | `DisplayConditions(UITraitCollection/NSAppearance)`, `UIColor/NSColor(ThemeColor)`, `UIFont/NSFont.themed`; `NodeView/NodeNSView.updateConditions`; `LayoutView/LayoutNSView.layoutTheme` | условия системы и тема для обычных view | [09](09-theme.md#обычные-view); дефект #202 |

@@ -23,6 +23,24 @@
         }
     }
 
+    /// A text of an explicit size, and one of that size that keeps it.
+    @MainActor
+    private final class TextPair: Node {
+        let grows = Text("Grows", style: TextStyle(size: 12))
+        let keeps: Text = {
+            var style = TextStyle(size: 12)
+            style.scalesWithText = false
+            return Text("Keeps", style: style)
+        }()
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                grows
+                keeps
+            }
+        }
+    }
+
     @MainActor
     private func host(_ root: Node) -> NodeHost {
         let host = NodeHost(root: root, size: LayoutSize(width: 300, height: 400))
@@ -42,6 +60,21 @@
 
         #expect(card.body.frame.size.height > height * 1.3)
         #expect(card.body.style.role == .body)
+    }
+
+    @Test @MainActor
+    func textOfAnExplicitSizeGrowsWithTheReadersTextSizeUnlessItKeepsItsSize() {
+        let pair = TextPair()
+        let (grows, keeps) = (pair.grows, pair.keeps)
+        let host = host(pair)
+        defer { host.detach() }
+
+        host.conditions.textScale = 2
+        host.layoutIfNeeded()
+
+        #expect(grows.shown.size == 24)
+        #expect(keeps.shown.size == 12)
+        #expect(grows.style.size == 12)
     }
 
     @Test @MainActor
@@ -196,6 +229,21 @@
         view.appearance = NSAppearance(named: .aqua)
         view.layout()
         #expect(view.host.conditions.colorScheme == .light)
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func aNodeViewOnTheMacMadeInADarkAppIsDarkFromItsFirstLayout() {
+        // The view's appearance never changes: it is dark from the start.
+        let app = NSApplication.shared
+        let before = app.appearance
+        app.appearance = NSAppearance(named: .darkAqua)
+        defer { app.appearance = before }
+        let view = NodeNSView(root: Node())
+        view.frame = CGRect(x: 0, y: 0, width: 100, height: 100)
+        view.layout()
+
+        #expect(view.host.conditions.colorScheme == .dark)
         view.host.detach()
     }
 

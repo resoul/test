@@ -64,6 +64,12 @@
         ///
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         public var maxLines: Int?
+        /// Whether the size and line spacing grow and shrink with the reader's text size, as
+        /// the theme's fonts do. Turn it off for text that must keep its size — a label on a
+        /// box of fixed size.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public var scalesWithText = true
 
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         public init(
@@ -90,20 +96,30 @@
             self.colorRole = colorRole
         }
 
-        /// The style with the theme's values in: the font of `role`, if any, and the color.
+        /// The style with the theme's values in: the font of `role`, if any, at the reader's
+        /// text size unless `scalesWithText` is off, and the color.
         ///
         /// Ownership: returns a value. Isolation: none. Errors: none. Cancellation: not
         /// applicable.
         public func resolved(in theme: ResolvedTheme) -> TextStyle {
             var style = self
+            var font = ThemeFont(
+                name: fontName,
+                size: size,
+                weight: weight,
+                lineSpacing: lineSpacing
+            )
             if let role {
-                let font = theme.font(role)
-                style.fontName = font.name
-                style.size = font.size
-                style.weight = font.weight
-                style.lineSpacing = font.lineSpacing
+                font = theme.theme.typography[role]
                 style.role = nil
             }
+            if scalesWithText {
+                font = font.scaled(by: theme.conditions.textScale)
+            }
+            style.fontName = font.name
+            style.size = font.size
+            style.weight = font.weight
+            style.lineSpacing = font.lineSpacing
             style.color = color ?? theme.color(colorRole)
             return style
         }
