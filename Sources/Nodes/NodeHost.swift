@@ -215,6 +215,9 @@ public final class NodeHost {
     /// Nodes of the layout being solved in the background that are not mounted yet.
     private var pending: [Node] = []
     private var pressed: Node?
+    /// The node last under a finger or the mouse going down, where commands go while no
+    /// node has the focus.
+    private var pointed: NodeID?
     /// The node a drag under way moves.
     private var dragged: Node?
     private var generation: UInt64 = 0
@@ -711,6 +714,7 @@ public final class NodeHost {
     public func pointerDown(at point: LayoutPoint) -> Bool {
         pointerCancelled()
         var node = root.hitTest(point)
+        pointed = node?.id
         while let current = node, current.onTap == nil {
             node = current.supernode
         }
@@ -1134,6 +1138,98 @@ public final class NodeHost {
             }
             return true
         }
+    }
+
+    // MARK: - Commands
+
+    /// Whether a node would carry out `command` now (`Node.handle`): the focused node, else
+    /// the node last pressed or clicked, else the root, or a node around it, has an enabled
+    /// handler for it. A menu shows the command enabled then.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func canPerform(_ command: Command) -> Bool {
+        enabledHandler { $0.command.id == command.id } != nil
+    }
+
+    /// Carries out `command` by the first node, from the focused one out, that can. Returns
+    /// whether one did; when not, the adapter passes the press or the key on to the system.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    @discardableResult
+    public func perform(_ command: Command) -> Bool {
+        guard let handler = enabledHandler(where: { $0.command.id == command.id }) else {
+            return false
+        }
+
+        handler.perform()
+        return true
+    }
+
+    /// Whether keys would carry out a command now: a node from the focused one out has an
+    /// enabled handler for a command they are the shortcut of.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func canPerform(_ shortcut: Shortcut) -> Bool {
+        enabledHandler { $0.command.shortcut == shortcut } != nil
+    }
+
+    /// For platform adapters: keys went down. Carries out the command they are the shortcut
+    /// of, by the first node, from the focused one out, that can; returns whether one did. A
+    /// shortcut comes before what the keys do otherwise — an arrow's move of the focus,
+    /// Return's press.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    @discardableResult
+    public func perform(_ shortcut: Shortcut) -> Bool {
+        guard let handler = enabledHandler(where: { $0.command.shortcut == shortcut }) else {
+            return false
+        }
+
+        handler.perform()
+        return true
+    }
+
+    /// The commands the nodes from the focused one out have handlers for, enabled or not, the
+    /// nearest first and each once — for the keyboard's list of shortcuts on iPad.
+    ///
+    /// Ownership: returns values. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    public func availableCommands() -> [Command] {
+        var seen: Set<String> = []
+        var commands: [Command] = []
+        var node: Node? = commandOrigin
+        while let current = node {
+            for handler in current.commandHandlers where seen.insert(handler.command.id).inserted {
+                commands.append(handler.command)
+            }
+            node = current.supernode
+        }
+        return commands
+    }
+
+    /// Whether any node of the tree carries out commands.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var handlesCommands: Bool {
+        !root.commandHandlers.isEmpty || mounted.values.contains { !$0.commandHandlers.isEmpty }
+    }
+
+    /// Where a command starts: the focused node, else the node last pressed or clicked while
+    /// it is in the tree, else the root.
+    private var commandOrigin: Node {
+        focusedNode.flatMap { mounted[$0] } ?? pointed.flatMap { mounted[$0] } ?? root
+    }
+
+    private func enabledHandler(where matches: (CommandHandler) -> Bool) -> CommandHandler? {
+        var node: Node? = commandOrigin
+        while let current = node {
+            if let handler = current.commandHandlers.first(where: { matches($0) && $0.isEnabled() })
+            {
+                return handler
+            }
+            node = current.supernode
+        }
+        return nil
     }
 
     // MARK: - Accessibility

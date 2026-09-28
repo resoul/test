@@ -177,6 +177,9 @@ open class Node: LayoutElement {
     /// MainActor. Errors: none. Cancellation: not applicable.
     public var onMoveCommand: (@MainActor (FocusMove) -> Bool)?
 
+    /// The commands the node carries out (`handle(_:isEnabled:perform:)`).
+    var commandHandlers: [CommandHandler] = []
+
     /// Makes the node a focus section: when the remote moves the focus toward any part of
     /// the node, the focus goes to a node inside it — the one focused there last, else the
     /// first — instead of only to nodes lying straight in the direction pressed. For rows and
