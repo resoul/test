@@ -74,6 +74,24 @@
     }
 
     @Test @MainActor
+    func theMenuButtonReachesAResponderOutsideTheTree() {
+        let row = Row()
+        let (view, around) = showing(row)
+        let stack = CommandResponder()
+        var backs = 0
+        stack.handle(.back, isEnabled: { backs == 0 }) { backs += 1 }
+        view.host.outerResponder = stack
+
+        view.pressesBegan([Press(.menu)], with: nil)
+        view.pressesBegan([Press(.menu)], with: nil)
+
+        #expect(backs == 1)
+        #expect(around.presses == [.menu])
+        #expect(view.keyCommands?.contains { $0.input == "[" } == true)
+        view.host.detach()
+    }
+
+    @Test @MainActor
     func playPauseGoesToTheNodes() {
         let row = Row()
         let (view, around) = showing(row)

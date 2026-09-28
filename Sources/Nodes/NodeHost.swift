@@ -1142,17 +1142,26 @@ public final class NodeHost {
 
     // MARK: - Commands
 
+    /// Where the commands no node of the tree carries out go on: the screen, the container or
+    /// the controller the tree is shown in, and through its `outer` the ones around it.
+    ///
+    /// Ownership: not kept: the responder usually holds the view that holds the host.
+    /// Isolation: MainActor. Errors: none. Cancellation: set to `nil`.
+    public weak var outerResponder: CommandResponder?
+
     /// Whether a node would carry out `command` now (`Node.handle`): the focused node, else
-    /// the node last pressed or clicked, else the root, or a node around it, has an enabled
-    /// handler for it. A menu shows the command enabled then.
+    /// the node last pressed or clicked, else the root, or a node around it, or else
+    /// `outerResponder` or a responder around it, has an enabled handler for it. A menu shows
+    /// the command enabled then.
     ///
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public func canPerform(_ command: Command) -> Bool {
         enabledHandler { $0.command.id == command.id } != nil
     }
 
-    /// Carries out `command` by the first node, from the focused one out, that can. Returns
-    /// whether one did; when not, the adapter passes the press or the key on to the system.
+    /// Carries out `command` by the first node, from the focused one out, or else the first
+    /// outer responder, that can. Returns whether one did; when not, the adapter passes the
+    /// press or the key on to the system.
     ///
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     @discardableResult
@@ -1165,8 +1174,8 @@ public final class NodeHost {
         return true
     }
 
-    /// Whether keys would carry out a command now: a node from the focused one out has an
-    /// enabled handler for a command they are the shortcut of.
+    /// Whether keys would carry out a command now: a node from the focused one out, or an
+    /// outer responder, has an enabled handler for a command they are the shortcut of.
     ///
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public func canPerform(_ shortcut: Shortcut) -> Bool {
@@ -1174,7 +1183,8 @@ public final class NodeHost {
     }
 
     /// For platform adapters: keys went down. Carries out the command they are the shortcut
-    /// of, by the first node, from the focused one out, that can; returns whether one did. A
+    /// of, by the first node from the focused one out, or outer responder, that can; returns
+    /// whether one did. A
     /// shortcut comes before what the keys do otherwise — an arrow's move of the focus,
     /// Return's press.
     ///
@@ -1189,8 +1199,9 @@ public final class NodeHost {
         return true
     }
 
-    /// The commands the nodes from the focused one out have handlers for, enabled or not, the
-    /// nearest first and each once — for the keyboard's list of shortcuts on iPad.
+    /// The commands the nodes from the focused one out, and then the outer responders, have
+    /// handlers for, enabled or not, the nearest first and each once — for the keyboard's list
+    /// of shortcuts on iPad.
     ///
     /// Ownership: returns values. Isolation: MainActor. Errors: none. Cancellation: not
     /// applicable.
@@ -1204,14 +1215,31 @@ public final class NodeHost {
             }
             node = current.supernode
         }
+        var responder = outerResponder
+        while let current = responder {
+            for handler in current.commandHandlers where seen.insert(handler.command.id).inserted {
+                commands.append(handler.command)
+            }
+            responder = current.outer
+        }
         return commands
     }
 
-    /// Whether any node of the tree carries out commands.
+    /// Whether any node of the tree, or an outer responder, carries out commands.
     ///
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public var handlesCommands: Bool {
-        !root.commandHandlers.isEmpty || mounted.values.contains { !$0.commandHandlers.isEmpty }
+        if !root.commandHandlers.isEmpty
+            || mounted.values.contains(where: { !$0.commandHandlers.isEmpty })
+        {
+            return true
+        }
+        var responder = outerResponder
+        while let current = responder {
+            if !current.commandHandlers.isEmpty { return true }
+            responder = current.outer
+        }
+        return false
     }
 
     /// Where a command starts: the focused node, else the node last pressed or clicked while
@@ -1229,7 +1257,7 @@ public final class NodeHost {
             }
             node = current.supernode
         }
-        return nil
+        return outerResponder?.enabledHandler(where: matches)
     }
 
     // MARK: - Accessibility
