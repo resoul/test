@@ -1021,6 +1021,12 @@
             shortcut: Shortcut("n", [.command])
         )
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public static let messageInfo = Command(
+            "messageInfo",
+            title: "Message Info",
+            shortcut: Shortcut("i", [.command])
+        )
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         public static let flagMessage = Command(
             "flagMessage",
             title: "Flag Message",
@@ -1118,6 +1124,38 @@
         }
     }
 
+    /// Who sent a message and when, in a sheet that opens halfway and is drawn up to full.
+    @MainActor
+    final class MessageInfoNode: Node {
+        let heading = Text("Message Info", style: TextStyle(size: 22, weight: .bold))
+        let details: Text
+        let hint = Text(
+            "Drag the sheet up by its grabber, or down to close it.",
+            style: TextStyle(size: 15, colorRole: .secondaryText)
+        )
+
+        init(_ mail: Mail?) {
+            details = Text(
+                "From \(mail?.sender ?? "nobody"): \(mail?.subject ?? "")",
+                style: TextStyle(size: 17)
+            )
+        }
+
+        override func update() {
+            appearance.background = theme.color(.background)
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                heading
+                details
+                hint
+            }
+            .gap(12)
+            .padding(24)
+        }
+    }
+
     /// The demo: two profiles and the screen showing them. Mac and iOS apps only host
     /// `screen` in a node view.
     ///
@@ -1187,6 +1225,7 @@
             Command.backToTop
             Divider()
             Command.editInbox
+            Command.messageInfo
             Command.flagMessage
         }
 
@@ -1213,7 +1252,14 @@
                 case .message(let id):
                     let message = MessageNode(inbox?.mail(id))
                     let screen = NodeScreen(message, title: inbox?.mail(id)?.sender ?? "")
-                    screen.toolbar = [.flagMessage]
+                    screen.toolbar = [.messageInfo, .flagMessage]
+                    screen.handle(.messageInfo) { [weak screen] in
+                        let info = Presentation(
+                            NodeScreen(MessageInfoNode(inbox?.mail(id)), title: "Message Info"),
+                            style: .sheet(heights: [.medium, .large])
+                        )
+                        screen?.present(info)
+                    }
                     screen.handle(
                         .flagMessage,
                         isEnabled: { inbox?.mail(id) != nil },

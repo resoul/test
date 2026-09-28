@@ -64,8 +64,9 @@
             let container = PresentedViewController(presentation)
             containers[ObjectIdentifier(presentation)] = container
             container.modalPresentationStyle =
-                presentation.style == .fullScreen ? .fullScreen : .automatic
+                presentation.style.coversWindow ? .fullScreen : .automatic
             container.presentationController?.delegate = self
+            (container as? any SheetHeights)?.setUpHeights()
             host.present(container, animated: true) {
                 presentation.showEnded(completed: true)
             }
@@ -195,17 +196,103 @@
             }
         }
 
-        /// A presentation the user cannot close holds a sheet back from a swipe down.
+        /// A presentation the user cannot close holds a sheet back from a swipe down; a
+        /// sheet moves to the height the presentation asks for.
         private func watchDismissible() {
             let watch = Observer { [weak self] in self?.watchDismissible() }
             self.watch = watch
-            isModalInPresentation = !watch.track { presentation.isDismissible }
+            let (dismissible, height) = watch.track {
+                (presentation.isDismissible, presentation.height)
+            }
+            isModalInPresentation = !dismissible
+            (self as? any SheetHeights)?.show(height)
         }
 
         /// The presentation is gone: a tree of nodes leaves its host.
         func letGo() {
             watch?.cancel()
             (content as? ScreenViewController)?.nodeView.host.detach()
+        }
+    }
+
+    /// The heights a sheet stops at. A TV has no sheets that stop part of the way: there
+    /// the conformance is unavailable, and a cast to it finds none.
+    @MainActor
+    protocol SheetHeights {
+        /// Gives the sheet the presentation's heights, before it shows.
+        func setUpHeights()
+        /// Moves the sheet to `height`, unless it is there.
+        func show(_ height: SheetHeight)
+    }
+
+    @available(tvOS, unavailable)
+    extension PresentedViewController: SheetHeights {
+        func setUpHeights() {
+            guard let sheet = sheetPresentationController, !presentation.style.coversWindow
+            else { return }
+
+            let heights = presentation.style.heights
+            sheet.detents = heights.map(\.detent)
+            sheet.prefersGrabberVisible = heights.count > 1
+            sheet.selectedDetentIdentifier = presentation.height.identifier
+        }
+
+        func show(_ height: SheetHeight) {
+            // Before the presentation begins, asking for the sheet would make its controller
+            // with the style not yet set; `setUpHeights()` gives the first height then.
+            guard !presentation.style.coversWindow, presentingViewController != nil,
+                let sheet = sheetPresentationController,
+                sheet.selectedDetentIdentifier != height.identifier
+            else { return }
+
+            sheet.animateChanges {
+                sheet.selectedDetentIdentifier = height.identifier
+            }
+        }
+    }
+
+    @available(tvOS, unavailable)
+    extension ModalPresenter: UISheetPresentationControllerDelegate {
+        /// The user dragged a sheet to another height.
+        func sheetPresentationControllerDidChangeSelectedDetentIdentifier(
+            _ sheetPresentationController: UISheetPresentationController
+        ) {
+            guard
+                let container = sheetPresentationController.presentedViewController
+                    as? PresentedViewController,
+                let height = container.presentation.style.heights.first(where: {
+                    $0.identifier == sheetPresentationController.selectedDetentIdentifier
+                })
+            else { return }
+
+            container.presentation.userMoved(to: height)
+        }
+    }
+
+    @available(tvOS, unavailable)
+    extension SheetHeight {
+        var identifier: UISheetPresentationController.Detent.Identifier {
+            switch self {
+            case .medium: .medium
+            case .large: .large
+            case .points(let points): .init("points.\(points)")
+            case .fraction(let fraction): .init("fraction.\(fraction)")
+            }
+        }
+
+        var detent: UISheetPresentationController.Detent {
+            switch self {
+            case .medium: .medium()
+            case .large: .large()
+            case .points(let points):
+                .custom(identifier: identifier) { context in
+                    min(points, context.maximumDetentValue)
+                }
+            case .fraction(let fraction):
+                .custom(identifier: identifier) { context in
+                    context.maximumDetentValue * min(max(fraction, 0), 1)
+                }
+            }
         }
     }
 #endif
