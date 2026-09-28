@@ -157,30 +157,5 @@
             window = nil
             session = nil
         }
-
-        private func contentController(for content: any SceneContent) -> UIViewController {
-            if let stack = content as? any PresentedStack {
-                return stack.makeViewController()
-            }
-            if let screen = content as? ControllerScreen {
-                return screen.controller
-            }
-            if let screen = content as? NodeScreen {
-                return ScreenViewController(screen)
-            }
-            return UIViewController()
-        }
-    }
-
-    extension PresentedStack {
-        /// The stack's navigation controller, whatever its routes.
-        fileprivate func makeViewController() -> UIViewController {
-            if let existing = platformContainer as? StackNavigationController {
-                return existing
-            }
-            let controller = StackNavigationController(stack: self)
-            platformContainer = controller
-            return controller
-        }
     }
 #endif

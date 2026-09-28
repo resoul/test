@@ -47,6 +47,10 @@ public enum NavigationRejection: Hashable, Sendable {
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     case closed
+    /// The screen already presents something (`Screen.present`).
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    case alreadyPresenting
 }
 
 /// For platform adapters: a move of a stack's screens from `from` to `to`, as the adapter is
@@ -95,8 +99,9 @@ public protocol StackPresenter: AnyObject {
 /// early changes nothing.
 ///
 /// A screen is made once for its entry, when the entry joins the path, and let go when the
-/// entry has left the path and no move needs it. It carries out `Command.back` while the
-/// path has more than the root; at the root, the command goes on to `outer`.
+/// entry has left the path and no move needs it; what it presents is dismissed then. It
+/// carries out `Command.back` while the path has more than the root; at the root, the command
+/// goes on to `outer`.
 ///
 /// Ownership: keeps the screens of its entries and the closure making them. Isolation:
 /// MainActor. Errors: requests return `NavigationResult`. Cancellation: `close()`.
@@ -396,6 +401,7 @@ public final class Stack<Route: Hashable>: CommandResponder {
         for entry in entries where !live.contains(entry.id) && entry.screen.owner === self {
             entry.screen.owner = nil
             entry.screen.outer = nil
+            entry.screen.presentation?.dismiss()
         }
     }
 }

@@ -21,6 +21,7 @@ struct LayoutDemo: Application {
 
     func started(_ shell: Shell) {
         model.openMessages(from: ProcessInfo.processInfo.environment)
+        model.openCompose(from: ProcessInfo.processInfo.environment)
     }
 
     func open(_ request: OpenRequest) -> OpenResult {

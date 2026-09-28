@@ -392,6 +392,7 @@ public final class Shell: CommandResponder {
     package func sessionClosed(_ session: SceneSession) {
         sessionsState.value.removeAll { $0 === session }
         (session.content as? any PresentedStack)?.close()
+        (session.content as? Screen)?.presentation?.dismiss()
         session.content.outer = nil
         session.outer = nil
     }

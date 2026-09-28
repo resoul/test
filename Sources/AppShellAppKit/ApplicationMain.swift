@@ -85,19 +85,6 @@
             updateActivation(of: session)
         }
 
-        private func contentController(for content: any SceneContent) -> NSViewController {
-            if let stack = content as? any PresentedStack {
-                return stack.makeViewController()
-            }
-            if let screen = content as? ControllerScreen {
-                return screen.controller
-            }
-            if let screen = content as? NodeScreen {
-                return ScreenViewController(screen)
-            }
-            return NSViewController()
-        }
-
         // MARK: - NSWindowDelegate
 
         func windowWillClose(_ notification: Notification) {
@@ -143,18 +130,6 @@
             } else {
                 session.setActivation(window.isKeyWindow ? .active : .inactive)
             }
-        }
-    }
-
-    extension PresentedStack {
-        /// The stack's view controller, whatever its routes.
-        fileprivate func makeViewController() -> NSViewController {
-            if let existing = platformContainer as? StackViewController {
-                return existing
-            }
-            let controller = StackViewController(stack: self)
-            platformContainer = controller
-            return controller
         }
     }
 

@@ -38,12 +38,7 @@
         /// Ownership: returns a controller the caller keeps; it keeps the stack. Isolation:
         /// MainActor. Errors: none. Cancellation: `close()` on the stack.
         public func makeViewController() -> UIViewController {
-            if let existing = platformContainer as? StackNavigationController {
-                return existing
-            }
-            let controller = StackNavigationController(stack: self)
-            platformContainer = controller
-            return controller
+            (self as any PresentedStack).makeViewController()
         }
     }
 
@@ -65,11 +60,15 @@
         private var applying: StackMove?
         /// The user going back, until the platform's move ends.
         private var goingBack: StackMove?
+        /// Shows what the stack's screens present, over the whole stack.
+        let modalPresenter = ModalPresenter()
 
         init(stack: any PresentedStack) {
             self.stack = stack
             super.init(nibName: nil, bundle: nil)
             delegate = self
+            modalPresenter.host = self
+            modalPresenter.onHidden = { [weak self] in self?.takeKeyboard() }
             stack.presenter = self
             // A stack shown before — in a scene the system connects again — shows what it
             // showed, without a move.
@@ -80,6 +79,17 @@
 
         required init?(coder: NSCoder) {
             nil
+        }
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            modalPresenter.hostAppeared()
+        }
+
+        /// A presentation gone, the top screen's tree takes the keyboard back: its keys and
+        /// the menus' commands reach it again.
+        private func takeKeyboard() {
+            (topViewController as? ScreenViewController)?.nodeView.becomeFirstResponder()
         }
 
         // MARK: - StackPresenter
@@ -218,6 +228,7 @@
                 return nil
             }
             controllers[entry] = controller
+            screen.presentationPresenter = modalPresenter
             watches[entry] = Observer { [weak self] in self?.showTop(of: entry) }
             showTop(of: entry)
             return controller
@@ -274,6 +285,8 @@
     final class ScreenViewController: UIViewController {
         let screen: NodeScreen
         let nodeView: NodeView
+        /// Shows what the screen presents while it is not in a stack.
+        let modalPresenter = ModalPresenter()
 
         init(_ screen: NodeScreen) {
             self.screen = screen
@@ -281,6 +294,13 @@
             super.init(nibName: nil, bundle: nil)
             nodeView.host.outerResponder = screen
             nodeView.host.solvesInBackground = true
+            modalPresenter.host = self
+            modalPresenter.onHidden = { [weak nodeView] in _ = nodeView?.becomeFirstResponder() }
+        }
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            modalPresenter.hostAppeared()
         }
 
         required init?(coder: NSCoder) {
