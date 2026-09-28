@@ -1,4 +1,5 @@
 #if canImport(CoreText)
+    import AppShell
     import Foundation
     import ImageIO
     import LayoutCore
@@ -416,9 +417,9 @@
         }
     }
 
-    /// An inbox of a dozen messages, in the scroll of the screen: swipe one aside for its
-    /// actions — delete it, flag it, mark it read. Edit it to drag messages by their handles
-    /// to other places, or select some and delete them.
+    /// An inbox of a dozen messages, in the scroll of the screen: tap one to open it, swipe
+    /// one aside for its actions — delete it, flag it, mark it read. Edit it to drag messages
+    /// by their handles to other places, or select some and delete them.
     @MainActor
     final class Inbox: Node {
         private let rows = NodeCache<Int, MailRow> { _ in MailRow() }
@@ -453,6 +454,10 @@
             table.appearance.clipsContent = true
             table.allowsMultipleSelectionDuringEditing = true
             table.onSelectionChange = { [weak self] _ in self?.relabel() }
+            table.onSelect = { [weak self] mail in
+                self?.change(mail.id) { $0.isUnread = false }
+                self?.onOpen?(mail)
+            }
             // Only from inside the inbox: its menu item is enabled once a message is pressed
             // or focused.
             handle(.editInbox) { [weak self] in self?.toggleEditing() }
@@ -483,6 +488,14 @@
                 ]
             }
             show()
+        }
+
+        /// What opening a message does.
+        var onOpen: (@MainActor (Mail) -> Void)?
+
+        /// The message `id`, while the inbox has it.
+        func mail(_ id: Int) -> Mail? {
+            mails.first { $0.id == id }
         }
 
         private func show() {
@@ -917,6 +930,9 @@
         let cards: [ProfileCard]
         let feed: Scroll
 
+        /// The inbox in the feed.
+        var inbox: Inbox? { (feed.content as? Feed)?.inbox }
+
         init(profiles: [Profile], rename: @escaping @MainActor () -> Void) {
             cards = profiles.map { ProfileCard(profile: $0) }
             let feed = Scroll(.vertical)
@@ -995,6 +1011,53 @@
         )
     }
 
+    /// Where the demo's navigation goes: the screen, and a message of its inbox.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public enum DemoRoute: Hashable, Sendable {
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case home
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case message(Int)
+    }
+
+    /// A message opened from the inbox: who wrote it, its subject, a few lines and a reply.
+    @MainActor
+    final class MessageNode: Node {
+        let sender: Text
+        let subject: Text
+        let body = Text(
+            "The lines of a message are not in this demo: the screen is here to show a stack of "
+                + "screens. Go back with the back button, a swipe from the edge, Menu on the "
+                + "remote or Command-[.",
+            style: TextStyle(size: 15, colorRole: .secondaryText)
+        )
+        private(set) lazy var reply: Button = Button("Reply") { [weak self] in
+            self?.reply.title = "Replied"
+            self?.setNeedsLayout()
+        }
+
+        init(_ mail: Mail?) {
+            sender = Text(mail?.sender ?? "", style: TextStyle(size: 22, weight: .bold))
+            subject = Text(mail?.subject ?? "The message is gone", style: TextStyle(size: 17))
+        }
+
+        override func update() {
+            appearance.background = theme.color(.background)
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                sender
+                subject
+                body
+                FlexContainer(.row) { reply }
+            }
+            .gap(12)
+            .padding(24)
+        }
+    }
+
     /// The demo: two profiles and the screen showing them. Mac and iOS apps only host
     /// `screen` in a node view.
     ///
@@ -1062,6 +1125,39 @@
             Command.backToTop
             Divider()
             Command.editInbox
+        }
+
+        /// The demo's navigation: the screen at its root, and a message on top of it when one
+        /// is opened in the inbox.
+        ///
+        /// Ownership: owned by the model. Isolation: MainActor. Errors: none. Cancellation:
+        /// not applicable.
+        public private(set) lazy var stack: Stack<DemoRoute> = {
+            let home = screenNode
+            let inbox = home.inbox
+            let stack = Stack(root: DemoRoute.home) { route in
+                switch route {
+                case .home:
+                    NodeScreen(home, title: "Layout demo")
+                case .message(let id):
+                    NodeScreen(MessageNode(inbox?.mail(id)), title: inbox?.mail(id)?.sender ?? "")
+                }
+            }
+            inbox?.onOpen = { [weak stack] mail in
+                stack?.push(.message(mail.id))
+            }
+            return stack
+        }()
+
+        /// Opens the messages `ids`, one over the other, as a link into the app would — the
+        /// UI tests start there. Launch arguments: `OPEN_MESSAGES=0,1` in the environment.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public func openMessages(from environment: [String: String]) {
+            guard let ids = environment["OPEN_MESSAGES"] else { return }
+
+            let messages = ids.split(separator: ",").compactMap { Int($0) }.map(DemoRoute.message)
+            stack.setPath([.home] + messages)
         }
 
         /// Ada's Follow badge — for a focus request.

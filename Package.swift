@@ -9,7 +9,9 @@ import PackageDescription
 // Nodes is the tree of nodes laid out by LayoutCore and driven by StateCore; NodesRender draws
 // it into CALayers (Apple platforms), NodesUIKit and NodesAppKit put it into views. ThemeCore
 // holds the theme — colors, text, radii, motion, spacing and breakpoints — for nodes and for
-// plain views alike; it depends on LayoutCore only, so it builds on Linux too.
+// plain views alike; it depends on LayoutCore only, so it builds on Linux too. AppShell is the
+// app layer — screens and navigation stacks — over Nodes, without UIKit or AppKit;
+// AppShellUIKit and AppShellAppKit show it in the platform's containers.
 let package = Package(
     name: "Espalier",
     platforms: [.macOS(.v14), .iOS(.v16), .tvOS(.v16)],
@@ -24,6 +26,9 @@ let package = Package(
         .library(name: "NodesRender", targets: ["NodesRender"]),
         .library(name: "NodesUIKit", targets: ["NodesUIKit"]),
         .library(name: "NodesAppKit", targets: ["NodesAppKit"]),
+        .library(name: "AppShell", targets: ["AppShell"]),
+        .library(name: "AppShellUIKit", targets: ["AppShellUIKit"]),
+        .library(name: "AppShellAppKit", targets: ["AppShellAppKit"]),
     ],
     dependencies: [
         .package(url: "https://github.com/resoul/AsyncRay.git", exact: "1.0.0")
@@ -47,6 +52,15 @@ let package = Package(
             name: "NodesAppKit",
             dependencies: ["Nodes", "NodesRender", "LayoutCore", "LayoutAppKit", "ThemeCore"]
         ),
+        .target(name: "AppShell", dependencies: ["Nodes", "StateCore"]),
+        .target(
+            name: "AppShellUIKit",
+            dependencies: ["AppShell", "Nodes", "NodesUIKit", "StateCore"]
+        ),
+        .target(
+            name: "AppShellAppKit",
+            dependencies: ["AppShell", "Nodes", "NodesAppKit", "StateCore"]
+        ),
         .target(
             name: "StateAsyncRay",
             dependencies: ["StateCore", .product(name: "AsyncRay", package: "asyncray")]
@@ -67,6 +81,14 @@ let package = Package(
         .testTarget(
             name: "StateAsyncRayTests",
             dependencies: ["AsyncRay", "StateAsyncRay", "StateCore"]
+        ),
+        .testTarget(name: "AppShellTests", dependencies: ["AppShell", "Nodes", "StateCore"]),
+        .testTarget(
+            name: "AppShellAdapterTests",
+            dependencies: [
+                "AppShell", "AppShellUIKit", "AppShellAppKit", "Nodes", "NodesUIKit",
+                "NodesAppKit", "LayoutCore", "StateCore",
+            ]
         ),
         .testTarget(
             name: "LayoutAdapterTests",
