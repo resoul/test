@@ -44,11 +44,12 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 /// Shows the node screen full size, with the margins a TV screen needs.
 final class ScreenController: UIViewController {
     private let model = DemoModel()
-    /// A screen for UI tests instead of the demo: the remote's reach (`FocusProbe`), or
-    /// moving rows with it (`MoveProbe`).
+    /// A screen for UI tests instead of the demo: the remote's reach (`FocusProbe`), moving
+    /// rows with it (`MoveProbe`), or its buttons as commands (`CommandProbe`).
     private let probe: Node? =
         ProcessInfo.processInfo.environment["FOCUS_PROBE"].map { FocusProbe($0) }
         ?? ProcessInfo.processInfo.environment["MOVE_PROBE"].map { _ in MoveProbe() }
+        ?? ProcessInfo.processInfo.environment["COMMAND_PROBE"].map { _ in CommandProbe() }
     private lazy var screen = NodeView(root: probe ?? model.screen)
 
     override func viewDidLoad() {
@@ -66,18 +67,14 @@ final class ScreenController: UIViewController {
             screen.topAnchor.constraint(equalTo: margins.topAnchor),
             screen.bottomAnchor.constraint(equalTo: margins.bottomAnchor),
         ])
+        // Play/Pause on the remote asks for the focus on Ada's badge, from wherever it is.
+        let badge = model.firstBadge.id
+        model.screen.handle(.playPause) { [weak screen] in
+            screen?.host.requestFocus(badge)
+        }
     }
 
     override var preferredFocusEnvironments: [any UIFocusEnvironment] {
         [screen]
-    }
-
-    /// Play/Pause on the remote asks for the focus on Ada's badge, from wherever it is.
-    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        if presses.contains(where: { $0.type == .playPause }) {
-            screen.host.requestFocus(model.firstBadge.id)
-        } else {
-            super.pressesBegan(presses, with: event)
-        }
     }
 }

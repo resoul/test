@@ -453,6 +453,9 @@
             table.appearance.clipsContent = true
             table.allowsMultipleSelectionDuringEditing = true
             table.onSelectionChange = { [weak self] _ in self?.relabel() }
+            // Only from inside the inbox: its menu item is enabled once a message is pressed
+            // or focused.
+            handle(.editInbox) { [weak self] in self?.toggleEditing() }
             table.onMove = { [weak self] move in
                 guard let self, let from = mails.firstIndex(where: { $0.id == move.item }) else {
                     return
@@ -945,6 +948,13 @@
             feed.content = Feed(cards: cards, actions: actions, toTop: toTop)
             self.feed = feed
             super.init()
+            handle(.renameAda, perform: rename)
+            handle(.backToTop, isEnabled: { [weak feed] in (feed?.contentOffset.y ?? 0) > 0 }) {
+                [weak feed] in
+                withAnimation(.easeInOut(duration: 0.8)) {
+                    feed?.contentOffset = .zero
+                }
+            }
         }
 
         override func update() {
@@ -962,6 +972,27 @@
                 feed
             }
         }
+    }
+
+    extension Command {
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public static let renameAda = Command(
+            "renameAda",
+            title: "Rename Ada",
+            shortcut: Shortcut("r", [.command])
+        )
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public static let backToTop = Command(
+            "backToTop",
+            title: "Back to the Top",
+            shortcut: Shortcut(.up, [.command])
+        )
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public static let editInbox = Command(
+            "editInbox",
+            title: "Edit Inbox",
+            shortcut: Shortcut("e", [.command])
+        )
     }
 
     /// The demo: two profiles and the screen showing them. Mac and iOS apps only host
@@ -1021,6 +1052,17 @@
         /// Ownership: owned by the model. Isolation: MainActor. Errors: none. Cancellation:
         /// not applicable.
         public var screen: Node { screenNode }
+
+        /// The demo's menu, for a Mac's menu bar and iPad's: its commands work from the
+        /// keyboard too.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public static let menu = Menu("Screen") {
+            Command.renameAda
+            Command.backToTop
+            Divider()
+            Command.editInbox
+        }
 
         /// Ada's Follow badge — for a focus request.
         ///

@@ -45,6 +45,10 @@
         private var topFocusItems: [any UIFocusItem] = []
         /// A select press that began on a focused node and has not ended yet.
         private var isSelecting = false
+        /// The presses the tree took, until they end: the rest of them is the tree's too.
+        private var takenPresses: Set<UIPress> = []
+        /// The long press select becomes if it is held down, until then.
+        private var holding: DispatchWorkItem?
         /// A focus guide over each focus section, kept while the section is.
         private var sectionGuides: [NodeID: SectionGuide] = [:]
         private var sectionEntries: [NodeID: SectionEntry] = [:]
@@ -396,7 +400,9 @@
             return CGSize(width: fitting.width * factor, height: fitting.height * factor)
         }
 
-        /// Presses on nodes with `onTap`; other touches go on up the responder chain.
+        /// Presses on nodes with `onTap`; other touches go on up the responder chain. A touch
+        /// makes the view the first responder when its nodes carry out commands, as a click
+        /// does on a Mac, and commands then go to the node touched and the nodes around it.
         ///
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -408,6 +414,9 @@
                     driver.stop()
                 }
                 return
+            }
+            if !isFirstResponder, host.handlesCommands {
+                becomeFirstResponder()
             }
             guard let touch = touches.first, host.pointerDown(at: point(of: touch)) else {
                 super.touchesBegan(touches, with: event)
@@ -516,10 +525,11 @@
 
         /// Remote and keyboard presses come to the first responder, and a focus item that is
         /// not a view is not one: the view takes the role where the tree takes focus — on a TV
-        /// at once, on iPad when one of its nodes gets the focus.
+        /// at once, on iPad when one of its nodes gets the focus — and where its nodes carry out
+        /// commands, whose shortcuts and menu items reach them through it: when it is touched.
         ///
         /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
-        public override var canBecomeFirstResponder: Bool { usesFocus }
+        public override var canBecomeFirstResponder: Bool { usesFocus || host.handlesCommands }
 
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func didMoveToWindow() {
@@ -546,25 +556,26 @@
             updateConditions()
         }
 
-        /// The remote's select button presses the focused node; other presses go on up the
-        /// responder chain.
+        /// The remote's select button presses the focused node, and held down carries out
+        /// `Command.longPress` instead while a node would (`Node.handle`); the Menu button
+        /// carries out `Command.back`, and Play/Pause `Command.playPause`. Presses the tree does
+        /// not take go on up the responder chain — Menu, at the top of an app on a TV, leaves
+        /// the app.
         ///
-        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        /// Ownership: keeps the presses it takes until they end. Isolation: MainActor. Errors:
+        /// none. Cancellation: none.
         public override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-            if presses.contains(where: NodeView.selects), host.selectBegan() {
-                isSelecting = true
-            } else {
-                super.pressesBegan(presses, with: event)
+            let others = presses.filter { !take($0) }
+            if !others.isEmpty {
+                super.pressesBegan(others, with: event)
             }
         }
 
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-            if isSelecting, presses.contains(where: NodeView.selects) {
-                isSelecting = false
-                host.selectEnded()
-            } else {
-                super.pressesEnded(presses, with: event)
+            let others = presses.filter { !release($0, ended: true) }
+            if !others.isEmpty {
+                super.pressesEnded(others, with: event)
             }
         }
 
@@ -573,13 +584,74 @@
             _ presses: Set<UIPress>,
             with event: UIPressesEvent?
         ) {
-            if isSelecting {
-                isSelecting = false
-                host.pointerCancelled()
-            } else {
-                super.pressesCancelled(presses, with: event)
+            let others = presses.filter { !release($0, ended: false) }
+            if !others.isEmpty {
+                super.pressesCancelled(others, with: event)
             }
         }
+
+        /// A press went down; returns whether the tree takes it.
+        private func take(_ press: UIPress) -> Bool {
+            let taken: Bool
+            if NodeView.selects(press) {
+                isSelecting = host.selectBegan()
+                let holds = press.type == .select && host.canPerform(.longPress)
+                if holds {
+                    startHolding()
+                }
+                taken = isSelecting || holds
+            } else if press.type == .menu {
+                taken = host.perform(.back)
+            } else if press.type == .playPause {
+                taken = host.perform(.playPause)
+            } else {
+                taken = false
+            }
+            if taken {
+                takenPresses.insert(press)
+            }
+            return taken
+        }
+
+        /// A press came up, or the system took it away; returns whether it was the tree's.
+        private func release(_ press: UIPress, ended: Bool) -> Bool {
+            guard takenPresses.remove(press) != nil else { return false }
+
+            if NodeView.selects(press) {
+                holding?.cancel()
+                holding = nil
+                if isSelecting {
+                    isSelecting = false
+                    if ended {
+                        host.selectEnded()
+                    } else {
+                        host.pointerCancelled()
+                    }
+                }
+            }
+            return true
+        }
+
+        /// Select held long enough is a long press: the focused node is let go without a tap,
+        /// and the command is carried out.
+        private func startHolding() {
+            holding?.cancel()
+            let work = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+
+                holding = nil
+                if isSelecting {
+                    isSelecting = false
+                    host.pointerCancelled()
+                }
+                host.perform(.longPress)
+            }
+            holding = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + NodeView.holdTime, execute: work)
+        }
+
+        /// Seconds select is held down before it is a long press.
+        static let holdTime = 0.5
 
         // MARK: - Reach
 

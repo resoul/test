@@ -490,12 +490,14 @@
 
         // MARK: - Keyboard focus
 
-        /// The view takes the keyboard when the tree has nodes to focus. Tab reaches it when
-        /// the system's keyboard navigation is on, as for any control.
+        /// The view takes the keyboard when the tree has nodes to focus, or nodes carrying out
+        /// commands — menus and shortcuts reach them through it. Tab reaches it when the
+        /// system's keyboard navigation is on, as for any control, and a click makes it the
+        /// first responder.
         ///
         /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
         public override var acceptsFirstResponder: Bool {
-            !host.focusItems().isEmpty
+            !host.focusItems().isEmpty || host.handlesCommands
         }
 
         /// Reached by Tab or Shift-Tab, focuses the first or the last node. A click takes the
@@ -526,12 +528,15 @@
             return true
         }
 
-        /// Tab and Shift-Tab go through the nodes and then on to the window's other views;
-        /// an arrow goes to the focused node (`onMoveCommand`), else to the nearest node that
-        /// way; Return and Space press the focused node. Other keys go on up the responder chain.
+        /// A command's shortcut (`Node.handle`) comes first, and then: Tab and Shift-Tab go
+        /// through the nodes and then on to the window's other views; an arrow goes to the
+        /// focused node (`onMoveCommand`), else to the nearest node that way; Return and Space
+        /// press the focused node. Other keys go on up the responder chain.
         ///
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func keyDown(with event: NSEvent) {
+            if let shortcut = Shortcut(event), host.perform(shortcut) { return }
+
             let backward = event.modifierFlags.contains(.shift)
             switch event.specialKey {
             case .tab? where !backward:
