@@ -411,6 +411,7 @@ package protocol PresentedStack: CommandResponder {
     func screen(for entry: StackEntryID) -> Screen?
     func backBegan(keeping: Int?) -> StackMove?
     func moveEnded(_ id: UInt64, completed: Bool)
+    func close()
 }
 
 extension Stack: PresentedStack {}

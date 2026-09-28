@@ -11,58 +11,37 @@ import ThemeCore
 import UIKit
 
 @main
-final class AppDelegate: UIResponder, UIApplicationDelegate {
-    func application(
-        _ application: UIApplication,
-        configurationForConnecting connectingSceneSession: UISceneSession,
-        options: UIScene.ConnectionOptions
-    ) -> UISceneConfiguration {
-        let configuration = UISceneConfiguration(
-            name: nil,
-            sessionRole: connectingSceneSession.role
-        )
-        configuration.delegateClass = SceneDelegate.self
-        return configuration
-    }
-}
+struct LayoutDemo: Application {
+    private let model = DemoModel()
 
-final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
-    var window: UIWindow?
-    /// The demo, while it shows.
-    private var model: DemoModel?
-    /// The stack a UI test drives (`StackProbe`), while it shows.
-    private var probeStack: Stack<StackProbe.Route>?
-
-    func scene(
-        _ scene: UIScene,
-        willConnectTo session: UISceneSession,
-        options connectionOptions: UIScene.ConnectionOptions
-    ) {
-        guard let windowScene = scene as? UIWindowScene else { return }
-
-        let window = UIWindow(windowScene: windowScene)
-        let environment = ProcessInfo.processInfo.environment
-        if let probe = ScreenController.probe(environment) {
-            window.rootViewController = ScreenController(probe)
-        } else if environment["STACK_PROBE"] != nil {
-            let stack = StackProbe.makeStack()
-            probeStack = stack
-            window.rootViewController = stack.makeViewController()
-        } else {
-            let model = DemoModel()
-            // Play/Pause on the remote asks for the focus on Ada's badge, from wherever it is.
-            let badge = model.firstBadge
-            model.screen.handle(.playPause) { [weak badge] in
-                guard let badge else { return }
-
-                badge.host?.requestFocus(badge.id)
+    /// The demo's stack, or a screen for UI tests: `ScreenController.probe` shows one of
+    /// UIKit's, `STACK_PROBE` a stack of its own (`StackProbe`).
+    var scenes: [WindowScene] {
+        WindowScene("main", title: "Layout demo") {
+            let environment = ProcessInfo.processInfo.environment
+            if let probe = ScreenController.probe(environment) {
+                return ControllerScreen(ScreenController(probe))
             }
-            model.openMessages(from: environment)
-            self.model = model
-            window.rootViewController = model.stack.makeViewController()
+            if environment["STACK_PROBE"] != nil {
+                return StackProbe.makeStack()
+            }
+            return model.stack
         }
-        window.makeKeyAndVisible()
-        self.window = window
+    }
+
+    func started(_ shell: Shell) {
+        // Play/Pause on the remote asks for the focus on Ada's badge, from wherever it is.
+        let badge = model.firstBadge
+        model.screen.handle(.playPause) { [weak badge] in
+            guard let badge else { return }
+
+            badge.host?.requestFocus(badge.id)
+        }
+        model.openMessages(from: ProcessInfo.processInfo.environment)
+    }
+
+    func open(_ request: OpenRequest) -> OpenResult {
+        model.open(request.url) ? .opened : .unsupported
     }
 }
 

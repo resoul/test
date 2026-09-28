@@ -69,6 +69,11 @@
             super.init(nibName: nil, bundle: nil)
             delegate = self
             stack.presenter = self
+            // A stack shown before — in a scene the system connects again — shows what it
+            // showed, without a move.
+            if viewControllers.isEmpty {
+                matchStack()
+            }
         }
 
         required init?(coder: NSCoder) {
