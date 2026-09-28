@@ -114,13 +114,15 @@
         /// The platform going back by itself — the back button, the swipe from the edge, its
         /// own Command-[, Menu over a controller of UIKit: the stack goes back with it, and
         /// learns at the end whether it did. When the stack cannot go back now, neither does
-        /// the platform. The stack's own moves set the controllers and never come here.
+        /// the platform. The stack's own moves set the controllers and never come here: a
+        /// call during one is the platform going back a second time for the same press — on
+        /// a TV, Menu reaches both the tree, which goes back through the stack, and the
+        /// navigation controller's own recognizer — and does nothing.
         override func popViewController(animated: Bool) -> UIViewController? {
             let count = viewControllers.count - 1
-            guard applying == nil, goingBack == nil else {
-                return super.popViewController(animated: animated)
-            }
-            guard let move = stack.backBegan(keeping: count) else { return nil }
+            guard applying == nil, goingBack == nil,
+                let move = stack.backBegan(keeping: count)
+            else { return nil }
 
             goingBack = move
             let popped = super.popViewController(animated: animated)
@@ -134,9 +136,9 @@
             animated: Bool
         ) -> [UIViewController]? {
             guard applying == nil, goingBack == nil,
-                let index = viewControllers.firstIndex(of: viewController)
-            else { return super.popToViewController(viewController, animated: animated) }
-            guard let move = stack.backBegan(keeping: index + 1) else { return nil }
+                let index = viewControllers.firstIndex(of: viewController),
+                let move = stack.backBegan(keeping: index + 1)
+            else { return nil }
 
             goingBack = move
             let popped = super.popToViewController(viewController, animated: animated)
@@ -145,9 +147,7 @@
         }
 
         override func popToRootViewController(animated: Bool) -> [UIViewController]? {
-            guard applying == nil, goingBack == nil, let root = viewControllers.first else {
-                return super.popToRootViewController(animated: animated)
-            }
+            guard let root = viewControllers.first else { return nil }
 
             return popToViewController(root, animated: animated)
         }

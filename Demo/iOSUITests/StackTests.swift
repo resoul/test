@@ -64,7 +64,10 @@ final class StackTests: XCTestCase {
     @MainActor
     func testAMessageOpensFromTheInbox() {
         let app = launch()
-        let row = app.staticTexts["On computable numbers"]
+        // A row of the table is one element, whose label holds its texts.
+        let row = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", "On computable numbers"))
+            .firstMatch
         XCTAssertTrue(app.navigationBars["Layout demo"].waitForExistence(timeout: 20))
         for _ in 0..<30 where !(row.exists && row.isHittable) {
             app.swipeUp(velocity: .slow)
