@@ -132,4 +132,28 @@ final class StackTests: XCTestCase {
         // The stack under it stayed where it was.
         XCTAssertTrue(app.navigationBars["Layout demo"].exists)
     }
+
+    @MainActor
+    func testASheetOpensHalfwayAndIsDrawnUpToFull() {
+        let app = launch(opening: "0")
+        let info = app.navigationBars.buttons["Message Info"]
+        XCTAssertTrue(info.waitForExistence(timeout: 20))
+        info.tap()
+        let heading = app.staticTexts["Message Info"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 5))
+        let window = app.windows.firstMatch.frame
+        sleep(1)
+        // Halfway: the sheet's top is in the lower half of the screen, and the message
+        // under it is usable.
+        XCTAssertGreaterThan(heading.frame.minY, window.height * 0.4)
+        app.buttons["Reply"].tap()
+        XCTAssertTrue(app.buttons["Replied"].waitForExistence(timeout: 5))
+        XCTAssertTrue(heading.exists)
+
+        let top = app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05))
+        heading.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: top)
+        sleep(1)
+        XCTAssertLessThan(heading.frame.minY, window.height * 0.3)
+    }
 }

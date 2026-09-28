@@ -124,5 +124,39 @@
             #expect(!presentation.isWanted)
             stack.close()
         }
+
+        @Test @available(tvOS, unavailable)
+        func aSheetStopsAtItsHeightsAndFollowsTheUsersDrag() throws {
+            let presentation = Presentation(
+                NodeScreen(Leaf()),
+                style: .sheet(heights: [.medium, .fraction(0.8), .large], usableBelow: .medium)
+            )
+            let (stack, _, shown, _) = try presenting(presentation)
+            presentation.showEnded(completed: true)
+            let sheet = try #require(shown.sheetPresentationController)
+            #expect(sheet.detents.count == 3)
+            #expect(sheet.prefersGrabberVisible)
+            #expect(sheet.selectedDetentIdentifier == .medium)
+            #expect(sheet.largestUndimmedDetentIdentifier == .medium)
+
+            presentation.height = .large
+            StateUpdates.flush()
+            #expect(sheet.selectedDetentIdentifier == .large)
+
+            sheet.selectedDetentIdentifier = .init("fraction.0.8")
+            let delegate = try #require(sheet.delegate as? UISheetPresentationControllerDelegate)
+            delegate.sheetPresentationControllerDidChangeSelectedDetentIdentifier?(sheet)
+            #expect(presentation.height == .fraction(0.8))
+            stack.close()
+        }
+
+        @Test
+        func aSheetWithHeightsCoversTheScreenOfATV() throws {
+            let presentation = Presentation(NodeScreen(Leaf()), style: .sheet(heights: [.medium]))
+            let (stack, _, shown, _) = try presenting(presentation)
+            let isTV = shown.traitCollection.userInterfaceIdiom == .tv
+            #expect((shown.modalPresentationStyle == .fullScreen) == isTV)
+            stack.close()
+        }
     }
 #endif

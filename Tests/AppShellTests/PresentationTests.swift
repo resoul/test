@@ -239,3 +239,36 @@ private final class AtOnce: StackPresenter {
         stack?.moveEnded(move.id, completed: true)
     }
 }
+
+@Test @MainActor
+func aSheetStopsAtItsHeightsOpeningAtTheFirst() {
+    #expect(PresentationStyle.sheet(heights: []).heights == [.large])
+    let twice = PresentationStyle.sheet(heights: [.medium, .large, .medium])
+    #expect(twice.heights == [.medium, .large])
+    #expect(PresentationStyle.sheet == .sheet(heights: [.large]))
+    #expect(PresentationStyle.fullScreen.heights.isEmpty)
+    let usable = PresentationStyle.sheet(heights: [.medium], usableBelow: .medium)
+    #expect(usable.usableBelow == .medium)
+    // Only one of its heights.
+    #expect(PresentationStyle.sheet(heights: [.medium], usableBelow: .large).usableBelow == nil)
+    #expect(PresentationStyle.sheet.usableBelow == nil)
+
+    let log = Log()
+    let presentation = Presentation(
+        Watched("share", log: log),
+        style: .sheet(heights: [.medium, .points(300), .large])
+    )
+    #expect(presentation.height == .medium)
+    presentation.height = .large
+    #expect(presentation.height == .large)
+    // Only its own heights.
+    presentation.height = .fraction(0.3)
+    #expect(presentation.height == .large)
+    presentation.userMoved(to: .points(300))
+    #expect(presentation.height == .points(300))
+
+    let whole = Presentation(Watched("player", log: log), style: .fullScreen)
+    #expect(whole.height == .large)
+    whole.height = .medium
+    #expect(whole.height == .large)
+}
