@@ -333,6 +333,46 @@
     }
 
     @Test @MainActor
+    func outOfEditingATapSelectsRowsThatStillSwipe() throws {
+        let inbox = Inbox()
+        defer { inbox.host.detach() }
+        inbox.table.allowsMultipleSelection = true
+        inbox.table.onSelectionChange = { selection in inbox.selections.append(selection) }
+        inbox.host.layoutIfNeeded()
+        let row = try #require(inbox.row(2))
+
+        inbox.tap(at: try #require(inbox.point(2)))
+        // The row shows it before a layout does.
+        #expect(row.cell.isSelected)
+        inbox.host.layoutIfNeeded()
+        inbox.tap(at: try #require(inbox.point(5)))
+        inbox.tap(at: try #require(inbox.point(2)))
+        inbox.host.layoutIfNeeded()
+        #expect(inbox.table.selection == [5])
+        #expect(inbox.selections == [[2], [2, 5], [5]])
+        // A tap selects instead of what it does otherwise, and no mark shows.
+        #expect(inbox.selected.isEmpty)
+        #expect(!row.cell.mark.isMounted)
+        let items = inbox.host.accessibilityItems()
+        #expect(items.first { $0.label == "Message 5" }?.traits.contains(.selected) == true)
+        #expect(items.first { $0.label == "Message 2" }?.traits.contains(.selected) == false)
+        let selected = try #require(inbox.row(5)).cell.appearance.background
+        #expect(selected != row.cell.appearance.background)
+
+        try inbox.swipe(1, by: -120)
+        #expect(inbox.row(1)?.position == -inbox.trailingWidth(1))
+
+        // Turned off, the selection stays but does not show, and a tap does what it did.
+        inbox.table.allowsMultipleSelection = false
+        inbox.host.layoutIfNeeded()
+        #expect(inbox.table.selection == [5])
+        #expect(inbox.row(5)?.cell.isSelected == false)
+        inbox.tap(at: try #require(inbox.point(3)))
+        #expect(inbox.selected == [3])
+        #expect(inbox.selections.count == 3)
+    }
+
+    @Test @MainActor
     func anEditedRowDoesNotSwipeAndOffersToMoveInstead() throws {
         let inbox = Inbox()
         defer { inbox.host.detach() }

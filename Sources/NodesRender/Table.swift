@@ -120,6 +120,12 @@
     /// VoiceOver offers the actions of a row as its element's actions. On a TV a row is
     /// selected, not swiped.
     ///
+    /// With `allowsMultipleSelection`, a tap on a row selects it or no longer does
+    /// (`selection`) instead of `onSelect`; selected rows show it, and still swipe.
+    ///
+    ///     inbox.allowsMultipleSelection = true
+    ///     inbox.onSelectionChange = { ids in model.selected = ids }
+    ///
     /// Edited (`isEditing`), rows do not swipe: with `onMove` each shows a handle at its
     /// trailing side that lifts it to be dragged to another place, and with
     /// `allowsMultipleSelectionDuringEditing` a mark at its leading side, and a tap selects
@@ -186,8 +192,19 @@
             didSet { setNeedsLayout() }
         }
 
+        /// Whether, out of editing, a tap on a row selects it or no longer does, instead of
+        /// `onSelect`, and each row shows whether it is selected. On a TV the remote then goes
+        /// to the rows, and its select button does what a tap does.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var allowsMultipleSelection = false {
+            didSet { setNeedsLayout() }
+        }
+
         /// The items selected, by their ids. A tap changes it and tells `onSelectionChange`;
         /// setting it tells nothing. The ids of items no longer in `sections` leave it.
+        /// Rows show it while a tap can change it: out of editing with
+        /// `allowsMultipleSelection`, while edited with `allowsMultipleSelectionDuringEditing`.
         ///
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public var selection: Set<Item.ID> = [] {
@@ -217,7 +234,8 @@
             didSet { setNeedsLayout() }
         }
 
-        /// What a tap on a row does. Without it, the remote of a TV does not go to the rows.
+        /// What a tap on a row does, unless it selects the row (`allowsMultipleSelection`).
+        /// Without either, the remote of a TV does not go to the rows.
         ///
         /// Ownership: the table keeps the closure; it must not keep the table. Isolation:
         /// MainActor. Errors: none. Cancellation: not applicable.
@@ -328,12 +346,14 @@
                     // Nothing is moved aside: a row kept from an earlier move shows in place.
                     row.appearance.offset = .zero
                 }
+                let id = item.id
                 row.show(
                     rowContent(item),
                     leading: leadingActions?(item) ?? [],
                     trailing: trailingActions?(item) ?? [],
-                    selects: onSelect != nil,
-                    select: { [weak self] in self?.onSelect?(item) },
+                    selects: onSelect != nil || allowsMultipleSelection,
+                    select: { [weak self] in self?.tapped(item) },
+                    isSelected: allowsMultipleSelection && selection.contains(id),
                     editing: isEditing ? editing(item) : nil
                 )
                 row.table = { [weak self] in self }
@@ -356,17 +376,30 @@
             return editing
         }
 
+        /// A tap on the row of `item`, out of editing.
+        private func tapped(_ item: Item) {
+            if allowsMultipleSelection {
+                toggle(item.id)
+            } else {
+                onSelect?(item)
+            }
+        }
+
         private func toggle(_ id: Item.ID) {
-            guard isEditing, allowsMultipleSelectionDuringEditing else { return }
+            guard isEditing ? allowsMultipleSelectionDuringEditing : allowsMultipleSelection
+            else { return }
 
             if selection.contains(id) {
                 selection.remove(id)
             } else {
                 selection.insert(id)
             }
-            // Its mark shows it at once; the layout that shows the rest may come later.
+            // The row shows it at once; the layout that shows the rest may come later.
             let row = mountedEntries(in: stack.items).first { $0.id == .row(id) }?.node
-            (row as? TableRow)?.cell.editing?.isSelected = selection.contains(id)
+            if let cell = (row as? TableRow)?.cell {
+                cell.editing?.isSelected = selection.contains(id)
+                cell.isSelected = selection.contains(id)
+            }
             onSelectionChange?(selection)
         }
 
@@ -894,12 +927,14 @@
             trailing: [SwipeAction],
             selects: Bool,
             select: @escaping @MainActor () -> Void,
+            isSelected: Bool = false,
             editing: RowEditing? = nil
         ) {
             if cell.content !== content {
                 cell.content = content
             }
             cell.editing = editing
+            cell.isSelected = editing.map { $0.marksSelection && $0.isSelected } ?? isSelected
             if let editing {
                 // Edited, the row does not swipe: its buttons go, and a tap selects it.
                 close()
@@ -1116,13 +1151,20 @@
             didSet {
                 mark.isSelected = editing?.isSelected ?? false
                 handle.onDrag = editing?.drag
-                if editing?.isSelected ?? false {
+                setNeedsLayout()
+            }
+        }
+        /// Whether the row shows it is selected: in its fill, and to assistive technologies.
+        var isSelected = false {
+            didSet {
+                guard isSelected != oldValue else { return }
+
+                if isSelected {
                     accessibility.traits.insert(.selected)
                 } else {
                     accessibility.traits.remove(.selected)
                 }
                 appearance.background = background(pressed: false)
-                setNeedsLayout()
             }
         }
         let mark = SelectionMark()
@@ -1168,7 +1210,7 @@
 
         private func background(pressed: Bool) -> Color {
             if pressed { return pressedFill }
-            return editing?.isSelected ?? false ? selectedFill : surface
+            return isSelected ? selectedFill : surface
         }
     }
 
