@@ -106,4 +106,30 @@ final class StackTests: XCTestCase {
         XCTAssertTrue(edit.waitForExistence(timeout: 5))
         XCTAssertFalse(edit.isEnabled)
     }
+
+    @MainActor
+    func testANewMessageIsASheetThatCancelAndASwipeDownClose() {
+        let app = launch()
+        let compose = app.navigationBars["Layout demo"].buttons["New Message"]
+        XCTAssertTrue(compose.waitForExistence(timeout: 20))
+        let heading = app.staticTexts["New Message"]
+        let gone = NSPredicate(format: "exists == false")
+
+        compose.tap()
+        XCTAssertTrue(heading.waitForExistence(timeout: 5))
+        app.buttons["Cancel"].tap()
+        wait(for: [expectation(for: gone, evaluatedWith: heading)], timeout: 5)
+
+        compose.tap()
+        XCTAssertTrue(heading.waitForExistence(timeout: 5))
+        let window = app.windows.firstMatch
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
+            .press(
+                forDuration: 0.1,
+                thenDragTo: window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95))
+            )
+        wait(for: [expectation(for: gone, evaluatedWith: heading)], timeout: 5)
+        // The stack under it stayed where it was.
+        XCTAssertTrue(app.navigationBars["Layout demo"].exists)
+    }
 }

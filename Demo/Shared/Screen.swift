@@ -1015,6 +1015,12 @@
             shortcut: Shortcut("e", [.command])
         )
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public static let newMessage = Command(
+            "newMessage",
+            title: "New Message",
+            shortcut: Shortcut("n", [.command])
+        )
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         public static let flagMessage = Command(
             "flagMessage",
             title: "Flag Message",
@@ -1073,6 +1079,39 @@
                 flag
                 body
                 FlexContainer(.row) { reply }
+            }
+            .gap(12)
+            .padding(24)
+        }
+    }
+
+    /// A new message, in a sheet over the inbox: Send and Cancel close it, as Escape, Menu on
+    /// the remote and a swipe down do.
+    @MainActor
+    final class ComposeNode: Node {
+        let heading = Text("New Message", style: TextStyle(size: 22, weight: .bold))
+        let body = Text(
+            "A sheet over the screen: its commands go to the window, not to the inbox under it.",
+            style: TextStyle(size: 15, colorRole: .secondaryText)
+        )
+        private(set) lazy var cancel: Button = Button("Cancel") { [weak self] in self?.onClose?() }
+        private(set) lazy var send: Button = Button("Send") { [weak self] in self?.onClose?() }
+        /// What Send and Cancel do.
+        var onClose: (@MainActor () -> Void)?
+
+        override func update() {
+            appearance.background = theme.color(.background)
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                heading
+                body
+                FlexContainer(.row) {
+                    cancel
+                    send
+                }
+                .gap(12)
             }
             .gap(12)
             .padding(24)
@@ -1142,6 +1181,8 @@
         ///
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public static let menu = Menu("Screen") {
+            Command.newMessage
+            Divider()
             Command.renameAda
             Command.backToTop
             Divider()
@@ -1159,11 +1200,15 @@
         public private(set) lazy var stack: Stack<DemoRoute> = {
             let home = screenNode
             let inbox = home.inbox
-            let stack = Stack(root: DemoRoute.home) { route in
+            let stack = Stack(root: DemoRoute.home) { [weak self] route in
                 switch route {
                 case .home:
                     let screen = NodeScreen(home, title: "Layout demo")
-                    screen.toolbar = [.editInbox]
+                    self?.homeScreen = screen
+                    screen.toolbar = [.newMessage, .editInbox]
+                    screen.handle(.newMessage) { [weak screen] in
+                        screen.map(DemoModel.compose(over:))
+                    }
                     return screen
                 case .message(let id):
                     let message = MessageNode(inbox?.mail(id))
@@ -1220,6 +1265,27 @@
             let messages = ids.split(separator: ",").compactMap { Int($0) }.map(DemoRoute.message)
             stack.setPath([.home] + messages)
         }
+
+        /// Shows a new message in a sheet over `screen`.
+        private static func compose(over screen: AppShell.Screen) {
+            let compose = ComposeNode()
+            let sheet = Presentation(NodeScreen(compose, title: "New Message"))
+            compose.onClose = { [weak sheet] in sheet?.dismiss() }
+            screen.present(sheet)
+        }
+
+        /// Opens a new message over the screen at launch, as ⌘N would — the UI tests start
+        /// there. Launch arguments: `OPEN_COMPOSE=1` in the environment.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public func openCompose(from environment: [String: String]) {
+            guard environment["OPEN_COMPOSE"] != nil else { return }
+
+            homeScreen?.perform(.newMessage)
+        }
+
+        /// The screen at the stack's root.
+        private weak var homeScreen: AppShell.Screen?
 
         /// Ada's Follow badge — for a focus request.
         ///

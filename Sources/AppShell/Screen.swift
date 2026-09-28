@@ -46,6 +46,18 @@ open class Screen: CommandResponder {
     /// The place the screen is in, while it is in one.
     weak var owner: AnyObject?
 
+    /// What the screen presents over itself, from `present(_:)` until it is gone.
+    ///
+    /// Ownership: kept by the screen. Isolation: MainActor. Errors: none. Cancellation:
+    /// `presentation.dismiss()`.
+    public internal(set) var presentation: Presentation?
+
+    /// What shows the screen's presentations: set by the adapter showing the screen. A
+    /// presentation asked for before waits for it.
+    package weak var presentationPresenter: (any PresentationPresenter)? {
+        didSet { presentation?.reconcile() }
+    }
+
     /// Only the screens of the layer and of its adapters derive from it: the adapters show
     /// each kind their own way.
     package init(title: String) {

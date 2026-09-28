@@ -39,12 +39,7 @@
         /// Ownership: returns a controller the caller keeps; it keeps the stack. Isolation:
         /// MainActor. Errors: none. Cancellation: `close()` on the stack.
         public func makeViewController() -> NSViewController {
-            if let existing = platformContainer as? StackViewController {
-                return existing
-            }
-            let controller = StackViewController(stack: self)
-            platformContainer = controller
-            return controller
+            (self as any PresentedStack).makeViewController()
         }
     }
 
@@ -62,6 +57,8 @@
         private var topWatch: Observer?
         /// The window's toolbar, while the stack is a window's content.
         private let toolbar = WindowToolbar(hasBack: true)
+        /// Shows what the stack's screens present, as sheets of its window.
+        let modalPresenter = ModalPresenter()
 
         /// Seconds a slide to the next screen takes.
         static let slideTime = 0.25
@@ -69,6 +66,7 @@
         init(stack: any PresentedStack) {
             self.stack = stack
             super.init(nibName: nil, bundle: nil)
+            modalPresenter.host = self
         }
 
         required init?(coder: NSCoder) {
@@ -100,6 +98,7 @@
             super.viewDidAppear()
             guard let window = view.window else { return }
 
+            modalPresenter.hostAppeared()
             if window.contentViewController === self {
                 toolbar.attach(to: window)
             }
@@ -250,6 +249,7 @@
                 return nil
             }
             controllers[entry] = controller
+            screen.presentationPresenter = modalPresenter
             return controller
         }
 
@@ -306,6 +306,8 @@
         let nodeView: NodeNSView
         private var toolbar: WindowToolbar?
         private var toolbarWatch: Observer?
+        /// Shows what the screen presents while it is not in a stack.
+        let modalPresenter = ModalPresenter()
 
         init(_ screen: NodeScreen) {
             self.screen = screen
@@ -313,6 +315,7 @@
             super.init(nibName: nil, bundle: nil)
             nodeView.host.outerResponder = screen
             nodeView.host.solvesInBackground = true
+            modalPresenter.host = self
         }
 
         required init?(coder: NSCoder) {
@@ -325,6 +328,7 @@
 
         override func viewDidAppear() {
             super.viewDidAppear()
+            modalPresenter.hostAppeared()
             guard let window = view.window, window.contentViewController === self else { return }
 
             if toolbar == nil {

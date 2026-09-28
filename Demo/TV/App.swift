@@ -38,6 +38,7 @@ struct LayoutDemo: Application {
             badge.host?.requestFocus(badge.id)
         }
         model.openMessages(from: ProcessInfo.processInfo.environment)
+        model.openCompose(from: ProcessInfo.processInfo.environment)
     }
 
     func open(_ request: OpenRequest) -> OpenResult {
