@@ -532,6 +532,11 @@
             }
         }
 
+        /// Flags the message `id`, or takes its flag away.
+        func toggleFlag(_ id: Int) {
+            change(id) { $0.isFlagged.toggle() }
+        }
+
         private func change(_ id: Int, _ edit: (inout Mail) -> Void) {
             guard let index = mails.firstIndex(where: { $0.id == id }) else { return }
 
@@ -1009,6 +1014,12 @@
             title: "Edit Inbox",
             shortcut: Shortcut("e", [.command])
         )
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public static let flagMessage = Command(
+            "flagMessage",
+            title: "Flag Message",
+            shortcut: Shortcut("l", [.command, .shift])
+        )
     }
 
     /// Where the demo's navigation goes: the screen, and a message of its inbox.
@@ -1032,6 +1043,8 @@
                 + "remote or Command-[.",
             style: TextStyle(size: 15, colorRole: .secondaryText)
         )
+        /// "Flagged" while the message is.
+        let flag = Text("", style: TextStyle(size: 15, weight: .semibold))
         private(set) lazy var reply: Button = Button("Reply") { [weak self] in
             self?.reply.title = "Replied"
             self?.setNeedsLayout()
@@ -1040,6 +1053,13 @@
         init(_ mail: Mail?) {
             sender = Text(mail?.sender ?? "", style: TextStyle(size: 22, weight: .bold))
             subject = Text(mail?.subject ?? "The message is gone", style: TextStyle(size: 17))
+            super.init()
+            showFlag(mail?.isFlagged ?? false)
+        }
+
+        func showFlag(_ isFlagged: Bool) {
+            flag.text = isFlagged ? "Flagged" : "Not flagged"
+            setNeedsLayout()
         }
 
         override func update() {
@@ -1050,6 +1070,7 @@
             FlexContainer(.column) {
                 sender
                 subject
+                flag
                 body
                 FlexContainer(.row) { reply }
             }
@@ -1125,10 +1146,13 @@
             Command.backToTop
             Divider()
             Command.editInbox
+            Command.flagMessage
         }
 
         /// The demo's navigation: the screen at its root, and a message on top of it when one
-        /// is opened in the inbox.
+        /// is opened in the inbox. The inbox's toolbar edits it — enabled once a message is
+        /// pressed or focused; a message's flags it, with a checkmark in the menu while it is
+        /// flagged.
         ///
         /// Ownership: owned by the model. Isolation: MainActor. Errors: none. Cancellation:
         /// not applicable.
@@ -1138,9 +1162,22 @@
             let stack = Stack(root: DemoRoute.home) { route in
                 switch route {
                 case .home:
-                    NodeScreen(home, title: "Layout demo")
+                    let screen = NodeScreen(home, title: "Layout demo")
+                    screen.toolbar = [.editInbox]
+                    return screen
                 case .message(let id):
-                    NodeScreen(MessageNode(inbox?.mail(id)), title: inbox?.mail(id)?.sender ?? "")
+                    let message = MessageNode(inbox?.mail(id))
+                    let screen = NodeScreen(message, title: inbox?.mail(id)?.sender ?? "")
+                    screen.toolbar = [.flagMessage]
+                    screen.handle(
+                        .flagMessage,
+                        isEnabled: { inbox?.mail(id) != nil },
+                        isOn: { inbox?.mail(id)?.isFlagged ?? false }
+                    ) { [weak message] in
+                        inbox?.toggleFlag(id)
+                        message?.showFlag(inbox?.mail(id)?.isFlagged ?? false)
+                    }
+                    return screen
                 }
             }
             inbox?.onOpen = { [weak stack] mail in

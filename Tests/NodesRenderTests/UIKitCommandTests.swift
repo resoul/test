@@ -177,4 +177,21 @@
         #expect(!(archive is UIKeyCommand))
         #expect((groups[1].children.last as? UIMenu)?.title == "More")
     }
+
+    @Test @MainActor @available(tvOS, unavailable)
+    func aCommandThatIsOnShowsACheckmarkInItsMenu() throws {
+        var on = false
+        let row = Row()
+        row.handle(.archive, isOn: { on }) {}
+        let view = NodeView(root: row)
+        let menu = UIMenu(Menu("Message") { Command.archive })
+        let archive = try #require(menu.children.first as? UICommand)
+
+        view.validate(archive)
+        #expect(archive.state == .off)
+        on = true
+        view.validate(archive)
+        #expect(archive.state == .on)
+        view.host.detach()
+    }
 #endif

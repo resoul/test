@@ -1,4 +1,5 @@
 import LayoutCore
+import StateCore
 import Testing
 
 @testable import Nodes
@@ -220,4 +221,58 @@ func aResponderGoneFromAroundEndsTheChain() {
     #expect(inner.outer == nil)
     #expect(!inner.perform(.back))
     #expect(backs == 1)
+}
+
+@Test @MainActor
+func aCommandIsOnAsTheHandlerThatWouldCarryItOutSays() {
+    let screen = Screen()
+    let host = host(screen)
+    var listCan = false
+    let outside = CommandResponder()
+    host.outerResponder = outside
+    screen.list.handle(.flag, isEnabled: { listCan }, isOn: { true }) {}
+    screen.handle(.flag, isOn: { false }) {}
+    host.focus(screen.list.first.id)
+
+    // The screen would carry it out, and it is off there.
+    #expect(!host.isOn(.flag))
+    listCan = true
+    #expect(host.isOn(.flag))
+    // While nothing can, the nearest handler says.
+    screen.removeHandler(for: .flag)
+    listCan = false
+    #expect(!host.canPerform(.flag))
+    #expect(host.isOn(.flag))
+    // A command not turned on and off, or not handled, is off.
+    screen.handle(.archive) {}
+    #expect(!host.isOn(.archive))
+    outside.handle(.archive, isOn: { true }) {}
+    #expect(!host.isOn(.archive))
+    screen.removeHandler(for: .archive)
+    #expect(host.isOn(.archive))
+    #expect(outside.isOn(.archive))
+    host.detach()
+}
+
+@Test @MainActor
+func whatACommandsStateDependsOnIsWatchedWithTheFocus() {
+    let screen = Screen()
+    let host = host(screen)
+    let selected = State(false)
+    screen.list.first.handle(.flag, isEnabled: { selected.value }) {}
+    var changes = 0
+    let watch = Observer { changes += 1 }
+    // From the root, the row's handler is not on the way.
+    #expect(!watch.track { host.canPerform(.flag) })
+    host.focus(screen.list.first.id)
+    StateUpdates.flush()
+    #expect(changes == 1)
+
+    #expect(!watch.track { host.canPerform(.flag) })
+    selected.value = true
+    StateUpdates.flush()
+    #expect(changes == 2)
+    #expect(watch.track { host.canPerform(.flag) })
+    watch.cancel()
+    host.detach()
 }

@@ -57,8 +57,10 @@
         let stack: any PresentedStack
         /// The controller of each entry, kept while the stack has the entry.
         private var controllers: [StackEntryID: UIViewController] = [:]
-        /// The title each controller shows, watched on its screen.
-        private var titles: [StackEntryID: Observer] = [:]
+        /// The title and the toolbar each controller shows, watched on its screen.
+        private var watches: [StackEntryID: Observer] = [:]
+        /// The buttons of each screen's toolbar commands, with the commands they carry out.
+        private var buttons: [StackEntryID: [(command: Command, item: UIBarButtonItem)]] = [:]
         /// A move of the stack being shown.
         private var applying: StackMove?
         /// The user going back, until the platform's move ends.
@@ -170,6 +172,18 @@
 
         /// After a move of the platform, what shows is what the stack showed last: a move the
         /// stack did not follow is put back.
+        /// A screen about to show brings its buttons up to date: whether a command can be
+        /// carried out may depend on what nothing watches.
+        func navigationController(
+            _ navigationController: UINavigationController,
+            willShow viewController: UIViewController,
+            animated: Bool
+        ) {
+            if let entry = controllers.first(where: { $0.value === viewController })?.key {
+                showTop(of: entry)
+            }
+        }
+
         func navigationController(
             _ navigationController: UINavigationController,
             didShow viewController: UIViewController,
@@ -204,18 +218,41 @@
                 return nil
             }
             controllers[entry] = controller
-            let title = Observer { [weak self] in self?.showTitle(of: entry) }
-            titles[entry] = title
-            showTitle(of: entry)
+            watches[entry] = Observer { [weak self] in self?.showTop(of: entry) }
+            showTop(of: entry)
             return controller
         }
 
-        private func showTitle(of entry: StackEntryID) {
-            guard let screen = stack.screen(for: entry), let title = titles[entry] else { return }
+        /// Shows the screen's title, and its toolbar's commands as buttons at the trailing
+        /// end of the navigation bar, enabled as the commands are, as they change. A TV's navigation bar shows no buttons: a screen there shows its commands
+        /// among its own nodes.
+        private func showTop(of entry: StackEntryID) {
+            guard let screen = stack.screen(for: entry), let watch = watches[entry],
+                let controller = controllers[entry]
+            else { return }
 
-            let text = title.track { screen.title }
+            let target: any CommandTarget =
+                (controller as? ScreenViewController)?.nodeView.host ?? screen
+            let showsButtons = traitCollection.userInterfaceIdiom != .tv
+            let text = watch.track {
+                let text = screen.title
+                guard showsButtons else { return text }
+
+                let commands = screen.toolbar
+                var shown = buttons[entry] ?? []
+                if shown.map(\.command) != commands {
+                    shown = commands.map { ($0, UIBarButtonItem($0, target: target)) }
+                    buttons[entry] = shown
+                    controller.navigationItem.rightBarButtonItems =
+                        shown.isEmpty ? nil : shown.reversed().map(\.item)
+                }
+                for (command, item) in shown {
+                    item.update(command, for: target)
+                }
+                return text
+            }
             if !text.isEmpty {
-                controllers[entry]?.navigationItem.title = text
+                controller.navigationItem.title = text
             }
         }
 
@@ -224,8 +261,9 @@
         private func letGo() {
             for (entry, controller) in controllers where stack.screen(for: entry) == nil {
                 controllers[entry] = nil
-                titles[entry]?.cancel()
-                titles[entry] = nil
+                watches[entry]?.cancel()
+                watches[entry] = nil
+                buttons[entry] = nil
                 (controller as? ScreenViewController)?.nodeView.host.detach()
             }
         }

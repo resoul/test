@@ -88,4 +88,22 @@ final class StackTests: XCTestCase {
         app.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(app.navigationBars["Layout demo"].waitForExistence(timeout: 5))
     }
+
+    @MainActor
+    func testAToolbarCommandIsAButtonOfTheNavigationBar() {
+        let app = launch(opening: "0")
+        XCTAssertTrue(app.staticTexts["Not flagged"].waitForExistence(timeout: 20))
+
+        app.navigationBars.buttons["Flag Message"].tap()
+        XCTAssertTrue(app.staticTexts["Flagged"].waitForExistence(timeout: 5))
+        app.navigationBars.buttons["Flag Message"].tap()
+        XCTAssertTrue(app.staticTexts["Not flagged"].waitForExistence(timeout: 5))
+
+        // The inbox's command is enabled only from inside the inbox: nothing there is
+        // pressed yet.
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        let edit = app.navigationBars["Layout demo"].buttons["Edit Inbox"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 5))
+        XCTAssertFalse(edit.isEnabled)
+    }
 }
