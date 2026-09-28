@@ -143,8 +143,12 @@ final class StackTests: XCTestCase {
         XCTAssertTrue(heading.waitForExistence(timeout: 5))
         let window = app.windows.firstMatch.frame
         sleep(1)
-        // Halfway: the sheet's top is in the lower half of the screen.
+        // Halfway: the sheet's top is in the lower half of the screen, and the message
+        // under it is usable.
         XCTAssertGreaterThan(heading.frame.minY, window.height * 0.4)
+        app.buttons["Reply"].tap()
+        XCTAssertTrue(app.buttons["Replied"].waitForExistence(timeout: 5))
+        XCTAssertTrue(heading.exists)
 
         let top = app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05))
         heading.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))

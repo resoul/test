@@ -235,6 +235,7 @@
             sheet.detents = heights.map(\.detent)
             sheet.prefersGrabberVisible = heights.count > 1
             sheet.selectedDetentIdentifier = presentation.height.identifier
+            sheet.largestUndimmedDetentIdentifier = presentation.style.usableBelow?.identifier
         }
 
         func show(_ height: SheetHeight) {

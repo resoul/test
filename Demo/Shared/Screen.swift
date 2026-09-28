@@ -1125,6 +1125,7 @@
     }
 
     /// Who sent a message and when, in a sheet that opens halfway and is drawn up to full.
+    /// Halfway, the message under it stays usable: Reply works.
     @MainActor
     final class MessageInfoNode: Node {
         let heading = Text("Message Info", style: TextStyle(size: 22, weight: .bold))
@@ -1256,7 +1257,7 @@
                     screen.handle(.messageInfo) { [weak screen] in
                         let info = Presentation(
                             NodeScreen(MessageInfoNode(inbox?.mail(id)), title: "Message Info"),
-                            style: .sheet(heights: [.medium, .large])
+                            style: .sheet(heights: [.medium, .large], usableBelow: .medium)
                         )
                         screen?.present(info)
                     }

@@ -247,6 +247,11 @@ func aSheetStopsAtItsHeightsOpeningAtTheFirst() {
     #expect(twice.heights == [.medium, .large])
     #expect(PresentationStyle.sheet == .sheet(heights: [.large]))
     #expect(PresentationStyle.fullScreen.heights.isEmpty)
+    let usable = PresentationStyle.sheet(heights: [.medium], usableBelow: .medium)
+    #expect(usable.usableBelow == .medium)
+    // Only one of its heights.
+    #expect(PresentationStyle.sheet(heights: [.medium], usableBelow: .large).usableBelow == nil)
+    #expect(PresentationStyle.sheet.usableBelow == nil)
 
     let log = Log()
     let presentation = Presentation(

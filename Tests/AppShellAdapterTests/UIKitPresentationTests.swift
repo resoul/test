@@ -129,7 +129,7 @@
         func aSheetStopsAtItsHeightsAndFollowsTheUsersDrag() throws {
             let presentation = Presentation(
                 NodeScreen(Leaf()),
-                style: .sheet(heights: [.medium, .fraction(0.8), .large])
+                style: .sheet(heights: [.medium, .fraction(0.8), .large], usableBelow: .medium)
             )
             let (stack, _, shown, _) = try presenting(presentation)
             presentation.showEnded(completed: true)
@@ -137,6 +137,7 @@
             #expect(sheet.detents.count == 3)
             #expect(sheet.prefersGrabberVisible)
             #expect(sheet.selectedDetentIdentifier == .medium)
+            #expect(sheet.largestUndimmedDetentIdentifier == .medium)
 
             presentation.height = .large
             StateUpdates.flush()

@@ -22,6 +22,14 @@ public struct PresentationStyle: Hashable, Sendable {
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public let heights: [SheetHeight]
 
+    /// The largest height at which the screen under the sheet stays usable — not dimmed,
+    /// taking touches, and its commands where the user is — as the map under a sheet of
+    /// places does; `nil` when the screen under is covered at every height. On iPhone and
+    /// iPad only.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public let usableBelow: SheetHeight?
+
     /// A sheet over the screen, which shows around it: a page sheet on iPhone and iPad, a
     /// sheet of the window on a Mac. A TV shows it over the whole screen.
     ///
@@ -35,20 +43,32 @@ public struct PresentationStyle: Hashable, Sendable {
 
     /// A sheet that stops at `heights` — the user drags it from one to another by its
     /// grabber, which shows while there are two or more. It opens at the first. No heights
-    /// is `.large`; a height given twice counts once.
+    /// is `.large`; a height given twice counts once. Up to `usableBelow`, one of the
+    /// heights, the screen under it stays usable; a height not among them counts as none.
+    ///
+    ///     .sheet(heights: [.fraction(0.2), .medium, .large], usableBelow: .medium)
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public static func sheet(heights: [SheetHeight]) -> PresentationStyle {
+    public static func sheet(
+        heights: [SheetHeight],
+        usableBelow: SheetHeight? = nil
+    ) -> PresentationStyle {
         var unique: [SheetHeight] = []
         for height in heights where !unique.contains(height) {
             unique.append(height)
         }
-        return PresentationStyle(coversWindow: false, heights: unique.isEmpty ? [.large] : unique)
+        let all = unique.isEmpty ? [SheetHeight.large] : unique
+        return PresentationStyle(
+            coversWindow: false,
+            heights: all,
+            usableBelow: usableBelow.flatMap { all.contains($0) ? $0 : nil }
+        )
     }
 
-    private init(coversWindow: Bool, heights: [SheetHeight]) {
+    private init(coversWindow: Bool, heights: [SheetHeight], usableBelow: SheetHeight? = nil) {
         self.coversWindow = coversWindow
         self.heights = heights
+        self.usableBelow = usableBelow
     }
 }
 
@@ -106,7 +126,9 @@ public protocol PresentationPresenter: AnyObject {
 /// It is not an entry of the stack under it: the stack's path stays as it was, and a stack
 /// inside the presentation is a stack of its own. While it shows, the commands of its
 /// content go on to the presentation and then to the window around — not to the screen or
-/// the stack under it. The user closes it with Escape (`Command.cancel`), Menu on the remote
+/// the stack under it. A sheet whose style leaves the screen under usable
+/// (`PresentationStyle.usableBelow`) lets the user work there too: the commands then go
+/// from where the user is. The user closes it with Escape (`Command.cancel`), Menu on the remote
 /// (`Command.back`, when the content does not go back itself) or a swipe down of a sheet —
 /// while `isDismissible`; a swipe let go early leaves it as it was. `dismiss()` closes it
 /// always.
