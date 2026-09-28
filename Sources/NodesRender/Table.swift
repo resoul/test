@@ -829,6 +829,14 @@
             }
         }
 
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func shownChanged(_ isShown: Bool) {
+            // Not shown, nothing is drawn moving either.
+            if !isShown {
+                endMoving()
+            }
+        }
+
         /// Puts every node drawn moved back, at once: the rows changed under them.
         private func endMoving() {
             if let lift {

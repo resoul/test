@@ -74,6 +74,8 @@
         public init(root: Node) {
             host = NodeHost(root: root, size: LayoutSize(width: 0, height: 0))
             super.init(frame: .zero)
+            // Out of a window, the tree does not show.
+            host.isShown = false
             contentLayer.anchorPoint = .zero
             layer.addSublayer(contentLayer)
             isAccessibilityElement = false
@@ -531,6 +533,10 @@
         /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
         public override var canBecomeFirstResponder: Bool { usesFocus || host.handlesCommands }
 
+        /// In a window, and not hidden, the tree shows (`NodeHost.isShown`): a screen under the
+        /// next one in a navigation controller, or in a tab not chosen, is taken out of the
+        /// window, and its nodes stop their work for showing until it comes back.
+        ///
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func didMoveToWindow() {
             super.didMoveToWindow()
@@ -538,6 +544,19 @@
                 becomeFirstResponder()
             }
             updateConditions()
+            updateShown()
+        }
+
+        /// Hidden, the tree does not show. Only the view's own flag counts: UIKit does not tell
+        /// a view that one around it was hidden.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public override var isHidden: Bool {
+            didSet { updateShown() }
+        }
+
+        private func updateShown() {
+            host.isShown = window != nil && !isHidden
         }
 
         /// Takes the system's settings into the host's conditions: the interface style,

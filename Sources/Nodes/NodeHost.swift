@@ -140,6 +140,27 @@ public final class NodeHost {
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public var solvesInBackground = false
 
+    /// Whether the tree shows: the adapter sets it — `true` while its view is in a window and
+    /// not hidden. It is not whether the nodes are mounted: a screen under the next one in a
+    /// navigation stack, or in a tab not chosen, keeps its tree, and its nodes stop their work
+    /// for showing (`Node.shownChanged`) until it shows again. It is not whether the window
+    /// is active either. A host without an adapter shows.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var isShown = true {
+        didSet {
+            guard isShown != oldValue else { return }
+
+            for node in mounted.values {
+                node.setShown(isShown)
+            }
+            updateScreen()
+            if isShown {
+                setNeedsRender()
+            }
+        }
+    }
+
     /// The focused node, or `nil`. The platform's focus system decides where focus goes; the
     /// adapter reports it with `focus(_:)`.
     ///
@@ -1545,7 +1566,7 @@ public final class NodeHost {
             node.unmount()
         }
         for (id, node) in present {
-            node.mount(in: parent[id], subnodes: children[id] ?? [])
+            node.mount(in: parent[id], subnodes: children[id] ?? [], shown: isShown)
         }
         mounted = present
         viewportDependents = dependents

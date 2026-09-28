@@ -55,6 +55,8 @@
         public init(root: Node) {
             host = NodeHost(root: root, size: LayoutSize(width: 0, height: 0))
             super.init(frame: .zero)
+            // Out of a window, the tree does not show.
+            host.isShown = false
             hostedLayer.isGeometryFlipped = true
             contentLayer.anchorPoint = .zero
             hostedLayer.addSublayer(contentLayer)
@@ -364,6 +366,32 @@
                 width: NSView.noIntrinsicMetric,
                 height: host.fittingSize(width: width).height * factor
             )
+        }
+
+        /// In a window, and neither the view nor one around it hidden, the tree shows
+        /// (`NodeHost.isShown`): a view controller taken out of the window, or a tab not chosen,
+        /// stops its nodes' work for showing until it comes back.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            updateShown()
+        }
+
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func viewDidHide() {
+            super.viewDidHide()
+            updateShown()
+        }
+
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func viewDidUnhide() {
+            super.viewDidUnhide()
+            updateShown()
+        }
+
+        private func updateShown() {
+            host.isShown = window != nil && !isHiddenOrHasHiddenAncestor
         }
 
         /// Follows the window's appearance, light or dark.

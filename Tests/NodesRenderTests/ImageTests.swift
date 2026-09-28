@@ -923,6 +923,40 @@
     }
 
     @Test @MainActor
+    func anImageWhoseTreeStopsShowingReleasesPixelsAndGetsThemBack() async throws {
+        let pipeline = ImagePipeline(previewPixelDimension: 64)
+        let image = Image(
+            source: .data(try encodedImage(width: 400, height: 200)),
+            pipeline: pipeline
+        )
+        try await loaded(image)
+        let shelf = Shelf(image)
+        let host = NodeHost(root: shelf, size: LayoutSize(width: 600, height: 600))
+        defer { host.detach() }
+        let renderer = LayerRenderer()
+        host.layoutIfNeeded()
+        renderer.render(shelf, in: CALayer())
+        for _ in 0..<100 where image.decodedPixelSize?.width != 400 {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(image.decodedPixelSize?.width == 400)
+
+        // A screen under the next one: the tree stays, the pixels go.
+        host.isShown = false
+        #expect(image.isMounted)
+        #expect(image.decodedPixelSize == nil)
+        #expect(image.pixelSize == LayoutSize(width: 400, height: 200))
+
+        host.isShown = true
+        #expect(host.needsRender)
+        renderer.render(shelf, in: CALayer())
+        for _ in 0..<100 where image.decodedPixelSize?.width != 400 {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(image.decodedPixelSize?.width == 400)
+    }
+
+    @Test @MainActor
     func imageLeavingTheTreeCancelsItsDownloadAndResumesOnReturn() async throws {
         let directory = temporaryCache()
         defer { try? FileManager.default.removeItem(at: directory) }
