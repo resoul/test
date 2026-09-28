@@ -158,5 +158,38 @@
             #expect((shown.modalPresentationStyle == .fullScreen) == isTV)
             stack.close()
         }
+
+        @Test
+        func anAlertIsAnAlertControllerWithItsActions() throws {
+            let stack = Stack(root: Route.inbox) { _ in NodeScreen(Leaf(), title: "Inbox") }
+            let controller = stack.makeViewController()
+            let first = window(showing: controller)
+            let inbox = try #require(stack.screen(for: stack.presentedEntries[0]))
+            let alert = Alert("Delete the message?", message: "It cannot be undone.") {
+                AlertAction("Delete", role: .destructive)
+                AlertAction.cancel
+            }
+
+            #expect(inbox.present(alert) == .accepted)
+            let shown = try #require(controller.presentedViewController as? UIAlertController)
+            #expect(shown.title == "Delete the message?")
+            #expect(shown.message == "It cannot be undone.")
+            #expect(shown.preferredStyle == .alert)
+            #expect(shown.actions.map(\.style) == [.destructive, .cancel])
+            _ = first
+            stack.close()
+
+            let other = Stack(root: Route.inbox) { _ in NodeScreen(Leaf(), title: "Inbox") }
+            let otherController = other.makeViewController()
+            let otherWindow = window(showing: otherController)
+            let root = try #require(other.screen(for: other.presentedEntries[0]))
+            root.present(Alert("Move to", style: .actions) { AlertAction("Archive") })
+            let actions = try #require(
+                otherController.presentedViewController as? UIAlertController
+            )
+            #expect(actions.preferredStyle == .actionSheet)
+            _ = otherWindow
+            other.close()
+        }
     }
 #endif

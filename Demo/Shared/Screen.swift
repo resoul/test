@@ -525,7 +525,8 @@
             }
         }
 
-        private func delete(_ id: Int) {
+        /// Deletes the message `id`.
+        func delete(_ id: Int) {
             withAnimation(.easeInOut(duration: 0.3)) {
                 mails.removeAll { $0.id == id }
                 show()
@@ -1021,6 +1022,12 @@
             shortcut: Shortcut("n", [.command])
         )
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public static let deleteMessage = Command(
+            "deleteMessage",
+            title: "Delete Message",
+            shortcut: Shortcut(.delete, [.command])
+        )
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         public static let messageInfo = Command(
             "messageInfo",
             title: "Message Info",
@@ -1061,6 +1068,10 @@
             self?.reply.title = "Replied"
             self?.setNeedsLayout()
         }
+        /// Asks whether to delete the message (`Command.deleteMessage`).
+        private(set) lazy var delete: Button = Button("Delete") { [weak self] in
+            self?.host?.perform(.deleteMessage)
+        }
 
         init(_ mail: Mail?) {
             sender = Text(mail?.sender ?? "", style: TextStyle(size: 22, weight: .bold))
@@ -1084,7 +1095,11 @@
                 subject
                 flag
                 body
-                FlexContainer(.row) { reply }
+                FlexContainer(.row) {
+                    reply
+                    delete
+                }
+                .gap(12)
             }
             .gap(12)
             .padding(24)
@@ -1228,6 +1243,7 @@
             Command.editInbox
             Command.messageInfo
             Command.flagMessage
+            Command.deleteMessage
         }
 
         /// The demo's navigation: the screen at its root, and a message on top of it when one
@@ -1254,6 +1270,21 @@
                     let message = MessageNode(inbox?.mail(id))
                     let screen = NodeScreen(message, title: inbox?.mail(id)?.sender ?? "")
                     screen.toolbar = [.messageInfo, .flagMessage]
+                    screen.handle(.deleteMessage, isEnabled: { inbox?.mail(id) != nil }) {
+                        [weak self, weak screen] in
+                        let alert = Alert("Delete the message?", message: "It cannot be undone.") {
+                            AlertAction("Delete", role: .destructive) {
+                                inbox?.delete(id)
+                                self?.stack.pop()
+                            }
+                            AlertAction.cancel
+                        }
+                        screen?.present(alert)
+                    }
+                    if self?.asksToDelete == true {
+                        self?.asksToDelete = false
+                        screen.perform(.deleteMessage)
+                    }
                     screen.handle(.messageInfo) { [weak screen] in
                         let info = Presentation(
                             NodeScreen(MessageInfoNode(inbox?.mail(id)), title: "Message Info"),
@@ -1330,6 +1361,18 @@
 
             homeScreen?.perform(.newMessage)
         }
+
+        /// Opens the messages of `OPEN_MESSAGES` asking whether to delete the top one, as its
+        /// Delete button would — the UI tests start there. Launch arguments: `ASK_DELETE=1`
+        /// in the environment, before `openMessages(from:)`.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public func askToDelete(from environment: [String: String]) {
+            asksToDelete = environment["ASK_DELETE"] != nil
+        }
+
+        /// Whether the next message opened asks whether to delete it.
+        private var asksToDelete = false
 
         /// The screen at the stack's root.
         private weak var homeScreen: AppShell.Screen?

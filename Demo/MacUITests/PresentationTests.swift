@@ -25,4 +25,29 @@ final class PresentationTests: XCTestCase {
         app.sheets.buttons["Send"].click()
         wait(for: [expectation(for: gone, evaluatedWith: heading)], timeout: 5)
     }
+
+    @MainActor
+    func testAnAlertIsASheetThatEscapeCancelsAndDeleteDoes() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["OPEN_MESSAGES"] = "0"
+        app.launch()
+        let subject = app.staticTexts["Notes on the Analytical Engine"]
+        XCTAssertTrue(subject.waitForExistence(timeout: 20))
+        let title = app.sheets.staticTexts["Delete the message?"]
+        let gone = NSPredicate(format: "exists == false")
+
+        app.buttons["Delete"].firstMatch.click()
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        app.typeKey(.escape, modifierFlags: [])
+        wait(for: [expectation(for: gone, evaluatedWith: title)], timeout: 5)
+        XCTAssertTrue(subject.exists)
+
+        app.buttons["Delete"].firstMatch.click()
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        app.sheets.buttons["Delete"].click()
+        XCTAssertTrue(
+            app.staticTexts["Nodes, text, state and a breakpoint"].waitForExistence(timeout: 5)
+        )
+    }
 }

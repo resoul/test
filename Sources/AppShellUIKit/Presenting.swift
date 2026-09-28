@@ -8,7 +8,7 @@
     /// The controller showing a window's content, or a presentation's: a stack's navigation
     /// controller, a screen of nodes, or a screen's own controller of UIKit.
     @MainActor
-    func contentController(for content: any SceneContent) -> UIViewController {
+    func contentController(for content: CommandResponder) -> UIViewController {
         if let stack = content as? any PresentedStack {
             return stack.makeViewController()
         }
@@ -46,7 +46,8 @@
         weak var host: UIViewController?
         /// Asked for while the host was out of a window: shown when it appears.
         private var waiting: [Presentation] = []
-        private var containers: [ObjectIdentifier: PresentedViewController] = [:]
+        /// The controller shown for each presentation: its container, or an alert.
+        private var containers: [ObjectIdentifier: UIViewController] = [:]
         /// Called when a presentation is gone: the host takes the keyboard back.
         var onHidden: (@MainActor () -> Void)?
 
@@ -55,12 +56,30 @@
                 waiting.append(presentation)
                 return
             }
+            // What the host presented is on its way out — an alert whose button was chosen,
+            // presenting what the button does: this one shows once it is gone.
+            if let leaving = host.presentedViewController, leaving.isBeingDismissed,
+                let coordinator = leaving.transitionCoordinator
+            {
+                coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+                    self?.show(presentation)
+                }
+                return
+            }
             // UIKit shows one presentation over a controller.
             guard host.presentedViewController == nil else {
                 presentation.showEnded(completed: false)
                 return
             }
 
+            if let alert = presentation.content as? Alert {
+                let controller = alertController(for: alert, over: host)
+                containers[ObjectIdentifier(presentation)] = controller
+                host.present(controller, animated: true) {
+                    presentation.showEnded(completed: true)
+                }
+                return
+            }
             let container = PresentedViewController(presentation)
             containers[ObjectIdentifier(presentation)] = container
             container.modalPresentationStyle =
@@ -102,9 +121,39 @@
         }
 
         private func gone(_ presentation: Presentation) {
-            containers[ObjectIdentifier(presentation)]?.letGo()
+            (containers[ObjectIdentifier(presentation)] as? PresentedViewController)?.letGo()
             containers[ObjectIdentifier(presentation)] = nil
             onHidden?()
+        }
+
+        /// An alert controller for `alert`: choosing a button closes it by UIKit, and the
+        /// alert learns which. A list of actions on iPad points at the middle of `host`.
+        private func alertController(for alert: Alert, over host: UIViewController)
+            -> UIAlertController
+        {
+            let controller = UIAlertController(
+                title: alert.title,
+                message: alert.message,
+                preferredStyle: alert.style == .actions ? .actionSheet : .alert
+            )
+            for (index, action) in alert.actions.enumerated() {
+                let style: UIAlertAction.Style =
+                    switch action.role {
+                    case .normal: .default
+                    case .cancel: .cancel
+                    case .destructive: .destructive
+                    }
+                controller.addAction(
+                    UIAlertAction(title: action.title, style: style) { [weak self, weak alert] _ in
+                        guard let alert, let presentation = alert.presentation else { return }
+
+                        self?.gone(presentation)
+                        alert.choose(index)
+                    }
+                )
+            }
+            (controller as? any PopoverAnchoring)?.anchor(in: host.view)
+            return controller
         }
 
         private func presentation(of controller: UIPresentationController) -> Presentation? {
@@ -294,6 +343,30 @@
                     context.maximumDetentValue * min(max(fraction, 0), 1)
                 }
             }
+        }
+    }
+
+    /// Where a popover points. A TV has no popovers: there the conformance is unavailable,
+    /// and a cast to it finds none.
+    @MainActor
+    protocol PopoverAnchoring {
+        /// Points the popover at the middle of `view`, without an arrow.
+        func anchor(in view: UIView)
+    }
+
+    @available(tvOS, unavailable)
+    extension UIAlertController: PopoverAnchoring {
+        func anchor(in view: UIView) {
+            guard let popover = popoverPresentationController else { return }
+
+            popover.sourceView = view
+            popover.sourceRect = CGRect(
+                x: view.bounds.midX,
+                y: view.bounds.midY,
+                width: 0,
+                height: 0
+            )
+            popover.permittedArrowDirections = []
         }
     }
 #endif

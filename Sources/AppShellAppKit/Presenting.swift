@@ -10,7 +10,7 @@
     /// The controller showing a window's content, or a presentation's: a stack's controller,
     /// a screen of nodes, or a screen's own controller of AppKit.
     @MainActor
-    func contentController(for content: any SceneContent) -> NSViewController {
+    func contentController(for content: CommandResponder) -> NSViewController {
         if let stack = content as? any PresentedStack {
             return stack.makeViewController()
         }
@@ -46,6 +46,8 @@
         /// Asked for while the host was out of a window: shown when it appears.
         private var waiting: [Presentation] = []
         private var containers: [ObjectIdentifier: PresentedViewController] = [:]
+        /// The alerts showing, as sheets of the host's window.
+        private var alerts: [ObjectIdentifier: NSAlert] = [:]
 
         func show(_ presentation: Presentation) {
             guard let host, host.viewIfLoaded?.window != nil else {
@@ -58,6 +60,10 @@
                 return
             }
 
+            if let alert = presentation.content as? Alert, let window = host.view.window {
+                show(alert, of: presentation, in: window)
+                return
+            }
             let container = PresentedViewController(presentation)
             containers[ObjectIdentifier(presentation)] = container
             host.presentAsSheet(container)
@@ -65,6 +71,9 @@
         }
 
         func hide(_ presentation: Presentation) {
+            if let alert = alerts.removeValue(forKey: ObjectIdentifier(presentation)) {
+                alert.window.sheetParent?.endSheet(alert.window, returnCode: .abort)
+            }
             if let container = containers[ObjectIdentifier(presentation)] {
                 containers[ObjectIdentifier(presentation)] = nil
                 if container.presentingViewController != nil {
@@ -73,6 +82,34 @@
                 container.letGo()
             }
             presentation.hideEnded()
+        }
+
+        /// Shows `alert` as a sheet of `window`: its first button takes Return, its cancel
+        /// button Escape.
+        private func show(_ alert: Alert, of presentation: Presentation, in window: NSWindow) {
+            let shown = NSAlert()
+            shown.messageText = alert.title
+            shown.informativeText = alert.message ?? ""
+            for action in alert.actions {
+                let button = shown.addButton(withTitle: action.title)
+                switch action.role {
+                case .normal: break
+                case .cancel: button.keyEquivalent = "\u{1B}"
+                case .destructive: button.hasDestructiveAction = true
+                }
+            }
+            alerts[ObjectIdentifier(presentation)] = shown
+            shown.beginSheetModal(for: window) { [weak self, weak alert] response in
+                let index =
+                    response.rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
+                // Taken away by `hide`: nothing was chosen.
+                guard let self, let alert,
+                    alerts.removeValue(forKey: ObjectIdentifier(presentation)) != nil
+                else { return }
+
+                alert.choose(index)
+            }
+            presentation.showEnded(completed: true)
         }
 
         /// The host is in a window: what waited for it shows.

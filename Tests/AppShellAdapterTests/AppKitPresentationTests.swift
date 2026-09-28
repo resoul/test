@@ -103,4 +103,48 @@
         #expect(!presentation.isShown)
         window.close()
     }
+
+    @Test @MainActor
+    func anAlertIsASheetOfTheWindowWhoseButtonsChoose() throws {
+        let stack = Stack(root: Route.inbox) { _ in NodeScreen(Leaf(), title: "Inbox") }
+        let controller = stack.makeViewController()
+        let window = window(showing: controller)
+        // An alert's sheet attaches only to a window on screen.
+        window.orderFront(nil)
+        let inbox = try #require(stack.screen(for: stack.presentedEntries[0]))
+        var chosen: [String] = []
+        let alert = Alert("Delete the message?", message: "It cannot be undone.") {
+            AlertAction("Delete", role: .destructive) { chosen.append("delete") }
+            AlertAction("Cancel", role: .cancel) { chosen.append("cancel") }
+        }
+
+        inbox.present(alert)
+        let sheet = try #require(window.attachedSheet)
+        let buttons = try #require(sheet.contentView).buttons
+        let delete = try #require(buttons.first { $0.title == "Delete" })
+        #expect(delete.hasDestructiveAction)
+        #expect(buttons.first { $0.title == "Cancel" }?.keyEquivalent == "\u{1B}")
+        delete.performClick(nil)
+        #expect(chosen == ["delete"])
+        #expect(inbox.presentation == nil)
+        #expect(window.attachedSheet == nil)
+
+        // Taken away, it chooses nothing.
+        let notice = Alert("Saved")
+        inbox.present(notice)
+        #expect(window.attachedSheet != nil)
+        notice.dismiss()
+        #expect(window.attachedSheet == nil)
+        #expect(inbox.presentation == nil)
+        #expect(chosen == ["delete"])
+        window.close()
+        stack.close()
+    }
+
+    extension NSView {
+        /// The buttons in the view and the views inside it.
+        fileprivate var buttons: [NSButton] {
+            subviews.flatMap { ($0 as? NSButton).map { [$0] } ?? $0.buttons }
+        }
+    }
 #endif

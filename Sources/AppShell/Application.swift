@@ -90,6 +90,16 @@ public protocol SceneContent: CommandResponder {}
 extension Stack: SceneContent {}
 extension Screen: SceneContent {}
 
+/// What a presentation shows: a `Stack`, a `Screen`, or an `Alert`.
+///
+/// Ownership: the presentation keeps its content. Isolation: MainActor. Errors: none.
+/// Cancellation: not applicable.
+@MainActor
+public protocol PresentationContent: CommandResponder {}
+
+extension Stack: PresentationContent {}
+extension Screen: PresentationContent {}
+
 /// A kind of scene of an app — a window on the Mac and iPad, the screen on iPhone and Apple TV
 /// — as a scene configuration: its id, its title, and how its content is made, anew for each
 /// session of the kind. Not `Scene`: that is SwiftUI's.

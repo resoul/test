@@ -22,6 +22,7 @@ struct LayoutDemo: Application {
     }
 
     func started(_ shell: Shell) {
+        model.askToDelete(from: ProcessInfo.processInfo.environment)
         model.openMessages(from: ProcessInfo.processInfo.environment)
         model.openCompose(from: ProcessInfo.processInfo.environment)
     }

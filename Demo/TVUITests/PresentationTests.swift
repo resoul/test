@@ -18,4 +18,21 @@ final class PresentationTests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground)
         XCTAssertTrue(app.staticTexts["Ada Lovelace"].firstMatch.waitForExistence(timeout: 5))
     }
+
+    @MainActor
+    func testMenuOnAnAlertChoosesCancel() {
+        let app = XCUIApplication()
+        app.launchEnvironment["OPEN_MESSAGES"] = "0"
+        app.launchEnvironment["ASK_DELETE"] = "1"
+        app.launch()
+        let alert = app.alerts["Delete the message?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 30))
+        sleep(1)
+
+        XCUIRemote.shared.press(.menu)
+        let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: alert)
+        wait(for: [gone], timeout: 5)
+        XCTAssertEqual(app.state, .runningForeground)
+        XCTAssertTrue(app.staticTexts["Notes on the Analytical Engine"].exists)
+    }
 }
