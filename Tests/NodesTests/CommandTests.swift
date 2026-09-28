@@ -160,3 +160,64 @@ func aMenuIsBuiltFromCommandsDividersAndMenus() {
         ]
     )
 }
+
+@Test @MainActor
+func pastTheRootACommandGoesOnToTheOuterRespondersInTurn() {
+    let screen = Screen()
+    let host = host(screen)
+    let stack = CommandResponder()
+    let window = CommandResponder()
+    stack.outer = window
+    host.outerResponder = stack
+    var done: [String] = []
+    var depth = 2
+    stack.handle(.back, isEnabled: { depth > 1 }) {
+        depth -= 1
+        done.append("stack")
+    }
+    window.handle(.back) { done.append("window") }
+    window.handle(.archive) { done.append("window") }
+    screen.list.handle(.archive) { done.append("list") }
+    host.focus(screen.aside.id)
+
+    // A node on the way out comes first; past the root, the stack while it can, then the window.
+    #expect(host.perform(.back))
+    #expect(host.perform(.back))
+    #expect(host.perform(.archive))
+    host.focus(screen.list.first.id)
+    #expect(host.perform(.archive))
+    #expect(done == ["stack", "window", "window", "list"])
+    #expect(host.availableCommands().map(\.id) == ["archive", "back"])
+    #expect(host.canPerform(Shortcut("[", [.command])))
+    host.detach()
+}
+
+@Test @MainActor
+func aTreeWithCommandsOnlyOutsideItStillHandlesCommands() {
+    let screen = Screen()
+    let host = host(screen)
+    let outer = CommandResponder()
+    host.outerResponder = outer
+    #expect(!host.handlesCommands)
+
+    outer.handle(.cancel) {}
+    #expect(host.handlesCommands)
+    #expect(outer.canPerform(.cancel))
+    #expect(!outer.canPerform(.back))
+    host.detach()
+}
+
+@Test @MainActor
+func aResponderGoneFromAroundEndsTheChain() {
+    let inner = CommandResponder()
+    var outer: CommandResponder? = CommandResponder()
+    var backs = 0
+    outer?.handle(.back) { backs += 1 }
+    inner.outer = outer
+
+    #expect(inner.perform(.back))
+    outer = nil
+    #expect(inner.outer == nil)
+    #expect(!inner.perform(.back))
+    #expect(backs == 1)
+}

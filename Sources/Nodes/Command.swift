@@ -137,14 +137,21 @@ public struct Command: Sendable, Hashable, Identifiable {
         self.shortcut = shortcut
     }
 
-    /// Going back: the remote's Menu button (Back on newer remotes), and Escape. When no node
-    /// carries it out, the press goes on to the system — at the top of an app on a TV, that
-    /// leaves the app. A screen that can go back handles it while it can:
+    /// Going back: the remote's Menu button (Back on newer remotes), and Command-[ on a
+    /// keyboard, as in the Finder and Safari. When nothing carries it out, the press goes on to
+    /// the system — at the top of an app on a TV, that leaves the app. A screen that can go
+    /// back handles it while it can:
     ///
     ///     root.handle(.back, isEnabled: { stack.count > 1 }) { pop() }
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
-    public static let back = Command("back", title: "Back", shortcut: Shortcut(.escape))
+    public static let back = Command("back", title: "Back", shortcut: Shortcut("[", [.command]))
+
+    /// Cancelling what is under way — an edit, a drag, a sheet: Escape. It is not going back:
+    /// a screen goes back with `back`.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public static let cancel = Command("cancel", title: "Cancel", shortcut: Shortcut(.escape))
 
     /// The remote's Play/Pause button.
     ///
@@ -158,7 +165,7 @@ public struct Command: Sendable, Hashable, Identifiable {
     public static let longPress = Command("longPress", title: "More")
 }
 
-/// How a node carries out a command.
+/// How a node or a responder carries out a command.
 @MainActor
 struct CommandHandler {
     let command: Command
@@ -166,12 +173,24 @@ struct CommandHandler {
     let perform: @MainActor () -> Void
 }
 
+extension [CommandHandler] {
+    /// Adds `handler`, in place of one for the same command.
+    mutating func set(_ handler: CommandHandler) {
+        if let index = firstIndex(where: { $0.command.id == handler.command.id }) {
+            self[index] = handler
+        } else {
+            append(handler)
+        }
+    }
+}
+
 extension Node {
     /// Carries out `command` with `perform` while `isEnabled` says the node can. A command
     /// goes to the node with the focus, else to the node last pressed or clicked, else to the
-    /// root, and then out through the nodes around it: the first of them with a handler for
-    /// it that is enabled carries it out. A disabled handler leaves the command to the nodes
-    /// further out. A menu shows the command enabled while one of them would carry it out.
+    /// root, and then out through the nodes around it, and past the root to the host's
+    /// `outerResponder` and the responders around it: the first of them with a handler for it
+    /// that is enabled carries it out. A disabled handler leaves the command to those further
+    /// out. A menu shows the command enabled while one of them would carry it out.
     ///
     ///     list.handle(.flag, isEnabled: { !selection.isEmpty }) { flagSelection() }
     ///
@@ -184,12 +203,9 @@ extension Node {
         isEnabled: @escaping @MainActor () -> Bool = { true },
         perform: @escaping @MainActor () -> Void
     ) {
-        let handler = CommandHandler(command: command, isEnabled: isEnabled, perform: perform)
-        if let index = commandHandlers.firstIndex(where: { $0.command.id == command.id }) {
-            commandHandlers[index] = handler
-        } else {
-            commandHandlers.append(handler)
-        }
+        commandHandlers.set(
+            CommandHandler(command: command, isEnabled: isEnabled, perform: perform)
+        )
     }
 
     /// Stops carrying out `command`.
@@ -206,5 +222,102 @@ extension Node {
     /// applicable.
     public var handledCommands: [Command] {
         commandHandlers.map(\.command)
+    }
+}
+
+/// Something outside a tree of nodes that carries out commands — a screen, a container of
+/// screens, a window, the app — in a chain from the inside out. A tree's commands go on to it
+/// when no node carries them out (`NodeHost.outerResponder`), and on through `outer`:
+///
+///     let screen = CommandResponder()
+///     screen.handle(.back, isEnabled: { stack.count > 1 }) { stack.removeLast() }
+///     screen.outer = window
+///     view.host.outerResponder = screen
+///
+/// A UIKit or AppKit app puts its own controllers into the chain the same way.
+///
+/// Ownership: the responder keeps its handlers; it does not keep `outer`. Isolation:
+/// MainActor. Errors: none. Cancellation: not applicable.
+@MainActor
+open class CommandResponder {
+    /// The commands the responder carries out.
+    var commandHandlers: [CommandHandler] = []
+
+    /// The responder around this one, where the commands it does not carry out go on — the
+    /// container around a screen, the window around a container.
+    ///
+    /// Ownership: not kept: whatever holds the responders keeps the one around. Isolation:
+    /// MainActor. Errors: none. Cancellation: set to `nil`.
+    public weak var outer: CommandResponder?
+
+    /// Ownership: the caller keeps the responder. Isolation: MainActor. Errors: none.
+    /// Cancellation: not applicable.
+    public init() {}
+
+    /// Carries out `command` with `perform` while `isEnabled` says the responder can; a
+    /// disabled handler leaves the command to `outer`. A second handler for the same command
+    /// replaces the first.
+    ///
+    /// Ownership: the responder keeps the closures; they must not keep the responder.
+    /// Isolation: MainActor. Errors: none. Cancellation: `removeHandler(for:)`.
+    public func handle(
+        _ command: Command,
+        isEnabled: @escaping @MainActor () -> Bool = { true },
+        perform: @escaping @MainActor () -> Void
+    ) {
+        commandHandlers.set(
+            CommandHandler(command: command, isEnabled: isEnabled, perform: perform)
+        )
+    }
+
+    /// Stops carrying out `command`.
+    ///
+    /// Ownership: drops the handler's closures. Isolation: MainActor. Errors: none.
+    /// Cancellation: not applicable.
+    public func removeHandler(for command: Command) {
+        commandHandlers.removeAll { $0.command.id == command.id }
+    }
+
+    /// The commands the responder has handlers for, in the order they were added.
+    ///
+    /// Ownership: returns values. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    public var handledCommands: [Command] {
+        commandHandlers.map(\.command)
+    }
+
+    /// Whether this responder, or one further out, would carry out `command` now.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func canPerform(_ command: Command) -> Bool {
+        enabledHandler { $0.command.id == command.id } != nil
+    }
+
+    /// Carries out `command` by this responder or the first one further out that can.
+    /// Returns whether one did.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    @discardableResult
+    public func perform(_ command: Command) -> Bool {
+        guard let handler = enabledHandler(where: { $0.command.id == command.id }) else {
+            return false
+        }
+
+        handler.perform()
+        return true
+    }
+
+    /// The first enabled handler matching, from this responder out.
+    func enabledHandler(where matches: (CommandHandler) -> Bool) -> CommandHandler? {
+        var responder: CommandResponder? = self
+        while let current = responder {
+            if let handler = current.commandHandlers.first(where: {
+                matches($0) && $0.isEnabled()
+            }) {
+                return handler
+            }
+            responder = current.outer
+        }
+        return nil
     }
 }

@@ -103,15 +103,18 @@
         var done: [String] = []
         leaf.handle(.flag) { done.append("flag") }
         leaf.handle(.back) { done.append("back") }
+        leaf.handle(.cancel) { done.append("cancel") }
         leaf.handle(.top) { done.append("top") }
 
         // Shift turns the letter into a capital; the shortcut is still Command-Shift-F.
         view.keyDown(with: key("F", [.command, .shift], keyCode: 3))
+        // Command-[ goes back; Escape cancels.
+        view.keyDown(with: key("[", [.command], keyCode: 33))
         view.keyDown(with: key("\u{1B}", keyCode: 53))
         view.keyDown(
             with: key(String(UnicodeScalar(NSUpArrowFunctionKey)!), [.command, .function])
         )
-        #expect(done == ["flag", "back", "top"])
+        #expect(done == ["flag", "back", "cancel", "top"])
         view.host.detach()
     }
 #endif
