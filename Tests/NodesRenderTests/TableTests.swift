@@ -380,6 +380,23 @@
     }
 
     @Test @MainActor
+    func aTableComesToRestInAndOutOfEditing() {
+        let inbox = Inbox()
+        defer { inbox.host.detach() }
+        inbox.table.onMove = { _ in }
+        for (editing, marks) in [(false, false), (true, false), (true, true), (false, true)] {
+            inbox.table.allowsMultipleSelectionDuringEditing = marks
+            inbox.table.allowsMultipleSelection = marks
+            inbox.table.isEditing = editing
+            inbox.host.layoutIfNeeded()
+
+            // Laid out, it asks for no other layout: a host that still needs one after its
+            // passes asks the adapter no more, and the screen stands still.
+            #expect(!inbox.host.needsLayout, "editing \(editing), marks \(marks)")
+        }
+    }
+
+    @Test @MainActor
     func theRemoteLiftsARowByItsHandleAndTheArrowsMoveIt() throws {
         let inbox = Inbox()
         defer { inbox.host.detach() }

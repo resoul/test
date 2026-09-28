@@ -443,3 +443,51 @@
         view.host.detach()
     }
 #endif
+
+#if canImport(UIKit)
+    import LayoutCore
+    import Nodes
+    import Testing
+    import UIKit
+
+    @testable import NodesUIKit
+
+    /// A focusable box that counts the arrows it takes.
+    @MainActor
+    private final class Mover: Node {
+        var moves: [FocusMove] = []
+
+        override init() {
+            super.init()
+            isFocusable = true
+            onMoveCommand = { [unowned self] move in
+                moves.append(move)
+                return true
+            }
+        }
+
+        override var layoutContent: LeafContent? { .size(LayoutSize(width: 50, height: 30)) }
+    }
+
+    @Test @MainActor
+    func theFocusSystemAskingSeveralTimesForOnePressMovesOnce() async {
+        let mover = Mover()
+        let view = NodeView(root: mover)
+        view.frame = CGRect(x: 0, y: 0, width: 100, height: 100)
+        view.layoutIfNeeded()
+        view.host.focus(mover.id)
+
+        // As the focus system asks for one press: once for each place it looks at.
+        for _ in 0..<5 {
+            #expect(view.takesMove(.down))
+        }
+        #expect(mover.moves == [.down])
+
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+        #expect(view.takesMove(.down))
+        #expect(mover.moves == [.down, .down])
+        view.host.detach()
+    }
+#endif
