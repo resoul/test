@@ -3,7 +3,7 @@
 **Статус: семь решений приняты пользователем (2026-09-28); A0 сделан** — мосты в `Nodes`
 (команды за корнем, показ хоста) и контракт экрана и стека, проверенный прототипом
 (раздел «A0»). A1 сделан: модули `AppShell`, `AppShellUIKit`, `AppShellAppKit` (раздел
-«A1»); следующий шаг — A2. Решения собраны в
+«A1»); A2 сделан — приложение и сцены (раздел «A2»); следующий шаг — A3. Решения собраны в
 конце. Примеры показывают желаемую форму API; это не существующий компилируемый API.
 
 ## Зачем и где граница
@@ -622,6 +622,67 @@ query и `*rest`, URL пути со значениями всех маршрут
 идентичность, в путь стека он не входит; первый сегмент, выбирающий вкладку (A3); правила
 доступа (`requires` с перенаправлением на `/login?next=`) — в таблице или в приложении;
 версия схемы URL для восстановления (A4).
+
+## A2: приложение и сцены (2026-09-28)
+
+**Статус: реализовано** (без UI-тестов — отложены пользователем). Всё строится на сценах, как
+на платформах Apple: объявление окна — `WindowScene` (конфигурация сцены; не `Scene` — это
+протокол SwiftUI), живое окно — `SceneSession` (как `UISceneSession`).
+
+```swift
+@main
+struct LayoutDemo: Application {
+    private let model = DemoModel()
+    var scenes: [WindowScene] { WindowScene("main", title: "Layout demo") { model.stack } }
+    var menuBar: MenuBar { MenuBar { DemoModel.menu } }
+    func started(_ shell: Shell) { shell.handle(.newMessage) { ... } }
+    func open(_ request: OpenRequest) -> OpenResult {
+        model.open(request.url) ? .opened : .unsupported   // DemoModel.routes
+    }
+}
+```
+
+- `AppShell`: `Application` (на MainActor; `scenes` через `@SceneBuilder`, `menuBar`,
+  `started`, `open`), `WindowScene` (id, заголовок, фабрика содержимого — новое на каждую
+  сессию), `SceneContent` (`Stack` или `Screen`), `SceneSession` (содержимое, `activation`,
+  `close()`, `Command.closeWindow` — Cmd-W, включена, где платформа может закрыть сцену),
+  `SceneActivation` (как `UIScene.ActivationState`), `Shell` (сессии, `activation`
+  приложения — самая активная из сцен, `open(_:in:)`, команды приложения), `OpenRequest`,
+  `OpenResult` (`opened`, `queued`, `unsupported`, `queueFull`).
+- Цепочка команд: нода → … → экран → стек → сессия сцены → приложение (`Shell`).
+- Ссылки: до первой показанной сцены ждут в очереди (по умолчанию 16, переполнение —
+  `.queueFull`, прежние остаются) и уходят в порядке прихода; дальше — сразу, повтор той же
+  ссылки — обычная новая ссылка.
+- `AppShellUIKit` — всё на сценах: `Application.main()` → `UIApplicationMain` с делегатом,
+  конфигурация сцены с делегатом сцены. Сессия — по `UISceneSession.persistentIdentifier`,
+  вид сцены — в `userInfo` сессии. **Отключение сцены** (`sceneDidDisconnect`) отпускает окно
+  и контроллеры, сессия с содержимым и путём стека остаётся; при повторном подключении стек
+  показывает то, что показывал, без хода. **Уничтожение** (`didDiscardSceneSessions`) —
+  окончательное закрытие: `Shell.sessionClosed`, стек закрыт. Закрыть — `requestSceneSession
+  Destruction`, только если приложение берёт несколько сцен. Активация — из
+  `sceneDidBecomeActive`/`WillResignActive`/`WillEnterForeground`/`DidEnterBackground`.
+  Ссылки — `openURLContexts` и `urlContexts` подключения. Меню приложения на iPad — после
+  View (`buildMenu`, на tvOS недоступно).
+- `AppShellAppKit`: `Application.main()` → `NSApplication` с делегатом; сцена — `NSWindow`,
+  закрытие окна — конец сессии; активация — ключевое, свёрнутое, скрытое приложение. Главное
+  меню `NSMenu(standardAround:)`: меню приложения (About, Hide, Hide Others, Show All, Quit),
+  File (Close Window — `Command.closeWindow`), Edit (Undo…Select All — действия AppKit), меню
+  приложения, Window (Minimize, Zoom, Bring All to Front; `windowsMenu`). Ссылки —
+  `application(_:open:)`, в ключевое окно.
+- Демо: все три приложения — `Application`; TV-пробы — `ControllerScreen(ScreenController)`,
+  `STACK_PROBE` — свой стек. `DemoModel.routes`: `/`, `/messages/:id`.
+
+Проверено: 4 теста `Shell` (сессия со своим содержимым и цепочка команд до приложения,
+очередь ссылок и её предел, активация приложения, закрытие только закрываемой сцены и
+отпускание содержимого), главное меню Mac; сборка пакета и трёх демо; вживую запуск демо на
+iPhone 17 и Apple TV Simulator с `OPEN_MESSAGES=0` — письмо поверх экрана, панель с «назад»
+и заголовком. Mac-демо вживую не запускалось (открыло бы окно на занятом Mac); UI-тесты
+(A1 и старые) не прогонялись после перевода демо — отложено пользователем.
+
+Не сделано в A2: URL-схемы демо в `Info.plist` (ссылки извне в демо не придут, работает
+`OPEN_MESSAGES`); повторное подключение сцены проверено только чтением кода; новая сцена по
+запросу (`Cmd-N`, `requestSceneSessionActivation`) — A5; окно настроек Mac — A5; кнопка
+«назад» в панели окна Mac — A3 (панели).
 
 ## Решения (приняты 2026-09-28)
 

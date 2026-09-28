@@ -76,6 +76,17 @@
             view.wantsLayer = true
             view.frame = NSRect(x: 0, y: 0, width: 480, height: 360)
             stack.presenter = self
+            // A stack shown before shows what it showed, without a move.
+            if shown == nil, let top = stack.presentedEntries.last,
+                let controller = controller(for: top)
+            {
+                addChild(controller)
+                controller.view.frame = view.bounds
+                controller.view.autoresizingMask = [.width, .height]
+                view.addSubview(controller.view)
+                shown = top
+                watchTitle()
+            }
         }
 
         /// Shown in a window whose keyboard is nowhere, the stack gives it to the top screen:

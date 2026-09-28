@@ -1149,6 +1149,30 @@
             return stack
         }()
 
+        /// The demo's links: `/` is the screen, `/messages/:id` a message over it.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public static let routes = RouteTable<DemoRoute> {
+            RoutePattern("/", .home)
+            RoutePattern(
+                "/messages/:id",
+                route: { .message(try $0.value("id")) },
+                values: { route in
+                    guard case .message(let id) = route else { return nil }
+                    return ["id": String(id)]
+                }
+            )
+        }
+
+        /// Opens the screens of a link into the demo (`routes`); `false` when it has none.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public func open(_ url: URL) -> Bool {
+            guard let path = try? DemoModel.routes.path(for: url) else { return false }
+
+            return stack.setPath(path) != .rejected(.screenInUse)
+        }
+
         /// Opens the messages `ids`, one over the other, as a link into the app would — the
         /// UI tests start there. Launch arguments: `OPEN_MESSAGES=0,1` in the environment.
         ///
