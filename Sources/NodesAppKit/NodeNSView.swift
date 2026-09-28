@@ -527,8 +527,8 @@
         }
 
         /// Tab and Shift-Tab go through the nodes and then on to the window's other views;
-        /// the arrows go to the nearest node that way; Return and Space press the focused
-        /// node. Other keys go on up the responder chain.
+        /// an arrow goes to the focused node (`onMoveCommand`), else to the nearest node that
+        /// way; Return and Space press the focused node. Other keys go on up the responder chain.
         ///
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func keyDown(with event: NSEvent) {
@@ -543,13 +543,13 @@
                     window?.selectPreviousKeyView(self)
                 }
             case .upArrow?:
-                host.moveFocus(.up)
+                arrow(.up)
             case .downArrow?:
-                host.moveFocus(.down)
+                arrow(.down)
             case .leftArrow?:
-                host.moveFocus(.left)
+                arrow(.left)
             case .rightArrow?:
-                host.moveFocus(.right)
+                arrow(.right)
             default:
                 if NodeNSView.selects(event) {
                     if !event.isARepeat, host.selectBegan() {
@@ -558,6 +558,14 @@
                 } else {
                     super.keyDown(with: event)
                 }
+            }
+        }
+
+        /// An arrow goes to the focused node first; the focus moves when the node does not
+        /// take it.
+        private func arrow(_ move: FocusMove) {
+            if !host.moveCommand(move) {
+                host.moveFocus(move)
             }
         }
 

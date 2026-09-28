@@ -3,6 +3,7 @@
 // back to Ada's badge: the `LayoutDemoTV` scheme of `Demo.xcodeproj`, on an Apple TV
 // simulator.
 import LayoutUIKit
+import Nodes
 import NodesUIKit
 import ThemeCore
 import UIKit
@@ -43,8 +44,11 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 /// Shows the node screen full size, with the margins a TV screen needs.
 final class ScreenController: UIViewController {
     private let model = DemoModel()
-    /// A screen for the remote's reach instead of the demo, for UI tests (`FocusProbe`).
-    private let probe = ProcessInfo.processInfo.environment["FOCUS_PROBE"].map { FocusProbe($0) }
+    /// A screen for UI tests instead of the demo: the remote's reach (`FocusProbe`), or
+    /// moving rows with it (`MoveProbe`).
+    private let probe: Node? =
+        ProcessInfo.processInfo.environment["FOCUS_PROBE"].map { FocusProbe($0) }
+        ?? ProcessInfo.processInfo.environment["MOVE_PROBE"].map { _ in MoveProbe() }
     private lazy var screen = NodeView(root: probe ?? model.screen)
 
     override func viewDidLoad() {

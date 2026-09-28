@@ -1051,6 +1051,21 @@ public final class NodeHost {
         max(0, max(b - (a + aLength), a - (b + bLength)))
     }
 
+    /// For platform adapters: an arrow was pressed. The focused node, or the nearest node
+    /// around it with `onMoveCommand`, decides whether it takes the press; returns whether
+    /// it did — then the focus does not move.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    @discardableResult
+    public func moveCommand(_ move: FocusMove) -> Bool {
+        var node = focusedNode.flatMap { mounted[$0] }
+        while let current = node {
+            if let command = current.onMoveCommand { return command(move) }
+            node = current.supernode
+        }
+        return false
+    }
+
     /// The remote's select button went down: the focused node shows itself pressed. Returns
     /// whether a focused node has `onTap`; when not, the adapter passes the press on.
     ///

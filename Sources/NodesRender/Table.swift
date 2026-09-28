@@ -120,11 +120,20 @@
     /// VoiceOver offers the actions of a row as its element's actions. On a TV a row is
     /// selected, not swiped.
     ///
+    /// With `allowsMultipleSelection`, a tap on a row selects it or no longer does
+    /// (`selection`) instead of `onSelect`; selected rows show it, and still swipe.
+    ///
+    ///     inbox.allowsMultipleSelection = true
+    ///     inbox.onSelectionChange = { ids in model.selected = ids }
+    ///
     /// Edited (`isEditing`), rows do not swipe: with `onMove` each shows a handle at its
     /// trailing side that lifts it to be dragged to another place, and with
     /// `allowsMultipleSelectionDuringEditing` a mark at its leading side, and a tap selects
     /// it or no longer does (`selection`). VoiceOver moves a row up or down by one with the
-    /// element's actions.
+    /// element's actions. With the remote of a TV, or the keyboard of a Mac, the handle takes
+    /// the focus: select lifts the row, the arrows up and down move it by one, and select
+    /// again — or the focus leaving — puts it down.
+    /// Where the row also has a mark, the mark takes the focus for selecting.
     ///
     ///     inbox.onMove = { move in model.move(move.item, to: move.to) }
     ///     withAnimation { inbox.isEditing = true }
@@ -173,6 +182,9 @@
                 closeOpenRow()
                 if !isEditing {
                     drop()
+                    if let pickedUp {
+                        putDown(pickedUp)
+                    }
                 }
                 setNeedsLayout()
             }
@@ -186,8 +198,19 @@
             didSet { setNeedsLayout() }
         }
 
+        /// Whether, out of editing, a tap on a row selects it or no longer does, instead of
+        /// `onSelect`, and each row shows whether it is selected. On a TV the remote then goes
+        /// to the rows, and its select button does what a tap does.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var allowsMultipleSelection = false {
+            didSet { setNeedsLayout() }
+        }
+
         /// The items selected, by their ids. A tap changes it and tells `onSelectionChange`;
         /// setting it tells nothing. The ids of items no longer in `sections` leave it.
+        /// Rows show it while a tap can change it: out of editing with
+        /// `allowsMultipleSelection`, while edited with `allowsMultipleSelectionDuringEditing`.
         ///
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public var selection: Set<Item.ID> = [] {
@@ -217,7 +240,8 @@
             didSet { setNeedsLayout() }
         }
 
-        /// What a tap on a row does. Without it, the remote of a TV does not go to the rows.
+        /// What a tap on a row does, unless it selects the row (`allowsMultipleSelection`).
+        /// Without either, the remote of a TV does not go to the rows.
         ///
         /// Ownership: the table keeps the closure; it must not keep the table. Isolation:
         /// MainActor. Errors: none. Cancellation: not applicable.
@@ -328,12 +352,14 @@
                     // Nothing is moved aside: a row kept from an earlier move shows in place.
                     row.appearance.offset = .zero
                 }
+                let id = item.id
                 row.show(
                     rowContent(item),
                     leading: leadingActions?(item) ?? [],
                     trailing: trailingActions?(item) ?? [],
-                    selects: onSelect != nil,
-                    select: { [weak self] in self?.onSelect?(item) },
+                    selects: onSelect != nil || allowsMultipleSelection,
+                    select: { [weak self] in self?.tapped(item) },
+                    isSelected: allowsMultipleSelection && selection.contains(id),
                     editing: isEditing ? editing(item) : nil
                 )
                 row.table = { [weak self] in self }
@@ -352,21 +378,86 @@
             if onMove != nil, canMove?(item) ?? true {
                 editing.drag = { [weak self] drag in self?.dragged(id, drag) }
                 editing.step = { [weak self] step in self?.move(id, by: step) ?? false }
+                editing.pickUp = { [weak self] in self?.pickUpOrPutDown(id) }
+                editing.command = { [weak self] move in self?.command(move, for: id) ?? false }
+                editing.putDown = { [weak self] in self?.putDown(id) }
             }
             return editing
         }
 
+        // MARK: - Moving rows by the remote or the keyboard
+
+        /// A select press on the focused handle of the row of `id`.
+        private func pickUpOrPutDown(_ id: Item.ID) {
+            if pickedUp == id {
+                putDown(id)
+            } else {
+                pickUp(id)
+            }
+        }
+
+        private func pickUp(_ id: Item.ID) {
+            guard isEditing, lift == nil else { return }
+
+            if let pickedUp {
+                putDown(pickedUp)
+            }
+            pickedUp = id
+            mountedRow(id)?.lifted(true)
+        }
+
+        private func putDown(_ id: Item.ID) {
+            guard pickedUp == id else { return }
+
+            pickedUp = nil
+            mountedRow(id)?.lifted(false)
+        }
+
+        /// An arrow pressed on the handle of the row of `id`: a lifted row moves by one up or
+        /// down, and keeps the focus either way; a row not lifted lets the focus move.
+        private func command(_ move: FocusMove, for id: Item.ID) -> Bool {
+            guard pickedUp == id else { return false }
+
+            let step: Int
+            switch move {
+            case .up: step = -1
+            case .down: step = 1
+            default: return true
+            }
+            if self.move(id, by: step) {
+                revealing = id
+            }
+            return true
+        }
+
+        private func mountedRow(_ id: Item.ID) -> TableRow? {
+            mountedEntries(in: stack.items).first { $0.id == .row(id) }?.node as? TableRow
+        }
+
+        /// A tap on the row of `item`, out of editing.
+        private func tapped(_ item: Item) {
+            if allowsMultipleSelection {
+                toggle(item.id)
+            } else {
+                onSelect?(item)
+            }
+        }
+
         private func toggle(_ id: Item.ID) {
-            guard isEditing, allowsMultipleSelectionDuringEditing else { return }
+            guard isEditing ? allowsMultipleSelectionDuringEditing : allowsMultipleSelection
+            else { return }
 
             if selection.contains(id) {
                 selection.remove(id)
             } else {
                 selection.insert(id)
             }
-            // Its mark shows it at once; the layout that shows the rest may come later.
+            // The row shows it at once; the layout that shows the rest may come later.
             let row = mountedEntries(in: stack.items).first { $0.id == .row(id) }?.node
-            (row as? TableRow)?.cell.editing?.isSelected = selection.contains(id)
+            if let cell = (row as? TableRow)?.cell {
+                cell.editing?.isSelected = selection.contains(id)
+                cell.isSelected = selection.contains(id)
+            }
             onSelectionChange?(selection)
         }
 
@@ -398,6 +489,10 @@
         }
 
         private var lift: Lift?
+        /// The row lifted by the remote or the keyboard, which the arrows move.
+        private var pickedUp: Item.ID?
+        /// The row the arrows moved, to show once it is laid out in its new place.
+        private var revealing: Item.ID?
         /// `sections` takes a row let go into the place the stack has it in already.
         private var committing = false
         /// A row let go, drawn where it was let go until the layout of its new place is
@@ -676,6 +771,12 @@
         /// The stack's nodes are where a layout of its items put them: a lifted row's
         /// others are moved aside anew from there, and a row let go goes into its place.
         private func stackLaidOut() {
+            if let id = revealing, let row = mountedRow(id) {
+                revealing = nil
+                withAnimation(Table.makingRoom) {
+                    (scroll ?? enclosingScroll)?.scrollToReveal(row)
+                }
+            }
             if var lift {
                 let isNewOrder = lift.laidOut.map(\.id) != stack.items.map(\.id)
                 lift.laidOut = stack.items
@@ -894,12 +995,14 @@
             trailing: [SwipeAction],
             selects: Bool,
             select: @escaping @MainActor () -> Void,
+            isSelected: Bool = false,
             editing: RowEditing? = nil
         ) {
             if cell.content !== content {
                 cell.content = content
             }
             cell.editing = editing
+            cell.isSelected = editing.map { $0.marksSelection && $0.isSelected } ?? isSelected
             if let editing {
                 // Edited, the row does not swipe: its buttons go, and a tap selects it.
                 close()
@@ -907,7 +1010,7 @@
                 self.trailing = []
                 dragAxis = nil
                 cell.onTap = editing.marksSelection ? editing.toggle : nil
-                cell.isFocusable = editing.marksSelection
+                cell.isFocusable = editing.marksSelection && editing.pickUp == nil
                 cell.accessibilityActions = moves(editing)
                 return
             }
@@ -1082,6 +1185,13 @@
         var drag: (@MainActor (Drag) -> Void)? = nil
         /// Moves it by that many rows; returns whether it could.
         var step: (@MainActor (Int) -> Bool)? = nil
+        /// Lifts it by the remote or the keyboard, or puts it down; `nil` for a row that
+        /// does not move.
+        var pickUp: (@MainActor () -> Void)? = nil
+        /// What an arrow pressed on its handle does; returns whether it took the press.
+        var command: (@MainActor (FocusMove) -> Bool)? = nil
+        /// Puts it down, as the focus leaves its handle.
+        var putDown: (@MainActor () -> Void)? = nil
     }
 
     /// What a table's frame timer calls on each frame: the table keeps it, the timer only
@@ -1116,13 +1226,35 @@
             didSet {
                 mark.isSelected = editing?.isSelected ?? false
                 handle.onDrag = editing?.drag
-                if editing?.isSelected ?? false {
+                let pickUp = editing?.pickUp
+                handle.isFocusable = pickUp != nil
+                handle.onTap = { [unowned handle] in
+                    // A select press on the focused handle; a touch on it does nothing.
+                    if handle.isFocused {
+                        pickUp?()
+                    }
+                }
+                handle.onMoveCommand = editing?.command
+                handle.focusLost = editing?.putDown
+                // With a handle to focus too, the mark takes the focus for selecting: a
+                // focusable row is focused as a whole, the handle inside it with it.
+                let marksApart = (editing?.marksSelection ?? false) && pickUp != nil
+                mark.isFocusable = marksApart
+                mark.onTap = marksApart ? editing?.toggle : nil
+                setNeedsLayout()
+            }
+        }
+        /// Whether the row shows it is selected: in its fill, and to assistive technologies.
+        var isSelected = false {
+            didSet {
+                guard isSelected != oldValue else { return }
+
+                if isSelected {
                     accessibility.traits.insert(.selected)
                 } else {
                     accessibility.traits.remove(.selected)
                 }
                 appearance.background = background(pressed: false)
-                setNeedsLayout()
             }
         }
         let mark = SelectionMark()
@@ -1168,7 +1300,7 @@
 
         private func background(pressed: Bool) -> Color {
             if pressed { return pressedFill }
-            return editing?.isSelected ?? false ? selectedFill : surface
+            return isSelected ? selectedFill : surface
         }
     }
 
@@ -1241,9 +1373,20 @@
 
     /// Three lines at the trailing side of an edited row that lift it to be dragged up or
     /// down. Taps on it do nothing, and it is not an element: the row's element moves it.
+    /// With the focus (a TV's remote, a Mac's keyboard), select lifts the row to be moved by
+    /// the arrows.
     @MainActor
     final class MoveHandle: Node {
         private let lines = (0..<3).map { _ in Node() }
+        /// What the handle losing the focus does.
+        var focusLost: (@MainActor () -> Void)?
+
+        override func focusChanged(_ isFocused: Bool) {
+            super.focusChanged(isFocused)
+            if !isFocused {
+                focusLost?()
+            }
+        }
 
         override init() {
             super.init()

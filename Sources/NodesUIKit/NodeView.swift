@@ -593,9 +593,13 @@
             guard usesFocus, reaching == nil,
                 let context = notification.userInfo?[UIFocusSystem.focusUpdateContextUserInfoKey]
                     as? UIFocusUpdateContext,
-                let from = context.previouslyFocusedItem as? NodeFocusItem, from.view === self,
-                let target = reachTarget(from: from, heading: context.focusHeading)
+                let from = context.previouslyFocusedItem as? NodeFocusItem, from.view === self
             else { return }
+            // With nowhere to go that way, the focused node may still take the arrow.
+            if let move = FocusMove(context.focusHeading), host.moveCommand(move) { return }
+            guard let target = reachTarget(from: from, heading: context.focusHeading) else {
+                return
+            }
 
             reaching = (target, CACurrentMediaTime() + NodeView.reachTime, false)
             requestedFocus = target
@@ -1669,12 +1673,38 @@
             UIFocusSystem.focusSystem(for: self)?.updateFocusIfNeeded()
         }
 
-        func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool { true }
+        /// A move of the focus away from the node by an arrow is first offered to the node:
+        /// one that takes it keeps the focus.
+        func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
+            guard context.previouslyFocusedItem === self,
+                let move = FocusMove(context.focusHeading),
+                let view
+            else { return true }
+
+            return !view.host.moveCommand(move)
+        }
 
         func didUpdateFocus(
             in context: UIFocusUpdateContext,
             with coordinator: UIFocusAnimationCoordinator
         ) {}
+    }
+
+    extension FocusMove {
+        /// The arrow a focus heading is; `nil` for other headings.
+        init?(_ heading: UIFocusHeading) {
+            if heading.contains(.up) {
+                self = .up
+            } else if heading.contains(.down) {
+                self = .down
+            } else if heading.contains(.left) {
+                self = .left
+            } else if heading.contains(.right) {
+                self = .right
+            } else {
+                return nil
+            }
+        }
     }
 
     /// The elements of a list laid out by where it shows, as VoiceOver goes through a list: one
