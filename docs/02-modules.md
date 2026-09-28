@@ -70,3 +70,4 @@ NodesUIKit ──► LayoutUIKit, NodesAppKit ──► LayoutAppKit   (усло
 | Экран на нодах в UIKit-приложении | `Nodes` + `NodesUIKit` |
 | Ноды + реактивные данные из AsyncRay | `Nodes` + `NodesUIKit` + `StateCore` + `StateAsyncRay` |
 | Тесты математики раскладки без платформы | `LayoutCore` |
+| Приложение целиком: окна, экраны, стек, маршруты (предложено, кода нет) | `AppShell` + `AppShellUIKit` / `AppShellAppKit` — [12](12-app-layer.md) |
