@@ -200,6 +200,13 @@ open class Node: LayoutElement {
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public private(set) var isMounted = false
 
+    /// Whether the node is in a tree its host shows (`NodeHost.isShown`): mounted, and the
+    /// view holding the tree in a window and not hidden. A screen under the next one in a
+    /// navigation stack, or in a tab not chosen, keeps its nodes mounted but not shown.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public private(set) var isShown = false
+
     /// Asks the host to keep `isOnScreen` up to date and to call `screenChanged(_:)` — for a
     /// node whose work should go first while it shows, such as an image loading. Off by
     /// default: the host looks at such nodes on every scroll move. A change takes effect at
@@ -210,8 +217,8 @@ open class Node: LayoutElement {
         didSet { if tracksScreen != oldValue { setNeedsLayout() } }
     }
 
-    /// Whether some of the node shows: within the host's bounds and within every node around
-    /// it that clips its content, none of them hidden. Kept up to date after each layout and
+    /// Whether some of the node shows: its host shows, and it is within the host's bounds and
+    /// within every node around it that clips its content, none of them hidden. Kept up to date after each layout and
     /// scroll move only while `tracksScreen` is set; `false` otherwise.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
@@ -431,6 +438,24 @@ open class Node: LayoutElement {
     /// cancels work it no longer needs when the node leaves.
     open func mountedChanged(_ isMounted: Bool) {}
 
+    /// The node's tree began or stopped showing (`isShown`) — to start or stop work that only
+    /// matters while it shows: loads, timers, frames. A node joining a shown tree gets it after
+    /// `mountedChanged(true)`, a node leaving one before `mountedChanged(false)`; the tree's
+    /// view leaving the window, or hidden, tells every node while they stay in the tree. Called
+    /// on each change. The default does nothing.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: an override
+    /// cancels work it no longer needs when the tree stops showing.
+    open func shownChanged(_ isShown: Bool) {}
+
+    /// Tells the node whether its tree shows.
+    func setShown(_ shown: Bool) {
+        guard shown != isShown else { return }
+
+        isShown = shown
+        shownChanged(shown)
+    }
+
     /// The node came into sight or went out of it (`isOnScreen`), where it `tracksScreen`.
     /// Called on each change. The default does nothing.
     ///
@@ -439,7 +464,7 @@ open class Node: LayoutElement {
 
     /// Updates `isOnScreen`, telling `screenChanged(_:)` of a change.
     func updateScreen() {
-        let shows = shownRect != nil
+        let shows = isShown && shownRect != nil
         guard shows != isOnScreen else { return }
 
         isOnScreen = shows
@@ -711,7 +736,7 @@ open class Node: LayoutElement {
         return observer
     }
 
-    func mount(in supernode: Node?, subnodes: [Node]) {
+    func mount(in supernode: Node?, subnodes: [Node], shown: Bool = false) {
         let wasMounted = isMounted
         isMounted = true
         self.supernode = supernode
@@ -730,9 +755,11 @@ open class Node: LayoutElement {
         }
         prepare()
         if !wasMounted { mountedChanged(true) }
+        setShown(shown)
     }
 
     func unmount() {
+        setShown(false)
         let wasMounted = isMounted
         isMounted = false
         isOnScreen = false

@@ -697,8 +697,8 @@
         private var detailGeneration: UInt64 = 0
         private var requestedPixelDimension: Int?
         private var revision: UInt64 = 0
-        /// Set while the node is out of the tree after having been in it: nothing loads and
-        /// no pixels are held until it returns.
+        /// Set while the node is out of the tree after having been in it, or its tree stopped
+        /// showing: nothing loads and no pixels are held until it shows again.
         private var isSuspended = false
         private var solid: (color: Color?, image: CGImage)?
 
@@ -734,15 +734,24 @@
             detailTask?.cancel()
         }
 
-        /// Leaving the tree cancels loading and lets go of the decoded pixels; the original
-        /// size stays, so the layout does not jump when the node returns. Returning resumes an
+        /// Leaving the tree, or its tree no longer showing — a screen under the next one, a tab
+        /// not chosen — cancels loading and lets go of the decoded pixels; the original size
+        /// stays, so the layout does not jump when the node returns. Showing again resumes an
         /// unfinished first load; the renderer then asks for pixels for the frame, which the
         /// pipeline's memory cache often still holds.
         ///
-        /// Ownership: cancels or starts node-owned tasks. Isolation: MainActor. Errors: none.
+        /// Ownership: cancels node-owned tasks. Isolation: MainActor. Errors: none.
         /// Cancellation: leaving cancels both loads.
         public override func mountedChanged(_ isMounted: Bool) {
-            if isMounted {
+            if !isMounted {
+                suspend()
+            }
+        }
+
+        /// Ownership: cancels or starts node-owned tasks. Isolation: MainActor. Errors: none.
+        /// Cancellation: no longer showing cancels both loads.
+        public override func shownChanged(_ isShown: Bool) {
+            if isShown {
                 guard isSuspended else { return }
 
                 isSuspended = false
@@ -751,18 +760,24 @@
                 }
                 host?.setNeedsRender()
             } else {
-                isSuspended = true
-                urgency.isUrgent = false
-                loadTask?.cancel()
-                detailTask?.cancel()
-                loadTask = nil
-                detailTask = nil
-                detailGeneration &+= 1
-                requestedPixelDimension = nil
-                loaded = nil
-                decodedPixelSize = nil
-                revision &+= 1
+                suspend()
             }
+        }
+
+        private func suspend() {
+            guard !isSuspended else { return }
+
+            isSuspended = true
+            urgency.isUrgent = false
+            loadTask?.cancel()
+            detailTask?.cancel()
+            loadTask = nil
+            detailTask = nil
+            detailGeneration &+= 1
+            requestedPixelDimension = nil
+            loaded = nil
+            decodedPixelSize = nil
+            revision &+= 1
         }
 
         /// Loads the current source again: after a failure, or after a file changed. A remote
