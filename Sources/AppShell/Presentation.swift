@@ -153,7 +153,7 @@ public final class Presentation: CommandResponder {
 
     /// Ownership: kept by the presentation until it is gone. Isolation: MainActor. Errors:
     /// none. Cancellation: not applicable.
-    public let content: any SceneContent
+    public let content: any PresentationContent
 
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public let style: PresentationStyle
@@ -211,11 +211,12 @@ public final class Presentation: CommandResponder {
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public var isShown: Bool { shownState.value }
 
-    /// A presentation of `content`: a screen, or a stack of screens.
+    /// A presentation of `content`: a screen, or a stack of screens. An alert is presented
+    /// by `Screen.present(_: Alert)`.
     ///
     /// Ownership: keeps `content`, which must not be shown elsewhere. Isolation: MainActor.
     /// Errors: none. Cancellation: not applicable.
-    public init(_ content: any SceneContent, style: PresentationStyle = .sheet) {
+    public init(_ content: any PresentationContent, style: PresentationStyle = .sheet) {
         self.content = content
         self.style = style
         heightState = State(style.heights.first ?? .large)

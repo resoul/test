@@ -37,6 +37,7 @@ struct LayoutDemo: Application {
 
             badge.host?.requestFocus(badge.id)
         }
+        model.askToDelete(from: ProcessInfo.processInfo.environment)
         model.openMessages(from: ProcessInfo.processInfo.environment)
         model.openCompose(from: ProcessInfo.processInfo.environment)
     }

@@ -156,4 +156,27 @@ final class StackTests: XCTestCase {
         sleep(1)
         XCTAssertLessThan(heading.frame.minY, window.height * 0.3)
     }
+
+    @MainActor
+    func testAnAlertAsksBeforeTheMessageIsDeleted() {
+        let app = launch(opening: "0")
+        let subject = app.staticTexts["Notes on the Analytical Engine"]
+        XCTAssertTrue(subject.waitForExistence(timeout: 20))
+        let alert = app.alerts["Delete the message?"]
+        let gone = NSPredicate(format: "exists == false")
+
+        app.buttons["Delete"].tap()
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons["Cancel"].tap()
+        wait(for: [expectation(for: gone, evaluatedWith: alert)], timeout: 5)
+        XCTAssertTrue(subject.exists)
+
+        app.buttons["Delete"].tap()
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons["Delete"].tap()
+        XCTAssertTrue(app.navigationBars["Layout demo"].waitForExistence(timeout: 5))
+        let row = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", "Notes on the Analytical Engine"))
+        XCTAssertEqual(row.count, 0)
+    }
 }
