@@ -596,7 +596,7 @@
                 let from = context.previouslyFocusedItem as? NodeFocusItem, from.view === self
             else { return }
             // With nowhere to go that way, the focused node may still take the arrow.
-            if let move = FocusMove(context.focusHeading), host.moveCommand(move) { return }
+            if let move = FocusMove(context.focusHeading), takesMove(move) { return }
             guard let target = reachTarget(from: from, heading: context.focusHeading) else {
                 return
             }
@@ -608,6 +608,24 @@
             }
             continueReach()
         }
+
+        /// Whether the focused node takes an arrow (`NodeHost.moveCommand`). The focus system
+        /// asks several times for one press — once for each place it looks at — and each
+        /// answer to the node would do what the arrow does again: the first answer holds until
+        /// the main queue turns.
+        func takesMove(_ move: FocusMove) -> Bool {
+            if let answered = moveAnswered, answered.move == move { return answered.taken }
+
+            let taken = host.moveCommand(move)
+            moveAnswered = (move, taken)
+            DispatchQueue.main.async { [weak self] in
+                self?.moveAnswered = nil
+            }
+            return taken
+        }
+
+        /// The answer to an arrow, for as long as the press asks.
+        private var moveAnswered: (move: FocusMove, taken: Bool)?
 
         /// Seconds a move the view makes has to get there; then it gives up.
         private static let reachTime = 2.0
@@ -1681,7 +1699,7 @@
                 let view
             else { return true }
 
-            return !view.host.moveCommand(move)
+            return !view.takesMove(move)
         }
 
         func didUpdateFocus(

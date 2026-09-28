@@ -1241,7 +1241,14 @@
                 let marksApart = (editing?.marksSelection ?? false) && pickUp != nil
                 mark.isFocusable = marksApart
                 mark.onTap = marksApart ? editing?.toggle : nil
-                setNeedsLayout()
+                // The row shows it again at every layout: only a change of what is laid out —
+                // the mark, the handle, the editing itself — asks for another.
+                let shape = { (editing: RowEditing?) in
+                    editing.map { [$0.marksSelection, $0.drag != nil] }
+                }
+                if shape(editing) != shape(oldValue) {
+                    setNeedsLayout()
+                }
             }
         }
         /// Whether the row shows it is selected: in its fill, and to assistive technologies.
