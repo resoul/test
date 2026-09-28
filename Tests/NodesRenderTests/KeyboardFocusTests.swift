@@ -75,6 +75,32 @@
     }
 
     @Test @MainActor
+    func anArrowGoesToTheFocusedNodeFirstAndMovesTheFocusWhenItIsNotTaken() {
+        let pair = Pair()
+        let view = NodeNSView(root: pair)
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 40)
+        view.layout()
+        var moves: [FocusMove] = []
+        var takes = true
+        pair.first.onMoveCommand = { move in
+            moves.append(move)
+            return takes
+        }
+        view.host.focus(pair.first.id)
+        let right = key(String(UnicodeScalar(NSRightArrowFunctionKey)!))
+
+        view.keyDown(with: right)
+        #expect(moves == [.right])
+        #expect(view.host.focusedNode == pair.first.id)
+
+        takes = false
+        view.keyDown(with: right)
+        #expect(moves == [.right, .right])
+        #expect(view.host.focusedNode == pair.second.id)
+        view.host.detach()
+    }
+
+    @Test @MainActor
     func spaceAndReturnPressTheFocusedNode() {
         let pair = Pair()
         let view = NodeNSView(root: pair)

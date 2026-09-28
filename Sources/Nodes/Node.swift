@@ -162,6 +162,21 @@ open class Node: LayoutElement {
         didSet { if isFocusable != oldValue { host?.setNeedsRender() } }
     }
 
+    /// What an arrow pressed while the node has the focus does — the remote's (tvOS), the
+    /// keyboard's (Mac) — before the focus moves. Returns whether the node took the press:
+    /// the focus then stays where it is. A row lifted to be moved, for one, moves instead.
+    /// Asked of the focused node, else of the nearest node around it that has one.
+    ///
+    ///     handle.onMoveCommand = { move in
+    ///         guard isLifted else { return false }
+    ///         step(move == .up ? -1 : 1)
+    ///         return true
+    ///     }
+    ///
+    /// Ownership: the node keeps the closure; it must not keep the node. Isolation:
+    /// MainActor. Errors: none. Cancellation: not applicable.
+    public var onMoveCommand: (@MainActor (FocusMove) -> Bool)?
+
     /// Makes the node a focus section: when the remote moves the focus toward any part of
     /// the node, the focus goes to a node inside it — the one focused there last, else the
     /// first — instead of only to nodes lying straight in the direction pressed. For rows and

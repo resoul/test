@@ -372,6 +372,119 @@
         #expect(inbox.selections.count == 3)
     }
 
+    /// A press of the select button of the remote, or of the keyboard, on the focused node.
+    @MainActor
+    private func pressSelect(_ inbox: Inbox) {
+        inbox.host.selectBegan()
+        inbox.host.selectEnded()
+    }
+
+    @Test @MainActor
+    func theRemoteLiftsARowByItsHandleAndTheArrowsMoveIt() throws {
+        let inbox = Inbox()
+        defer { inbox.host.detach() }
+        inbox.table.onMove = { move in inbox.moves.append(move) }
+        inbox.table.isEditing = true
+        inbox.host.layoutIfNeeded()
+        let row = try #require(inbox.row(2))
+        let handle = row.cell.handle
+
+        // The handle takes the focus, not the row as a whole.
+        inbox.host.focus(row.cell.id)
+        #expect(inbox.host.focusedNode == nil)
+        inbox.host.focus(handle.id)
+        #expect(inbox.host.focusedNode == handle.id)
+        // Not lifted, the arrows move the focus.
+        #expect(!inbox.host.moveCommand(.down))
+
+        pressSelect(inbox)
+        #expect(row.appearance.zIndex == 1)
+        #expect(inbox.host.moveCommand(.down))
+        inbox.host.layoutIfNeeded()
+        #expect(inbox.order[0].prefix(5) == [0, 1, 3, 2, 4])
+        #expect(inbox.moves.map(\.to) == [TablePosition(section: "today", index: 3)])
+        #expect(inbox.host.moveCommand(.up))
+        inbox.host.layoutIfNeeded()
+        #expect(inbox.order[0].prefix(5) == [0, 1, 2, 3, 4])
+        // Aside, the arrows do nothing, and the focus stays on the lifted row.
+        #expect(inbox.host.moveCommand(.left))
+        #expect(inbox.order[0].prefix(5) == [0, 1, 2, 3, 4])
+        #expect(inbox.host.focusedNode == handle.id)
+
+        pressSelect(inbox)
+        #expect(row.appearance.zIndex == 0)
+        #expect(!inbox.host.moveCommand(.down))
+        #expect(inbox.moves.count == 2)
+    }
+
+    @Test @MainActor
+    func aRowMovedByTheArrowsPastTheWindowIsScrolledTo() throws {
+        let inbox = Inbox()
+        defer { inbox.host.detach() }
+        inbox.table.onMove = { _ in }
+        inbox.table.isEditing = true
+        inbox.host.layoutIfNeeded()
+        let handle = try #require(inbox.row(7)).cell.handle
+        inbox.host.focus(handle.id)
+        pressSelect(inbox)
+
+        for _ in 0..<6 {
+            #expect(inbox.host.moveCommand(.down))
+            inbox.host.layoutIfNeeded()
+        }
+
+        // Into the next section, and on to where the window has to follow it.
+        #expect(inbox.order[1].prefix(4) == [10, 11, 12, 7])
+        let top = try #require(inbox.shownTop(7))
+        #expect(top >= 0)
+        #expect(top + 44 <= 400)
+        #expect((inbox.table.scroll?.contentOffset.y ?? 0) > 0)
+    }
+
+    @Test @MainActor
+    func aLiftedRowIsPutDownAsTheFocusLeavesOrTheEditingEnds() throws {
+        let inbox = Inbox()
+        defer { inbox.host.detach() }
+        inbox.table.onMove = { _ in }
+        inbox.table.isEditing = true
+        inbox.host.layoutIfNeeded()
+        let first = try #require(inbox.row(1))
+        let second = try #require(inbox.row(4))
+
+        inbox.host.focus(first.cell.handle.id)
+        pressSelect(inbox)
+        inbox.host.focus(second.cell.handle.id)
+        #expect(first.appearance.zIndex == 0)
+        #expect(!inbox.host.moveCommand(.down))
+
+        pressSelect(inbox)
+        #expect(second.appearance.zIndex == 1)
+        inbox.table.isEditing = false
+        #expect(second.appearance.zIndex == 0)
+    }
+
+    @Test @MainActor
+    func withMarksTooTheMarkTakesTheFocusForSelecting() throws {
+        let inbox = Inbox()
+        defer { inbox.host.detach() }
+        inbox.edit()
+        let row = try #require(inbox.row(2))
+
+        inbox.host.focus(row.cell.mark.id)
+        #expect(inbox.host.focusedNode == row.cell.mark.id)
+        pressSelect(inbox)
+        #expect(inbox.table.selection == [2])
+        // A touch on the mark still selects, as on the rest of the row.
+        inbox.tap(at: try #require(inbox.point(2)))
+        #expect(inbox.table.selection.isEmpty)
+
+        inbox.host.focus(row.cell.handle.id)
+        pressSelect(inbox)
+        #expect(inbox.host.moveCommand(.down))
+        inbox.host.layoutIfNeeded()
+        #expect(inbox.order[0].prefix(4) == [0, 1, 3, 2])
+    }
+
     @Test @MainActor
     func anEditedRowDoesNotSwipeAndOffersToMoveInstead() throws {
         let inbox = Inbox()
