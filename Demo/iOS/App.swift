@@ -1,9 +1,10 @@
-// The demo screen on iPhone and iPad, and on the Mac through Mac Catalyst: the
-// `LayoutDemoiOS` scheme of `Demo.xcodeproj`. SwiftUI is used only here, as the app's shell:
-// the screen itself is made of nodes, whose `Text`, `Color` and `Button` would clash with
-// SwiftUI's names in one file.
+// The demo screen on iPhone and iPad, and on the Mac through Mac Catalyst, in a stack of
+// screens: the `LayoutDemoiOS` scheme of `Demo.xcodeproj`. SwiftUI is used only here, as the
+// app's shell: the screens are made of nodes, whose `Text`, `Color` and `Button` would clash
+// with SwiftUI's names in one file.
+import AppShell
+import AppShellUIKit
 import LayoutUIKit
-import NodesUIKit
 import SwiftUI
 import ThemeCore
 
@@ -18,8 +19,9 @@ struct LayoutDemoApp: App {
     }
 }
 
-/// The node screen in a `NodeView`.
-struct DemoScreenView: UIViewRepresentable {
+/// The demo's stack of screens in its navigation controller: the node screen at the root, a
+/// message over it when one is opened in the inbox.
+struct DemoScreenView: UIViewControllerRepresentable {
     @MainActor
     final class Coordinator {
         let model = DemoModel()
@@ -29,16 +31,11 @@ struct DemoScreenView: UIViewRepresentable {
         Coordinator()
     }
 
-    func makeUIView(context: Context) -> NodeView {
-        let view = NodeView(root: context.coordinator.model.screen)
-        view.host.solvesInBackground = true
-        return view
+    func makeUIViewController(context: Context) -> UIViewController {
+        let model = context.coordinator.model
+        model.openMessages(from: ProcessInfo.processInfo.environment)
+        return model.stack.makeViewController()
     }
 
-    func updateUIView(_ view: NodeView, context: Context) {}
-
-    /// The screen takes all the space it is offered.
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView: NodeView, context: Context) -> CGSize? {
-        proposal.replacingUnspecifiedDimensions()
-    }
+    func updateUIViewController(_ controller: UIViewController, context: Context) {}
 }

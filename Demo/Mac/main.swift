@@ -1,6 +1,9 @@
-// The demo screen in a Mac window, with the screen's commands in the menu bar: the
-// `LayoutDemoMac` scheme of `Demo.xcodeproj`.
+// The demo screen in a Mac window, in a stack of screens — a message opened in the inbox
+// slides in over it — with the screen's commands in the menu bar: the `LayoutDemoMac` scheme
+// of `Demo.xcodeproj`.
 import AppKit
+import AppShell
+import AppShellAppKit
 import Nodes
 import NodesAppKit
 
@@ -11,24 +14,17 @@ final class DemoApp: NSObject, NSApplicationDelegate {
     private let model = DemoModel()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let content = NSView(frame: NSRect(x: 0, y: 0, width: 640, height: 560))
-        let screen = content.addSubnode(model.screen)
-        screen.frame = content.bounds
-        screen.autoresizingMask = [.width, .height]
-        screen.host.solvesInBackground = true
-
+        model.openMessages(from: ProcessInfo.processInfo.environment)
         let window = NSWindow(
-            contentRect: content.frame,
+            contentRect: NSRect(x: 0, y: 0, width: 640, height: 560),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
-        window.title = "Layout demo"
-        window.contentView = content
+        window.contentViewController = model.stack.makeViewController()
+        window.setContentSize(NSSize(width: 640, height: 560))
         window.center()
         window.makeKeyAndOrderFront(nil)
-        // The keyboard, and with it the menu's commands, go to the screen from the start.
-        window.makeFirstResponder(screen)
         self.window = window
 
         let quit = NSMenuItem(
@@ -42,6 +38,7 @@ final class DemoApp: NSObject, NSApplicationDelegate {
         let menu = NSMenu(title: "")
         menu.addItem(app)
         menu.addItem(NSMenuItem(DemoModel.menu))
+        menu.addItem(NSMenuItem(Menu("Go") { Command.back }))
         NSApplication.shared.mainMenu = menu
     }
 

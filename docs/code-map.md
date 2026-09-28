@@ -325,3 +325,11 @@
 | `NodeHost.theme`, `conditions`, `resolvedTheme`; `Node.theme`, `themeOverride`; `Animation(Motion)` | тема в дереве нод, переопределения поддерева | [09](09-theme.md#распространение-по-дереву) |
 | `TextStyle.role`, `colorRole`, `scalesWithText`, `resolved(in:)`; `Text.restyle`; `Button.fill`; тема в `Table`, `RefreshSpinner` | компоненты по теме | [09](09-theme.md) |
 | `DisplayConditions(UITraitCollection/NSAppearance)`, `UIColor/NSColor(ThemeColor)`, `UIFont/NSFont.themed`; `NodeView/NodeNSView.updateConditions`; `LayoutView/LayoutNSView.layoutTheme` | условия системы и тема для обычных view | [09](09-theme.md#обычные-view); дефект #202 |
+
+## `Sources/AppShell`, `Sources/AppShellUIKit`, `Sources/AppShellAppKit`
+
+| Код | Что | Основание |
+|---|---|---|
+| `Screen`, `NodeScreen`, `Stack`, `StackEntryID`, `StackMove`, `StackPresenter`, `NavigationResult`, `NavigationRejection`, `PresentedStack` | экраны и стек: записи со своей идентичностью, один ход за раз, подтверждение платформой, возврат пользователя | [12](12-app-layer.md) (A0, A1; «Идентичность и согласование переходов») |
+| `StackNavigationController` (`popViewController`/`popToViewController` override, `follow`, `matchStack`), `ScreenViewController`, `ControllerScreen` (UIKit) | стек в `UINavigationController`; возврат платформы ведёт стек | [12](12-app-layer.md) (A1) |
+| `StackViewController` (`present`, `giveKeyboard`, `goBack`, `validateMenuItem`), `StackView`, `ScreenViewController`, `ControllerScreen` (AppKit) | свой стек Mac: сдвиг, Cmd-[, меню, возврат фокуса | [12](12-app-layer.md) (A1) |

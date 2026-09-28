@@ -135,7 +135,7 @@ public final class Stack<Route: Hashable>: CommandResponder {
     /// What shows the stack; until there is one, nothing shows and no move ends.
     ///
     /// Ownership: not kept. Isolation: MainActor. Errors: none. Cancellation: set to `nil`.
-    public weak var presenter: StackPresenter? {
+    public weak var presenter: (any StackPresenter)? {
         didSet { reconcile() }
     }
 
@@ -260,6 +260,26 @@ public final class Stack<Route: Hashable>: CommandResponder {
 
     // MARK: - For platform adapters
 
+    /// The platform's container showing the stack, while there is one: a stack is shown in
+    /// one place, and asking the adapter again gives the same container.
+    package weak var platformContainer: AnyObject?
+
+    /// Whether the user can begin going back now: the stack shows more than its root and no
+    /// move goes on. The adapter keeps the platform's swipe back from beginning otherwise.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var canBeginBack: Bool {
+        !isClosed && moving == nil && confirmed.count > 1
+    }
+
+    /// The entries the platform last confirmed showing, the root first.
+    ///
+    /// Ownership: returns values. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    public var presentedEntries: [StackEntryID] {
+        confirmed.map(\.id)
+    }
+
     /// The screen of `entry`, while the stack has it.
     ///
     /// Ownership: returns a screen the stack keeps. Isolation: MainActor. Errors: none.
@@ -269,16 +289,18 @@ public final class Stack<Route: Hashable>: CommandResponder {
     }
 
     /// The user began going back — a swipe from the edge, the back button, Menu on the
-    /// remote — which the platform animates by itself. Returns the move to report the end
-    /// of, or `nil` when the stack cannot go back now: at the root, or during another move;
-    /// the adapter then keeps the platform from beginning it.
+    /// remote — which the platform animates by itself, to the first `keeping` screens (the
+    /// back button's menu jumps several); `nil` goes back one. Returns the move to report the
+    /// end of, or `nil` when the stack cannot go back there now: at the root, during another
+    /// move, or to nowhere shown; the adapter then keeps the platform from beginning it.
     ///
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: the move ends
     /// with `completed: false` when the user lets go early.
-    public func backBegan() -> StackMove? {
-        guard !isClosed, moving == nil, confirmed.count > 1 else { return nil }
+    public func backBegan(keeping: Int? = nil) -> StackMove? {
+        let count = keeping ?? confirmed.count - 1
+        guard canBeginBack, count >= 1, count < confirmed.count else { return nil }
 
-        let target = Array(confirmed.dropLast())
+        let target = Array(confirmed.prefix(count))
         let move = makeMove(to: target)
         moving = Move(move: move, revision: revision, target: target, isBack: true)
         return move
@@ -377,3 +399,18 @@ public final class Stack<Route: Hashable>: CommandResponder {
         }
     }
 }
+
+/// A stack as its adapters see it, whatever its routes: they show its entries' screens and
+/// report the moves.
+@MainActor
+package protocol PresentedStack: CommandResponder {
+    var presenter: (any StackPresenter)? { get set }
+    var platformContainer: AnyObject? { get set }
+    var presentedEntries: [StackEntryID] { get }
+    var canBeginBack: Bool { get }
+    func screen(for entry: StackEntryID) -> Screen?
+    func backBegan(keeping: Int?) -> StackMove?
+    func moveEnded(_ id: UInt64, completed: Bool)
+}
+
+extension Stack: PresentedStack {}

@@ -30,6 +30,9 @@ ThemeCore       тема: цвета (Color), типографика, радиу
 StateCore       синхронное состояние на MainActor с отслеживанием чтений: State, Computed,
                 Observer, Effect, StateTransaction (см. 08). Только стандартная библиотека.
 StateAsyncRay   адаптер AsyncRay ↔ StateCore (AsyncRay 1.0.0)
+AppShell        слой приложения: Screen, NodeScreen, Stack (см. 12). Без UIKit/AppKit.
+AppShellUIKit   стек в UINavigationController, ControllerScreen(UIViewController)
+AppShellAppKit  свой стек на NSViewController, ControllerScreen(NSViewController)
 ```
 
 Зависимости направлены только вниз:
@@ -70,4 +73,4 @@ NodesUIKit ──► LayoutUIKit, NodesAppKit ──► LayoutAppKit   (усло
 | Экран на нодах в UIKit-приложении | `Nodes` + `NodesUIKit` |
 | Ноды + реактивные данные из AsyncRay | `Nodes` + `NodesUIKit` + `StateCore` + `StateAsyncRay` |
 | Тесты математики раскладки без платформы | `LayoutCore` |
-| Приложение целиком: окна, экраны, стек, маршруты (предложено, кода нет) | `AppShell` + `AppShellUIKit` / `AppShellAppKit` — [12](12-app-layer.md) |
+| Экраны и стек навигации (A1; окна и точка входа — позже) | `AppShell` + `AppShellUIKit` / `AppShellAppKit` — [12](12-app-layer.md) |

@@ -1,9 +1,11 @@
 import Nodes
+import StateCore
 
 /// What a navigation stack, a tab or a window shows as one screen: its title, the commands of
 /// its toolbar, and whether it is the one shown. What it shows is its kind's: a tree of nodes
-/// (`NodeScreen`), or a view controller of the platform (`ControllerScreen`). It carries out
-/// commands as a `CommandResponder`: those its content leaves, before the stack around it.
+/// (`NodeScreen`), or a view controller of the platform (`ControllerScreen`, in the UIKit and
+/// AppKit adapters). It carries out commands as a `CommandResponder`: those its content
+/// leaves, before the stack around it.
 ///
 /// A screen belongs to one place at a time: a stack does not take a screen that is already in
 /// one.
@@ -12,17 +14,31 @@ import Nodes
 /// Isolation: MainActor. Errors: none. Cancellation: not applicable.
 @MainActor
 open class Screen: CommandResponder {
+    private let titleState: State<String>
+    private let toolbarState = State<[Command]>([])
+
+    /// The screen's title, in the navigation bar or the window's title. Reading it under
+    /// tracking depends on it: the adapters show a new title at once.
+    ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
-    public var title: String
+    public var title: String {
+        get { titleState.value }
+        set { titleState.value = newValue }
+    }
 
     /// The commands the container shows as buttons around the screen — in its navigation bar,
-    /// or the window's toolbar — enabled as the menus are (`canPerform`).
+    /// or the window's toolbar — enabled as the menus are (`canPerform`). Reading it under
+    /// tracking depends on it.
     ///
     /// Ownership: values. Isolation: MainActor. Errors: none. Cancellation: not applicable.
-    public var toolbar: [Command] = []
+    public var toolbar: [Command] {
+        get { toolbarState.value }
+        set { toolbarState.value = newValue }
+    }
 
     /// Whether the screen is the one its container shows, as last confirmed: set before
-    /// `appeared()`, cleared before `disappeared()`.
+    /// `appeared()`, cleared before `disappeared()`. A screen under a sheet is still the one
+    /// its stack shows.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public internal(set) var isPresented = false
@@ -30,10 +46,10 @@ open class Screen: CommandResponder {
     /// The place the screen is in, while it is in one.
     weak var owner: AnyObject?
 
-    // In the module this is `package`: only the screens of the layer and of its adapters
-    // (`ControllerScreen`) derive from it, as the adapters show each kind their own way.
-    init(title: String) {
-        self.title = title
+    /// Only the screens of the layer and of its adapters derive from it: the adapters show
+    /// each kind their own way.
+    package init(title: String) {
+        titleState = State(title)
     }
 
     /// The screen became the one shown, once its move ended. A move taken back — a swipe
@@ -68,26 +84,6 @@ open class NodeScreen: Screen {
     /// Errors: none. Cancellation: not applicable.
     public init(_ root: Node, title: String = "") {
         self.root = root
-        super.init(title: title)
-    }
-}
-
-/// A screen showing a view controller of the platform — a stand-in here for the adapters'
-/// `ControllerScreen(UIViewController)` and `ControllerScreen(NSViewController)`, which own
-/// the controller and pass it the screen's life and input.
-///
-/// Ownership: keeps `controller`. Isolation: MainActor. Errors: none. Cancellation: not
-/// applicable.
-@MainActor
-open class ControllerScreen: Screen {
-    /// Ownership: kept by the screen. Isolation: MainActor. Errors: none. Cancellation: not
-    /// applicable.
-    public let controller: AnyObject
-
-    /// Ownership: keeps `controller`, which must not be shown elsewhere. Isolation:
-    /// MainActor. Errors: none. Cancellation: not applicable.
-    public init(_ controller: AnyObject, title: String = "") {
-        self.controller = controller
         super.init(title: title)
     }
 }

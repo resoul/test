@@ -2,7 +2,7 @@ import Nodes
 import StateCore
 import Testing
 
-@testable import AppShellModel
+@testable import AppShell
 
 private enum Route: Hashable {
     case inbox

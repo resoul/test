@@ -2,6 +2,8 @@
 // Rename button, the select button presses the focused one, and Play/Pause brings the focus
 // back to Ada's badge: the `LayoutDemoTV` scheme of `Demo.xcodeproj`, on an Apple TV
 // simulator.
+import AppShell
+import AppShellUIKit
 import LayoutUIKit
 import Nodes
 import NodesUIKit
@@ -26,6 +28,10 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
+    /// The demo, while it shows.
+    private var model: DemoModel?
+    /// The stack a UI test drives (`StackProbe`), while it shows.
+    private var probeStack: Stack<StackProbe.Route>?
 
     func scene(
         _ scene: UIScene,
@@ -35,22 +41,51 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         guard let windowScene = scene as? UIWindowScene else { return }
 
         let window = UIWindow(windowScene: windowScene)
-        window.rootViewController = ScreenController()
+        let environment = ProcessInfo.processInfo.environment
+        if let probe = ScreenController.probe(environment) {
+            window.rootViewController = ScreenController(probe)
+        } else if environment["STACK_PROBE"] != nil {
+            let stack = StackProbe.makeStack()
+            probeStack = stack
+            window.rootViewController = stack.makeViewController()
+        } else {
+            let model = DemoModel()
+            // Play/Pause on the remote asks for the focus on Ada's badge, from wherever it is.
+            let badge = model.firstBadge
+            model.screen.handle(.playPause) { [weak badge] in
+                guard let badge else { return }
+
+                badge.host?.requestFocus(badge.id)
+            }
+            model.openMessages(from: environment)
+            self.model = model
+            window.rootViewController = model.stack.makeViewController()
+        }
         window.makeKeyAndVisible()
         self.window = window
     }
 }
 
-/// Shows the node screen full size, with the margins a TV screen needs.
+/// Shows a screen for UI tests full size, with the margins a TV screen needs.
 final class ScreenController: UIViewController {
-    private let model = DemoModel()
     /// A screen for UI tests instead of the demo: the remote's reach (`FocusProbe`), moving
     /// rows with it (`MoveProbe`), or its buttons as commands (`CommandProbe`).
-    private let probe: Node? =
-        ProcessInfo.processInfo.environment["FOCUS_PROBE"].map { FocusProbe($0) }
-        ?? ProcessInfo.processInfo.environment["MOVE_PROBE"].map { _ in MoveProbe() }
-        ?? ProcessInfo.processInfo.environment["COMMAND_PROBE"].map { _ in CommandProbe() }
-    private lazy var screen = NodeView(root: probe ?? model.screen)
+    static func probe(_ environment: [String: String]) -> Node? {
+        environment["FOCUS_PROBE"].map { FocusProbe($0) }
+            ?? environment["MOVE_PROBE"].map { _ in MoveProbe() }
+            ?? environment["COMMAND_PROBE"].map { _ in CommandProbe() }
+    }
+
+    private let screen: NodeView
+
+    init(_ root: Node) {
+        screen = NodeView(root: root)
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -67,11 +102,6 @@ final class ScreenController: UIViewController {
             screen.topAnchor.constraint(equalTo: margins.topAnchor),
             screen.bottomAnchor.constraint(equalTo: margins.bottomAnchor),
         ])
-        // Play/Pause on the remote asks for the focus on Ada's badge, from wherever it is.
-        let badge = model.firstBadge.id
-        model.screen.handle(.playPause) { [weak screen] in
-            screen?.host.requestFocus(badge)
-        }
     }
 
     override var preferredFocusEnvironments: [any UIFocusEnvironment] {
