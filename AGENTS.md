@@ -43,7 +43,8 @@ D09», «см. ADR 0007», «по плану, этап E1», «дефект #95�
   Модуль раскладки — чистые функции над иммутабельными `Sendable`-значениями.
 - **Платформа.** `LayoutCore` импортирует только Foundation и собирается на Linux. `#if os(...)`
   запрещён. UIKit/AppKit — только в адаптерах (`LayoutUIKit`, `LayoutAppKit`, `NodesUIKit`,
-  `NodesAppKit`), под `#if canImport(...)` в самих файлах. AppKit-адаптеры — под
+  `NodesAppKit`, `AppShellUIKit`, `AppShellAppKit`), под `#if canImport(...)` в самих файлах.
+  Слой приложения `AppShell` — без UIKit/AppKit, собирается на Linux. AppKit-адаптеры — под
   `#if canImport(AppKit) && !canImport(UIKit)`: в Mac Catalyst импортируются оба фреймворка,
   но `NSView` там нет, и приложение пользуется UIKit-адаптером.
 - **Документация публичного API.** Каждое `public` объявление несёт `Ownership:`,
