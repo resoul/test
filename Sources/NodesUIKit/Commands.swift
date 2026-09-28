@@ -129,10 +129,48 @@
             }
         }
 
+        /// A command's menu item shows a checkmark while the command is on.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        @available(tvOS, unavailable)
+        public override func validate(_ command: UICommand) {
+            super.validate(command)
+            guard command.action == #selector(performCommand(_:)),
+                let carried = self.command(of: command)
+            else { return }
+
+            command.state = host.isOn(carried) ? .on : .off
+        }
+
         private func command(of sender: UICommand) -> Command? {
             guard let id = sender.propertyList as? String else { return nil }
 
             return host.availableCommands().first { $0.id == id }
+        }
+    }
+
+    extension UIBarButtonItem {
+        /// A button carrying out `command` by `target` — a tree's host, or a screen and the
+        /// responders around it — with the command's title. `update(_:for:)` shows whether it
+        /// is enabled.
+        ///
+        /// Ownership: returns a new item; it does not keep `target`. Isolation: MainActor.
+        /// Errors: none. Cancellation: not applicable.
+        public convenience init(_ command: Command, target: any CommandTarget) {
+            let action = UIAction(title: command.title) { [weak target] _ in
+                target?.perform(command)
+            }
+            self.init(primaryAction: action)
+            accessibilityIdentifier = command.id
+            update(command, for: target)
+        }
+
+        /// Shows whether `command` would be carried out by `target` now: the button is enabled
+        /// then. Reading it under tracking depends on what the command's handlers read.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public func update(_ command: Command, for target: any CommandTarget) {
+            isEnabled = target.canPerform(command)
         }
     }
 

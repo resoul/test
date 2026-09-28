@@ -49,7 +49,9 @@
     }
 
     /// Shows a stack's top screen, and slides between screens as the stack moves.
-    final class StackViewController: NSViewController, StackPresenter, NSMenuItemValidation {
+    final class StackViewController: NSViewController, StackPresenter, NSMenuItemValidation,
+        NSToolbarItemValidation
+    {
         let stack: any PresentedStack
         /// The controller of each entry, kept while the stack has the entry.
         private var controllers: [StackEntryID: NSViewController] = [:]
@@ -57,7 +59,9 @@
         private var shown: StackEntryID?
         /// The node that had the keyboard's focus on each screen when it went under the next.
         private var savedFocus: [StackEntryID: NodeID] = [:]
-        private var titleWatch: Observer?
+        private var topWatch: Observer?
+        /// The window's toolbar, while the stack is a window's content.
+        private let toolbar = WindowToolbar(hasBack: true)
 
         /// Seconds a slide to the next screen takes.
         static let slideTime = 0.25
@@ -85,16 +89,21 @@
                 controller.view.autoresizingMask = [.width, .height]
                 view.addSubview(controller.view)
                 shown = top
-                watchTitle()
+                watchTop()
             }
         }
 
         /// Shown in a window whose keyboard is nowhere, the stack gives it to the top screen:
-        /// its keys and the menus' commands reach it from the start.
+        /// its keys and the menus' commands reach it from the start. As the window's content,
+        /// it puts up the window's toolbar.
         override func viewDidAppear() {
             super.viewDidAppear()
-            guard let window = view.window, window.firstResponder === window,
-                let shown, let controller = controllers[shown]
+            guard let window = view.window else { return }
+
+            if window.contentViewController === self {
+                toolbar.attach(to: window)
+            }
+            guard window.firstResponder === window, let shown, let controller = controllers[shown]
             else { return }
 
             giveKeyboard(to: controller, entry: shown)
@@ -127,7 +136,7 @@
             incoming.view.autoresizingMask = [.width, .height]
             view.addSubview(incoming.view)
             shown = target
-            watchTitle()
+            watchTop()
 
             let finish = { [weak self] in
                 outgoing?.view.removeFromSuperview()
@@ -191,16 +200,18 @@
         /// A command's menu item chosen over a controller of AppKit: the top screen, and the
         /// stack around it, carry it out. Over nodes, their view takes it first.
         @objc func performCommand(_ sender: Any?) {
-            guard let command = (sender as? NSMenuItem)?.representedObject as? Command else {
-                return
-            }
+            guard let command = Command(carriedBy: sender) else { return }
 
             topScreen?.perform(command)
         }
 
         func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-            guard menuItem.action == #selector(performCommand(_:)) else { return true }
-            guard let command = menuItem.representedObject as? Command else { return false }
+            menuItem.validate(with: topScreen)
+        }
+
+        func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
+            guard item.action == #selector(performCommand(_:)) else { return true }
+            guard let command = Command(carriedBy: item) else { return false }
 
             return topScreen?.canPerform(command) ?? false
         }
@@ -242,14 +253,17 @@
             return controller
         }
 
-        /// The controller's title is the top screen's, as it changes.
-        private func watchTitle() {
-            titleWatch?.cancel()
-            let watch = Observer { [weak self] in self?.watchTitle() }
-            titleWatch = watch
-            if let screen = topScreen {
-                title = watch.track { screen.title }
-            }
+        /// The controller's title is the top screen's, and the toolbar's commands are, as they
+        /// change.
+        private func watchTop() {
+            topWatch?.cancel()
+            let watch = Observer { [weak self] in self?.watchTop() }
+            topWatch = watch
+            guard let screen = topScreen else { return }
+
+            let (text, commands) = watch.track { (screen.title, screen.toolbar) }
+            title = text
+            toolbar.show(commands)
         }
 
         /// Lets go of the controllers of entries the stack no longer has; a tree of nodes
@@ -285,10 +299,13 @@
     }
 
     /// Shows a screen of nodes: its tree in a node view filling the controller's view. The
-    /// tree's commands go on to the screen.
+    /// tree's commands go on to the screen. As a window's content, it puts up the window's
+    /// toolbar with the screen's commands.
     final class ScreenViewController: NSViewController {
         let screen: NodeScreen
         let nodeView: NodeNSView
+        private var toolbar: WindowToolbar?
+        private var toolbarWatch: Observer?
 
         init(_ screen: NodeScreen) {
             self.screen = screen
@@ -304,6 +321,23 @@
 
         override func loadView() {
             view = nodeView
+        }
+
+        override func viewDidAppear() {
+            super.viewDidAppear()
+            guard let window = view.window, window.contentViewController === self else { return }
+
+            if toolbar == nil {
+                toolbar = WindowToolbar(hasBack: false)
+                watchToolbar()
+            }
+            toolbar?.attach(to: window)
+        }
+
+        private func watchToolbar() {
+            let watch = Observer { [weak self] in self?.watchToolbar() }
+            toolbarWatch = watch
+            toolbar?.show(watch.track { screen.toolbar })
         }
     }
 #endif

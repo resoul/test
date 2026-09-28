@@ -14,7 +14,7 @@ import ThemeCore
 /// Ownership: the host keeps the root, which keeps its mounted subnodes. Isolation:
 /// MainActor; the pass runs synchronously. Errors: none. Cancellation: `detach()`.
 @MainActor
-public final class NodeHost {
+public final class NodeHost: CommandTarget {
     /// Ownership: owned by the host. Isolation: MainActor. Errors: none. Cancellation: not
     /// applicable.
     public let root: Node
@@ -238,7 +238,13 @@ public final class NodeHost {
     private var pressed: Node?
     /// The node last under a finger or the mouse going down, where commands go while no
     /// node has the focus.
-    private var pointed: NodeID?
+    private var pointed: NodeID? {
+        didSet {
+            if pointed != oldValue { originChanges.value &+= 1 }
+        }
+    }
+    /// Counts the moves of where commands start — the focus, the node last pressed.
+    private let originChanges = State(0)
     /// The node a drag under way moves.
     private var dragged: Node?
     private var generation: UInt64 = 0
@@ -979,6 +985,7 @@ public final class NodeHost {
 
         let previous = focusedNode.flatMap { mounted[$0] }
         focusedNode = target?.id
+        originChanges.value &+= 1
         // The adapter draws a focus ring, if any, at its next drawing.
         setNeedsRender()
         withAnimation(focusAnimation) {
@@ -1263,10 +1270,24 @@ public final class NodeHost {
         return false
     }
 
+    /// Whether `command` is on (`Node.handle(_:isEnabled:isOn:perform:)`), as the handler
+    /// that would carry it out says — or, while none can, the nearest handler for it, from
+    /// the focused node out. `false` for a command that is not turned on and off. A menu
+    /// shows a checkmark by it while it is on.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func isOn(_ command: Command) -> Bool {
+        let matches = { (handler: CommandHandler) in handler.command.id == command.id }
+        let handler = enabledHandler(where: matches) ?? nearestHandler(where: matches)
+        return handler?.isOn?() ?? false
+    }
+
     /// Where a command starts: the focused node, else the node last pressed or clicked while
-    /// it is in the tree, else the root.
+    /// it is in the tree, else the root. Reading it under tracking depends on where it is: a
+    /// toolbar watching its commands sees a new focus.
     private var commandOrigin: Node {
-        focusedNode.flatMap { mounted[$0] } ?? pointed.flatMap { mounted[$0] } ?? root
+        _ = originChanges.value
+        return focusedNode.flatMap { mounted[$0] } ?? pointed.flatMap { mounted[$0] } ?? root
     }
 
     private func enabledHandler(where matches: (CommandHandler) -> Bool) -> CommandHandler? {
@@ -1279,6 +1300,17 @@ public final class NodeHost {
             node = current.supernode
         }
         return outerResponder?.enabledHandler(where: matches)
+    }
+
+    private func nearestHandler(where matches: (CommandHandler) -> Bool) -> CommandHandler? {
+        var node: Node? = commandOrigin
+        while let current = node {
+            if let handler = current.commandHandlers.first(where: matches) {
+                return handler
+            }
+            node = current.supernode
+        }
+        return outerResponder?.nearestHandler(where: matches)
     }
 
     // MARK: - Accessibility

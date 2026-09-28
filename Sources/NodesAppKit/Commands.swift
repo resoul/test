@@ -63,27 +63,98 @@
         }
     }
 
-    extension NodeNSView: NSMenuItemValidation {
-        /// A menu item made from a command (`NSMenuItem(_:)`) was chosen: the tree carries the
-        /// command out.
+    /// A toolbar button carrying out a command through the responder chain, with its title —
+    /// for a window's `NSToolbar`, whose delegate makes one for the command's identifier:
+    ///
+    ///     CommandToolbarItem(.flag)   // identifier "flag"
+    ///
+    /// It is enabled while the first responder would carry the command out: a node view
+    /// there asks its tree.
+    ///
+    /// Ownership: the toolbar keeps it. Isolation: MainActor. Errors: none. Cancellation:
+    /// not applicable.
+    public final class CommandToolbarItem: NSToolbarItem {
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public let command: Command
+
+        /// An item for `command`, with the command's id as its identifier unless `identifier`
+        /// is given.
+        ///
+        /// Ownership: returns a new item. Isolation: MainActor. Errors: none. Cancellation:
+        /// not applicable.
+        public init(_ command: Command, identifier: NSToolbarItem.Identifier? = nil) {
+            self.command = command
+            super.init(itemIdentifier: identifier ?? NSToolbarItem.Identifier(command.id))
+            label = command.title
+            paletteLabel = command.title
+            title = command.title
+            toolTip = command.title
+            isBordered = true
+            action = #selector(NodeNSView.performCommand(_:))
+        }
+    }
+
+    extension Command {
+        /// The command of a menu item (`NSMenuItem(_:)`) or a toolbar item
+        /// (`CommandToolbarItem`) made from one — the sender of `performCommand(_:)`.
+        ///
+        /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: not
+        /// applicable.
+        @MainActor
+        public init?(carriedBy item: Any?) {
+            if let command = (item as? NSMenuItem)?.representedObject as? Command {
+                self = command
+            } else if let command = (item as? CommandToolbarItem)?.command {
+                self = command
+            } else {
+                return nil
+            }
+        }
+    }
+
+    extension NodeNSView: NSMenuItemValidation, NSToolbarItemValidation {
+        /// A menu item or toolbar item made from a command (`NSMenuItem(_:)`,
+        /// `CommandToolbarItem`) was chosen: the tree carries the command out.
         ///
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         @objc public func performCommand(_ sender: Any?) {
-            guard let command = (sender as? NSMenuItem)?.representedObject as? Command else {
-                return
-            }
+            guard let command = Command(carriedBy: sender) else { return }
 
             host.perform(command)
         }
 
-        /// A command's item is enabled while a node of the tree would carry it out.
+        /// A command's item is enabled while a node of the tree would carry it out, and shows
+        /// a checkmark while the command is on.
         ///
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-            guard menuItem.action == #selector(performCommand(_:)) else { return true }
-            guard let command = menuItem.representedObject as? Command else { return false }
+            menuItem.validate(with: host)
+        }
+
+        /// A command's toolbar button is enabled while a node of the tree would carry it out.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
+            guard item.action == #selector(performCommand(_:)) else { return true }
+            guard let command = Command(carriedBy: item) else { return false }
 
             return host.canPerform(command)
+        }
+    }
+
+    extension NSMenuItem {
+        /// Validates an item made from a command against `target`: whether it is enabled, and
+        /// its checkmark. Other items are left enabled. For a validator in the chain — a
+        /// controller over views of AppKit — that sends commands to `target`.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        @MainActor
+        public func validate(with target: (any CommandTarget)?) -> Bool {
+            guard action == #selector(NodeNSView.performCommand(_:)) else { return true }
+            guard let command = representedObject as? Command, let target else { return false }
+
+            state = target.isOn(command) ? .on : .off
+            return target.canPerform(command)
         }
     }
 

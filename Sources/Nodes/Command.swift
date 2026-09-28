@@ -170,6 +170,7 @@ public struct Command: Sendable, Hashable, Identifiable {
 struct CommandHandler {
     let command: Command
     let isEnabled: @MainActor () -> Bool
+    let isOn: (@MainActor () -> Bool)?
     let perform: @MainActor () -> Void
 }
 
@@ -194,6 +195,11 @@ extension Node {
     ///
     ///     list.handle(.flag, isEnabled: { !selection.isEmpty }) { flagSelection() }
     ///
+    /// A command that turns something on and off — a sidebar shown, a sort order chosen —
+    /// says with `isOn` whether it is on: a menu shows a checkmark by it then.
+    ///
+    ///     root.handle(.showSidebar, isOn: { sidebar.isShown }) { sidebar.isShown.toggle() }
+    ///
     /// A second handler for the same command replaces the first.
     ///
     /// Ownership: the node keeps the closures; they must not keep the node. Isolation:
@@ -201,10 +207,11 @@ extension Node {
     public func handle(
         _ command: Command,
         isEnabled: @escaping @MainActor () -> Bool = { true },
+        isOn: (@MainActor () -> Bool)? = nil,
         perform: @escaping @MainActor () -> Void
     ) {
         commandHandlers.set(
-            CommandHandler(command: command, isEnabled: isEnabled, perform: perform)
+            CommandHandler(command: command, isEnabled: isEnabled, isOn: isOn, perform: perform)
         )
     }
 
@@ -239,7 +246,7 @@ extension Node {
 /// Ownership: the responder keeps its handlers; it does not keep `outer`. Isolation:
 /// MainActor. Errors: none. Cancellation: not applicable.
 @MainActor
-open class CommandResponder {
+open class CommandResponder: CommandTarget {
     /// The commands the responder carries out.
     var commandHandlers: [CommandHandler] = []
 
@@ -255,18 +262,20 @@ open class CommandResponder {
     public init() {}
 
     /// Carries out `command` with `perform` while `isEnabled` says the responder can; a
-    /// disabled handler leaves the command to `outer`. A second handler for the same command
-    /// replaces the first.
+    /// disabled handler leaves the command to `outer`. `isOn` says whether a command that
+    /// turns something on and off is on, as for `Node.handle`. A second handler for the same
+    /// command replaces the first.
     ///
     /// Ownership: the responder keeps the closures; they must not keep the responder.
     /// Isolation: MainActor. Errors: none. Cancellation: `removeHandler(for:)`.
     public func handle(
         _ command: Command,
         isEnabled: @escaping @MainActor () -> Bool = { true },
+        isOn: (@MainActor () -> Bool)? = nil,
         perform: @escaping @MainActor () -> Void
     ) {
         commandHandlers.set(
-            CommandHandler(command: command, isEnabled: isEnabled, perform: perform)
+            CommandHandler(command: command, isEnabled: isEnabled, isOn: isOn, perform: perform)
         )
     }
 
@@ -307,17 +316,57 @@ open class CommandResponder {
         return true
     }
 
+    /// Whether `command` is on (`handle(_:isEnabled:isOn:perform:)`), as the handler that
+    /// would carry it out says — or, while none can, the nearest handler for it. `false` for a
+    /// command that is not turned on and off.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func isOn(_ command: Command) -> Bool {
+        let matches = { (handler: CommandHandler) in handler.command.id == command.id }
+        let handler = enabledHandler(where: matches) ?? nearestHandler(where: matches)
+        return handler?.isOn?() ?? false
+    }
+
     /// The first enabled handler matching, from this responder out.
     func enabledHandler(where matches: (CommandHandler) -> Bool) -> CommandHandler? {
+        nearestHandler { matches($0) && $0.isEnabled() }
+    }
+
+    /// The first handler matching, enabled or not, from this responder out.
+    func nearestHandler(where matches: (CommandHandler) -> Bool) -> CommandHandler? {
         var responder: CommandResponder? = self
         while let current = responder {
-            if let handler = current.commandHandlers.first(where: {
-                matches($0) && $0.isEnabled()
-            }) {
+            if let handler = current.commandHandlers.first(where: matches) {
                 return handler
             }
             responder = current.outer
         }
         return nil
     }
+}
+
+/// Where a menu item, a toolbar button or any control made from a command sends it: a tree's
+/// host — from its focused node out, and on past the root — or a responder and those around
+/// it. It says whether the command would be carried out now and whether it is on.
+///
+/// Ownership: whoever makes the control keeps the target; controls do not keep it.
+/// Isolation: MainActor. Errors: none. Cancellation: not applicable.
+@MainActor
+public protocol CommandTarget: AnyObject {
+    /// Whether the command would be carried out now: a control shows it enabled then.
+    /// Reading it under tracking depends on what its handlers read.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    func canPerform(_ command: Command) -> Bool
+
+    /// Carries out the command; returns whether one did.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    @discardableResult
+    func perform(_ command: Command) -> Bool
+
+    /// Whether the command is on: a menu shows a checkmark by it.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    func isOn(_ command: Command) -> Bool
 }
