@@ -129,10 +129,11 @@
         /// the platform. The stack's own moves set the controllers and never come here: a
         /// call during one is the platform going back a second time for the same press — on
         /// a TV, Menu reaches both the tree, which goes back through the stack, and the
-        /// navigation controller's own recognizer — and does nothing.
+        /// navigation controller's own recognizer — and does nothing. Nor does a press of Menu
+        /// that a node of a screen took for itself, a panel it closes, take the screen off.
         override func popViewController(animated: Bool) -> UIViewController? {
             let count = viewControllers.count - 1
-            guard applying == nil, goingBack == nil,
+            guard applying == nil, goingBack == nil, !treeHandlesMenu,
                 let move = stack.backBegan(keeping: count)
             else { return nil }
 
@@ -142,12 +143,19 @@
             return popped
         }
 
+        /// A screen's tree took the Menu press that is going on.
+        private var treeHandlesMenu: Bool {
+            viewControllers.contains {
+                ($0 as? ScreenViewController)?.nodeView.isHandlingMenu == true
+            }
+        }
+
         /// The back button's menu, jumping back several screens.
         override func popToViewController(
             _ viewController: UIViewController,
             animated: Bool
         ) -> [UIViewController]? {
-            guard applying == nil, goingBack == nil,
+            guard applying == nil, goingBack == nil, !treeHandlesMenu,
                 let index = viewControllers.firstIndex(of: viewController),
                 let move = stack.backBegan(keeping: index + 1)
             else { return nil }

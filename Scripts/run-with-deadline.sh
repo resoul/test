@@ -54,6 +54,8 @@ SAMPLE_SECONDS=${SAMPLE_SECONDS:-3}
 KILL_GRACE=${KILL_GRACE:-10}
 
 mkdir -p "$RUN_DIR"
+# Absolute, so that a command which changes directory still finds the folder.
+RUN_DIR=$(cd "$RUN_DIR" && pwd)
 export RUN_DIR
 
 {
