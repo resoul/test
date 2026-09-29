@@ -1407,6 +1407,7 @@ public final class NodeHost: CommandTarget {
     ) -> CommandHandler? {
         var node: Node? = origin ?? commandOrigin
         while let current = node {
+            current.trackHandlers()
             if let handler = current.commandHandlers.first(where: { matches($0) && $0.isEnabled() })
             {
                 return handler
@@ -1419,6 +1420,7 @@ public final class NodeHost: CommandTarget {
     private func nearestHandler(where matches: (CommandHandler) -> Bool) -> CommandHandler? {
         var node: Node? = commandOrigin
         while let current = node {
+            current.trackHandlers()
             if let handler = current.commandHandlers.first(where: matches) {
                 return handler
             }

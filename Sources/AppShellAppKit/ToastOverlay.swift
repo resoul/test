@@ -111,6 +111,8 @@
             layer?.cornerRadius = 12
             layer?.masksToBounds = true
 
+            // A text field says its words as its value; the label is what a query finds it by.
+            label.setAccessibilityLabel(toast.message)
             var views: [NSView] = [label]
             if let action = toast.action {
                 actionButton.title = action.title
