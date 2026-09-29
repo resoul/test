@@ -3,6 +3,7 @@
     import LayoutCore
     import Nodes
     import NodesRender
+    import StateCore
     import Testing
 
     @testable import NodesAppKit
@@ -68,6 +69,39 @@
             let secure = name == "Password" || name == "New password"
             #expect((text is NSSecureTextField) == secure, "\(name)")
         }
+        view.host.detach()
+    }
+
+    @MainActor
+    private final class Address: Node {
+        let email = EmailField(placeholder: "Email")
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { email }
+        }
+    }
+
+    @Test @MainActor
+    func aFieldWhoseTextIsNotRightHasARedEdgeAndTellsWhyToAssistiveTools() throws {
+        let address = Address()
+        let view = NodeNSView(root: address)
+        view.frame = NSRect(x: 0, y: 0, width: 300, height: 100)
+        view.layout()
+        view.layout()
+        let text = try #require(view.embeddedView(of: address.email.id) as? NSTextField)
+        #expect(text.layer?.borderWidth == 0)
+        #expect(text.accessibilityHelp() == nil)
+
+        address.email.userChanged("ada")
+        address.email.validate()
+        StateUpdates.flush()
+        #expect(text.layer?.borderWidth == 1)
+        #expect(text.accessibilityHelp() == EmailField.defaultMessage)
+
+        address.email.userChanged("ada@example.com")
+        StateUpdates.flush()
+        #expect(text.layer?.borderWidth == 0)
+        #expect(text.accessibilityHelp() == nil)
         view.host.detach()
     }
 #endif

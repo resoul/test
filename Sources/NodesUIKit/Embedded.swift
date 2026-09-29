@@ -120,6 +120,7 @@
                 if view.text != text { view.text = text }
                 view.placeholder = placeholder
                 view.returnKeyType = UIReturnKeyType(returnKey)
+                view.show(validation)
             }
             onEditingRequest = { [weak view] editing in
                 guard let view else { return }
@@ -293,6 +294,20 @@
 
         required init?(coder: NSCoder) {
             nil
+        }
+
+        /// A red edge and the message read after the field's label, while the text is not
+        /// right.
+        func show(_ validation: FieldValidation) {
+            if case .invalid(let message) = validation {
+                layer.borderColor = UIColor.systemRed.cgColor
+                layer.borderWidth = 1
+                layer.cornerRadius = 6
+                accessibilityHint = message
+            } else {
+                layer.borderWidth = 0
+                accessibilityHint = nil
+            }
         }
 
         /// Text that is not words: no capitals, no autocorrection, no spell checking.
