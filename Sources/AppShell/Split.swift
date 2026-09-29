@@ -83,11 +83,14 @@ public final class Split: CommandResponder, SceneContent, TabContent {
         content.outer = self
         sidebar.setShown(false)
         (content as? any ShownByContainer)?.setShown(false)
-        handle(.back, isEnabled: { [weak self] in
-            guard let self else { return false }
+        handle(
+            .back,
+            isEnabled: { [weak self] in
+                guard let self else { return false }
 
-            return isCollapsed && isContentShown
-        }) { [weak self] in
+                return isCollapsed && isContentShown
+            }
+        ) { [weak self] in
             self?.showSidebar()
         }
     }

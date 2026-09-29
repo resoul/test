@@ -6,11 +6,15 @@
     import UIKit
 
     /// The controller showing a window's content, or a presentation's: a stack's navigation
-    /// controller, a screen of nodes, or a screen's own controller of UIKit.
+    /// controller, tabs' tab bar controller, a screen of nodes, or a screen's own controller of
+    /// UIKit.
     @MainActor
     func contentController(for content: CommandResponder) -> UIViewController {
         if let stack = content as? any PresentedStack {
             return stack.makeViewController()
+        }
+        if let tabs = content as? any PresentedTabs {
+            return tabs.makeViewController()
         }
         if let screen = content as? ControllerScreen {
             return screen.controller

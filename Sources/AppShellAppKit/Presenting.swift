@@ -8,11 +8,14 @@
     import StateCore
 
     /// The controller showing a window's content, or a presentation's: a stack's controller,
-    /// a screen of nodes, or a screen's own controller of AppKit.
+    /// tabs' controller, a screen of nodes, or a screen's own controller of AppKit.
     @MainActor
     func contentController(for content: CommandResponder) -> NSViewController {
         if let stack = content as? any PresentedStack {
             return stack.makeViewController()
+        }
+        if let tabs = content as? any PresentedTabs {
+            return tabs.makeViewController()
         }
         if let screen = content as? ControllerScreen {
             return screen.controller
