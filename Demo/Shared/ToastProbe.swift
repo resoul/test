@@ -1,4 +1,5 @@
 import AppShell
+import Foundation
 import LayoutCore
 import Nodes
 import NodesRender
@@ -39,6 +40,10 @@ enum ToastProbe {
         }
         shell.handle(showLongToast) {
             shell.toast(Toast("Could not save", persistent: true))
+        }
+        // `TOAST_AUTO` shows one as the app starts, to look at without touching anything.
+        if let auto = ProcessInfo.processInfo.environment["TOAST_AUTO"] {
+            shell.perform(auto == "long" ? showLongToast : showToast)
         }
     }
 

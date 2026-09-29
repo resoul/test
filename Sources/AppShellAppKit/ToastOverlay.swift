@@ -15,7 +15,6 @@
         init(session: SceneSession) {
             self.session = session
             super.init(frame: .zero)
-            autoresizingMask = [.width, .height]
             let watch = Observer { [weak self] in self?.follow() }
             self.watch = watch
             watch.track { [weak self] in self?.update() }
@@ -27,6 +26,16 @@
 
         private func follow() {
             watch?.track { [weak self] in self?.update() }
+        }
+
+        /// The toast is what this view has to say to assistive technologies; the view itself
+        /// is not an element.
+        override func isAccessibilityElement() -> Bool {
+            false
+        }
+
+        override func accessibilityChildren() -> [Any]? {
+            pill.map { [$0] } ?? []
         }
 
         /// Only the toast takes the mouse: everywhere else it goes to the view under.
@@ -144,6 +153,19 @@
 
         required init?(coder: NSCoder) {
             nil
+        }
+
+        /// The toast is a group: its words, its action, the button that closes it.
+        override func isAccessibilityElement() -> Bool {
+            true
+        }
+
+        override func accessibilityRole() -> NSAccessibility.Role? {
+            .group
+        }
+
+        override func accessibilityChildren() -> [Any]? {
+            [label] + (hasAction ? [actionButton] : []) + [closeButton]
         }
 
         @objc func actionTapped() {
