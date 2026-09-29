@@ -95,6 +95,24 @@ cd Demo && xcodebuild test -project Demo.xcodeproj -scheme LayoutDemoMac -destin
 «показать»), пропускаются, пока исполнителю тестов не разрешено управлять компьютером
 (Системные настройки → Конфиденциальность и безопасность → Универсальный доступ).
 
+## Долгие прогоны
+
+Полный `swift test` и прогоны `xcodebuild` (особенно UI-тесты Simulator) запускаются под
+крайним сроком: зависший прогон не должен съедать часы, а его состояние нужно снять до
+остановки — после остановки от него ничего не остаётся.
+
+```sh
+Scripts/run-with-deadline.sh 1800 -- swift test
+Scripts/run-with-deadline.sh 2400 -- sh -c 'cd Demo && xcodebuild test -project Demo.xcodeproj -scheme LayoutDemoTV -destination "platform=tvOS Simulator,name=Apple TV 4K (3rd generation)" -resultBundlePath "$RUN_DIR/result.xcresult"'
+```
+
+Срок — защита от потери времени, а не исправление зависания. Всё лежит в папке прогона
+(`.build/deadline-runs/<время>`, команда видит её как `$RUN_DIR`): полный вывод без
+фильтра, при срабатывании срока — таблица процессов, стеки зависших процессов (`sample`),
+тесты, которые начались и не закончились, загруженные симуляторы. Код выхода при остановке
+по сроку — 124. Такую папку прикладывать к записи о зависании в
+[docs/defects.md](docs/defects.md); вывод зависшего прогона не фильтровать.
+
 ## Отчётность
 
 - Каждый найденный дефект — строка в [docs/defects.md](docs/defects.md) в момент

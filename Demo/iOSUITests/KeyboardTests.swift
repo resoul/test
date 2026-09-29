@@ -18,9 +18,17 @@ final class KeyboardTests: XCTestCase {
             app.swipeUp()
         }
 
+        // The stages of the keyboard coming up, each judged on its own: the touch reached the
+        // field and gave it the focus, the keyboard showed, and only then whether the two
+        // came in time.
+        XCTAssertTrue(name.isHittable, "the field is under the finger")
         name.tap()
         let keyboard = app.keyboards.firstMatch
-        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        let focus = { name.value(forKey: "hasKeyboardFocus") as? Bool ?? false }
+        guard stage("the field has the focus", of: app, timeout: 15, until: focus) != nil,
+            stage("the keyboard shows", of: app, timeout: 15, until: { keyboard.exists }) != nil
+        else { return }
+
         sleep(1)
         XCTAssertLessThanOrEqual(name.frame.maxY, keyboard.frame.minY)
         name.typeText("Ada")

@@ -53,10 +53,29 @@ final class StackTests: XCTestCase {
         app.buttons["Reply"].tap()
         XCTAssertTrue(app.buttons["Replied"].waitForExistence(timeout: 5))
 
+        let began = Date()
         swipeFromTheEdge(of: app, to: 0.2, holding: true)
+        // How long the gesture took: on an idle machine it is a fixed few seconds, and a
+        // machine that is slow shows here.
+        let note = XCTAttachment(
+            string: String(format: "the swipe took %.2f s", Date().timeIntervalSince(began))
+        )
+        note.name = "the swipe - time"
+        note.lifetime = .keepAlways
+        add(note)
         sleep(1)
-        // The same screen, with what was done on it.
-        XCTAssertTrue(subject.exists)
+        // What the system did with the swipe: it finished the move (the inbox shows), or gave
+        // it up and the message stayed, or the message is gone with the inbox not there.
+        let outcome: String
+        if app.navigationBars["Layout demo"].exists {
+            outcome = "the system completed the move back"
+        } else if subject.exists {
+            outcome = "the system cancelled the move, the message stayed"
+        } else {
+            outcome = "neither the inbox nor the message shows"
+        }
+        attachEvidence("after the swipe: \(outcome)", of: app)
+        XCTAssertTrue(subject.exists, outcome)
         XCTAssertTrue(app.buttons["Replied"].exists)
         XCTAssertTrue(app.navigationBars["Ada Lovelace"].exists)
     }

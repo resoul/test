@@ -55,4 +55,28 @@ final class StackTests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Subject 1"].exists)
         XCTAssertEqual(app.state, .runningForeground)
     }
+
+    /// A node that takes Menu itself (a panel it closes) is the only one to answer that
+    /// press: the platform's own going back does not come with it and take the screen off.
+    @MainActor
+    func testMenuTakenByANodeDoesNotGoBackAsWell() {
+        let app = XCUIApplication()
+        app.launchEnvironment["STACK_PROBE"] = "1"
+        app.launchEnvironment["OWN_MENU"] = "1"
+        app.launchEnvironment["OPEN_MESSAGES"] = "0"
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Panel open"].waitForExistence(timeout: 20))
+        sleep(1)
+
+        XCUIRemote.shared.press(.menu)
+        // Time for a second, unwanted going back to show.
+        sleep(3)
+        XCTAssertTrue(app.staticTexts["Panel closed"].exists)
+        XCTAssertFalse(app.buttons["Open 0"].exists)
+
+        // The panel is closed: this one goes back.
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(app.buttons["Open 0"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.state, .runningForeground)
+    }
 }

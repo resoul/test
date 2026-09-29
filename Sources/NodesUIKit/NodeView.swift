@@ -47,6 +47,7 @@
         private var isSelecting = false
         /// The presses the tree took, until they end: the rest of them is the tree's too.
         private var takenPresses: Set<UIPress> = []
+        private var isMenuTaken = false
         /// The long press select becomes if it is held down, until then.
         private var holding: DispatchWorkItem?
         /// A focus guide over each focus section, kept while the section is.
@@ -627,6 +628,13 @@
             }
         }
 
+        /// Whether the tree took the Menu press that is going on, or has just ended: the
+        /// platform's own reaction to Menu, such as a navigation controller's going back, would
+        /// be a second answer to it.
+        ///
+        /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
+        public var isHandlingMenu: Bool { isMenuTaken }
+
         /// A press went down; returns whether the tree takes it.
         private func take(_ press: UIPress) -> Bool {
             let taken: Bool
@@ -646,6 +654,9 @@
             }
             if taken {
                 takenPresses.insert(press)
+                if press.type == .menu {
+                    isMenuTaken = true
+                }
             }
             return taken
         }
@@ -654,6 +665,11 @@
         private func release(_ press: UIPress, ended: Bool) -> Bool {
             guard takenPresses.remove(press) != nil else { return false }
 
+            if press.type == .menu {
+                // The platform's own recognizer of Menu acts on the same press, and not
+                // necessarily before this: it is still the tree's press for a turn more.
+                DispatchQueue.main.async { [weak self] in self?.isMenuTaken = false }
+            }
             if NodeView.selects(press) {
                 holding?.cancel()
                 holding = nil

@@ -273,17 +273,26 @@
             var kept: [NodeID: NodeAccessibilityElement] = [:]
             var keptLists: [NodeID: ListAccessibilityElement] = [:]
             var listItems: [NodeID: [Int: [NodeAccessibilityElement]]] = [:]
-            /// The element of `item` in `parent`, which takes `container` in the view.
+            let top = accessibilityParentOfTree
+            /// The element of `item` in `parent`, which takes `container` in the view; one
+            /// at the top of the tree (`container` is `nil`) is placed in the space of `top`.
             func element(
                 _ item: AccessibilityItem,
                 in parent: Any,
-                container: CGRect
+                container: CGRect?
             ) -> NodeAccessibilityElement {
                 let element =
                     accessibilityByNode[item.node]
                     ?? NodeAccessibilityElement(parent: self, node: item.node)
                 element.setAccessibilityParent(parent)
-                element.update(item, frame: parentSpace(zoomed(item.frame), in: container))
+                if let container {
+                    element.update(
+                        item,
+                        frame: .inParent(parentSpace(zoomed(item.frame), in: container))
+                    )
+                } else {
+                    element.update(item, frame: .inTree(zoomed(item.frame)))
+                }
                 kept[item.node] = element
                 return element
             }
@@ -291,7 +300,7 @@
             for entry in host.accessibilityEntries() {
                 switch entry {
                 case .element(let item):
-                    order.append(element(item, in: self, container: bounds))
+                    order.append(element(item, in: top, container: nil))
                 case .list(let list, let items):
                     let group =
                         accessibilityLists[list.node]
@@ -307,7 +316,7 @@
                             element(item, in: row, container: container)
                         )
                     }
-                    group.update(list, frame: parentSpace(frame, in: bounds), elements: byItem)
+                    group.update(list, frame: frame, parent: top, elements: byItem)
                     listItems[list.node] = byItem
                     keptLists[list.node] = group
                     order.append(group)
@@ -318,6 +327,35 @@
             accessibilityListItems = listItems
             accessibilityOrder = order
             return order
+        }
+
+        /// What the tree's top elements have as their parent: the closest ancestor AppKit does
+        /// not skip. The view is skipped (its elements are the tree's), and an element whose
+        /// parent is a skipped view is not the child of that parent AppKit finds it under, which
+        /// XCTest reports as an inconsistency of the accessibility tree.
+        private var accessibilityParentOfTree: Any {
+            NSAccessibility.unignoredAncestor(of: self) ?? self
+        }
+
+        /// `rect`, in the view's points from its top left, as a frame in the space of the
+        /// parent of the tree's top elements. Worked out when asked, from where the view is on
+        /// the screen: the view may move in its parent without a drawing to tell of it, and a
+        /// parent that is not a view (a window) has no bottom left of the view's to count from
+        /// (its space starts at its own frame's bottom left).
+        fileprivate func parentSpaceOfTree(_ rect: CGRect) -> CGRect {
+            guard window != nil,
+                let parent = NSAccessibility.unignoredAncestor(of: self)
+                    as? NSAccessibilityElementProtocol
+            else { return parentSpace(rect, in: bounds) }
+
+            let screen = NSAccessibility.screenRect(fromView: self, rect: rect)
+            let origin = parent.accessibilityFrame().origin
+            return CGRect(
+                x: screen.minX - origin.x,
+                y: screen.minY - origin.y,
+                width: screen.width,
+                height: screen.height
+            )
         }
 
         /// `rect`, in the tree's points, in the view's points.
@@ -392,6 +430,16 @@
         public override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             updateShown()
+            accessibilityOrder = nil
+        }
+
+        /// The tree's top elements have the closest ancestor AppKit does not skip as their
+        /// parent; a new superview may change it.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func viewDidMoveToSuperview() {
+            super.viewDidMoveToSuperview()
+            accessibilityOrder = nil
         }
 
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
@@ -1115,6 +1163,35 @@
         }
     }
 
+    /// Where an accessibility element is.
+    enum AccessibilityFrame {
+        /// Fixed, in the parent's space, from the parent's bottom left.
+        case inParent(CGRect)
+        /// At the top of the tree, in the view's points from its top left.
+        case inTree(CGRect)
+    }
+
+    /// Where an accessibility element is, and the view it is placed by.
+    @MainActor
+    final class AccessibilityPlace {
+        weak var view: NodeNSView?
+        /// Fixed in the parent's space, or, at the top of the tree, in the view's points, to
+        /// be placed in the parent's space when asked.
+        var frame = AccessibilityFrame.inParent(.zero)
+
+        init(view: NodeNSView) {
+            self.view = view
+        }
+
+        /// The frame in the parent's space.
+        var rect: CGRect {
+            switch frame {
+            case .inParent(let rect): rect
+            case .inTree(let rect): view?.parentSpaceOfTree(rect) ?? .zero
+            }
+        }
+    }
+
     /// One accessibility element of a node tree. It keeps the node's identity and asks the
     /// host to act on it; it never holds the node itself.
     @MainActor
@@ -1124,8 +1201,12 @@
         private let press: @MainActor @Sendable () -> Bool
 
         private weak var host: NodeHost?
+        /// Where the element is. A constant holding the place, so that the nonisolated frame
+        /// method can reach it without touching `self`'s state.
+        private let place: AccessibilityPlace
 
         init(parent: NodeNSView, node: NodeID) {
+            place = AccessibilityPlace(view: parent)
             host = parent.host
             press = { [weak host = parent.host] in
                 host?.activate(node) ?? false
@@ -1139,8 +1220,9 @@
         /// The names of the actions shown, so that they are made again only when they change.
         private var actionNames: [String] = []
 
-        /// Shows what `item` says, at `frame` in its parent's space.
-        func update(_ item: AccessibilityItem, frame: CGRect) {
+        /// Shows what `item` says, at `frame`.
+        func update(_ item: AccessibilityItem, frame: AccessibilityFrame) {
+            place.frame = frame
             if item.actions != actionNames {
                 actionNames = item.actions
                 let id = item.node
@@ -1162,7 +1244,13 @@
             setAccessibilityRole(NodeAccessibilityElement.role(item.traits))
             setAccessibilitySelected(item.traits.contains(.selected))
             setAccessibilityEnabled(!item.traits.contains(.notEnabled))
-            setAccessibilityFrameInParentSpace(frame)
+        }
+
+        // AppKit declares this without actor isolation but calls it on the main thread;
+        // `assumeIsolated` checks that at run time.
+        override nonisolated func accessibilityFrameInParentSpace() -> NSRect {
+            let place = place
+            return MainActor.assumeIsolated { place.rect }
         }
 
         // AppKit declares this without actor isolation but calls it on the main thread;
@@ -1193,6 +1281,8 @@
         private var count = 0
         private var laidOut: Range<Int> = 0..<0
         private var rows: [Int: ListRowAccessibilityElement] = [:]
+        /// Where the list is, in the view's points from its top left.
+        private var frameInTree = CGRect.zero
 
         init(view: NodeNSView, list: NodeID) {
             self.view = view
@@ -1202,11 +1292,13 @@
             setAccessibilityRole(.list)
         }
 
-        /// Takes what `list` says, `frame` in the view's space, and the elements of the items
-        /// laid out, by item.
+        /// Takes what `list` says, `frame` in the view's points from its top left, `parent` as
+        /// the parent of the tree's top elements, and the elements of the items laid out, by
+        /// item.
         func update(
             _ list: AccessibilityList,
             frame: CGRect,
+            parent: Any,
             elements: [Int: [NodeAccessibilityElement]]
         ) {
             for index in laidOut where elements[index] == nil {
@@ -1218,7 +1310,15 @@
             for (index, elements) in elements {
                 row(index).elements = elements
             }
-            setAccessibilityFrameInParentSpace(frame)
+            frameInTree = frame
+            setAccessibilityParent(parent)
+        }
+
+        // AppKit asks on the main thread; `assumeIsolated` checks that at run time.
+        override func accessibilityFrameInParentSpace() -> NSRect {
+            let frame = frameInTree
+            let view = view
+            return MainActor.assumeIsolated { view?.parentSpaceOfTree(frame) ?? .zero }
         }
 
         /// The row of the item at `index`.
@@ -1290,7 +1390,7 @@
 
         /// The frame of the item at `index` in this element's space.
         fileprivate func frame(ofItem index: Int) -> CGRect {
-            let shown = accessibilityFrameInParentSpace()
+            let container = frameInTree
             let view = view
             let list = list
             // AppKit asks on the main thread; `assumeIsolated` checks that at run time.
@@ -1298,13 +1398,6 @@
                 guard let view, let item = view.accessibilityFrame(ofItem: index, in: list)
                 else { return .zero }
 
-                // The list's frame back in the view's points from the top left.
-                let container = CGRect(
-                    x: shown.minX,
-                    y: view.bounds.height - shown.maxY,
-                    width: shown.width,
-                    height: shown.height
-                )
                 return view.parentSpace(item, in: container)
             }
         }
