@@ -328,6 +328,7 @@
     }
 
     @available(tvOS, unavailable)
+    @MainActor
     extension SheetHeight {
         var identifier: UISheetPresentationController.Detent.Identifier {
             switch self {
