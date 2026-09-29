@@ -2085,6 +2085,9 @@
 
         private static func traits(_ traits: AccessibilityTraits) -> UIAccessibilityTraits {
             var result: UIAccessibilityTraits = []
+            if traits.contains(.toggle), #available(iOS 17, tvOS 17, *) {
+                result.insert(.toggleButton)
+            }
             if traits.contains(.button) { result.insert(.button) }
             if traits.contains(.header) { result.insert(.header) }
             if traits.contains(.image) { result.insert(.image) }

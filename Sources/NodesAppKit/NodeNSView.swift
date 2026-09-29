@@ -1239,7 +1239,10 @@
                 )
             }
             setAccessibilityLabel(item.label)
-            setAccessibilityValue(item.value)
+            // A check box reports 0, 1 or 2 as a number.
+            setAccessibilityValue(
+                item.traits.contains(.toggle) ? item.value.flatMap { Int($0) } ?? 0 : item.value
+            )
             setAccessibilityHelp(item.hint)
             setAccessibilityRole(NodeAccessibilityElement.role(item.traits))
             setAccessibilitySelected(item.traits.contains(.selected))
@@ -1261,6 +1264,7 @@
         }
 
         private static func role(_ traits: AccessibilityTraits) -> NSAccessibility.Role {
+            if traits.contains(.toggle) { return .checkBox }
             if traits.contains(.button) { return .button }
             if traits.contains(.image) { return .image }
             if traits.contains(.staticText) || traits.contains(.header) { return .staticText }

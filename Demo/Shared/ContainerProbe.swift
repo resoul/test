@@ -6,16 +6,54 @@ import NodesRender
 import StateCore
 import ThemeCore
 
-/// Scenes for UI tests of the containers of screens, chosen by the launch environment:
-/// `TABS_PROBE=1` shows tabs (an inbox stack, a search screen, a settings screen with a
-/// counter), `SPLIT_PROBE=1` a split (folders in the sidebar, a stack of the folder's messages
-/// as the content).
+/// Scenes for UI tests of the containers of screens and of controls, chosen by the launch
+/// environment: `TABS_PROBE=1` shows tabs (an inbox stack, a search screen, a settings screen
+/// with a counter), `SPLIT_PROBE=1` a split (folders in the sidebar, a stack of the folder's
+/// messages as the content), `TOGGLE_PROBE=1` a switch and a check box.
 @MainActor
 enum ContainerProbe {
     static func content(_ environment: [String: String]) -> (any SceneContent)? {
         if environment["TABS_PROBE"] != nil { return tabs() }
         if environment["SPLIT_PROBE"] != nil { return split() }
+        if environment["TOGGLE_PROBE"] != nil {
+            return NodeScreen(TogglePage(), title: "Toggles")
+        }
         return nil
+    }
+
+    /// A switch and a check box, and a line saying what each shows.
+    private final class TogglePage: Node {
+        let status = Text("", style: TextStyle(size: 17))
+        let toggle = Switch(label: "Notifications")
+        let box = Checkbox(.mixed, label: "Select all")
+
+        override init() {
+            super.init()
+            toggle.onChange = { [weak self] _ in self?.show() }
+            box.onChange = { [weak self] _ in self?.show() }
+            show()
+        }
+
+        private func show() {
+            let all =
+                switch box.value {
+                case .off: "off"
+                case .on: "on"
+                case .mixed: "mixed"
+                }
+            status.text = "Notifications \(toggle.isOn ? "on" : "off"), all \(all)"
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                status
+                toggle
+                box
+            }
+            .gap(24)
+            .padding(24)
+            .alignItems(.start)
+        }
     }
 
     /// A screen of a title, a line of text and buttons.

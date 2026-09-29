@@ -24,6 +24,9 @@ public struct AccessibilityTraits: OptionSet, Sendable, Hashable {
     public static let selected = AccessibilityTraits(rawValue: 1 << 4)
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
     public static let notEnabled = AccessibilityTraits(rawValue: 1 << 5)
+    /// An on/off control — a switch, a check box. Its `Accessibility.value` is `"1"` for on,
+    /// `"0"` for off and `"2"` for mixed, as the platforms' own check boxes report it.
+    public static let toggle = AccessibilityTraits(rawValue: 1 << 6)
 }
 
 /// How a node presents itself to assistive technologies. Every field left `nil` keeps what
