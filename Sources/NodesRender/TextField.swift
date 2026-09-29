@@ -40,6 +40,24 @@
         case onSubmit
     }
 
+    /// When a field shows a button that clears it.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public enum ClearButton: Hashable, Sendable {
+        /// Never.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case never
+        /// While the field is edited and has text.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case whileEditing
+        /// Whenever the field has text.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case always
+    }
+
     /// What the keyboard's Return key says, and what it does in a `TextField`.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
@@ -146,6 +164,18 @@
 
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public let content: TextContent
+
+        /// How many characters the field takes at most: what the user types or pastes beyond it
+        /// is cut off, in the field as in `text`. `nil` is no limit. Text set by code is not cut.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var maxLength: Int?
+
+        /// When the field shows a button that clears it: UIKit's own; the Mac's text field has
+        /// none, and shows nothing.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var clearButton = ClearButton.never
 
         /// Whether the field shows what is typed: a secure field shows dots.
         ///
@@ -259,7 +289,8 @@
         package var onEditingRequest: (@MainActor (Bool) -> Void)?
 
         /// The user changed the text in the field's view.
-        package func userChanged(_ text: String) {
+        package func userChanged(_ typed: String) {
+            let text = maxLength.map { String(typed.prefix(max($0, 0))) } ?? typed
             guard text != textState.value else { return }
 
             textState.value = text

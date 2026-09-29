@@ -13,6 +13,9 @@
         let clip = UIView()
         let view: UIView
         private var watch: Observer?
+        /// Set by a view whose height follows its text: given the width the node has, it sets
+        /// the node's size, and says whether it changed.
+        var fit: (@MainActor (Double) -> Bool)?
 
         init(node: EmbeddedNode, view: UIView) {
             self.node = node
@@ -65,6 +68,7 @@
                 // Over the scrolls' physics, which are views too, so that touches reach it.
                 bringSubviewToFront(holder.clip)
                 holder.place(frame: zoomed(item.frame), shown: item.shownFrame.map(zoomed))
+                if holder.fit?(item.frame.size.width) == true { madeViews = true }
                 kept[id] = holder
             }
             for (id, holder) in embedded where kept[id] == nil {
@@ -72,9 +76,9 @@
             }
             embedded = kept
             if madeViews {
-                // A new view tells its node its size, which the pass in progress has already
-                // gone by, and the host does not ask a view to lay out again from inside a
-                // pass: ask for the next one.
+                // A view tells its node its size — when it is made, when its text grows —
+                // which the pass in progress has already gone by, and the host does not ask a
+                // view to lay out again from inside a pass: ask for the next one.
                 setNeedsLayout()
             }
         }
@@ -262,6 +266,7 @@
             adjustsFontForContentSizeCategory = true
             accessibilityIdentifier = field.placeholder
             isSecureTextEntry = field.isSecure
+            clearButtonMode = UITextField.ViewMode(field.clearButton)
             switch field.content {
             case .text:
                 break
@@ -317,8 +322,12 @@
             spellCheckingType = .no
         }
 
-        @objc private func changed() {
-            field?.userChanged(text ?? "")
+        @objc func changed() {
+            guard let field else { return }
+
+            field.userChanged(text ?? "")
+            // The node may have cut what was typed to its limit.
+            if text != field.text { text = field.text }
         }
 
         func textFieldDidBeginEditing(_ textField: UITextField) {
@@ -332,6 +341,153 @@
         func textFieldShouldReturn(_ textField: UITextField) -> Bool {
             field?.userSubmitted()
             return false
+        }
+    }
+
+    extension UITextField.ViewMode {
+        init(_ button: ClearButton) {
+            switch button {
+            case .never: self = .never
+            case .whileEditing: self = .whileEditing
+            case .always: self = .always
+            }
+        }
+    }
+
+    extension TextEditor: UIKitEmbedded {
+        func makeHolder() -> EmbeddedHolder {
+            let view = EditorView(self)
+            let holder = EmbeddedHolder(node: self, view: view)
+            holder.watch { [weak view, weak self] in
+                guard let view, let self else { return }
+
+                let text = text
+                if view.text != text {
+                    view.text = text
+                    setNeedsLayout()
+                }
+                view.placeholderLabel.text = placeholder
+                view.updatePlaceholder()
+            }
+            onEditingRequest = { [weak view] editing in
+                guard let view else { return }
+
+                if editing {
+                    view.becomeFirstResponder()
+                } else {
+                    view.resignFirstResponder()
+                }
+            }
+            holder.fit = { [weak view, weak self] width in
+                guard let view, let self else { return false }
+
+                let content = Double(
+                    view.sizeThatFits(
+                        CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+                    ).height
+                )
+                let metrics = view.lineMetrics(width: width)
+                let fitted = height(
+                    forContent: content,
+                    lineHeight: metrics.lineHeight,
+                    insets: metrics.insets
+                )
+                view.isScrollEnabled = fitted.scrolls
+                guard abs(preferredSize.height - fitted.height) > 0.5 else { return false }
+
+                preferredSize = LayoutSize(width: preferredSize.width, height: fitted.height)
+                return true
+            }
+            return holder
+        }
+    }
+
+    /// A text view showing a `TextEditor` node: what the user types goes to the node. A text
+    /// view has no placeholder, so a label stands where the first line goes while it is empty.
+    final class EditorView: UITextView, UITextViewDelegate {
+        weak var editor: TextEditor?
+        let placeholderLabel = UILabel()
+
+        init(_ editor: TextEditor) {
+            self.editor = editor
+            super.init(frame: .zero, textContainer: nil)
+            delegate = self
+            font = .preferredFont(forTextStyle: .body)
+            adjustsFontForContentSizeCategory = true
+            textContainerInset = UIEdgeInsets(top: 8, left: 6, bottom: 8, right: 6)
+            layer.borderColor = UIColor.separator.cgColor
+            layer.borderWidth = 1
+            layer.cornerRadius = 8
+            isScrollEnabled = false
+            accessibilityIdentifier = editor.placeholder
+            placeholderLabel.font = font
+            placeholderLabel.textColor = .placeholderText
+            placeholderLabel.numberOfLines = 0
+            placeholderLabel.isUserInteractionEnabled = false
+            placeholderLabel.isAccessibilityElement = false
+            addSubview(placeholderLabel)
+            updatePlaceholder()
+        }
+
+        required init?(coder: NSCoder) {
+            nil
+        }
+
+        func updatePlaceholder() {
+            placeholderLabel.isHidden = !text.isEmpty
+            setNeedsLayout()
+        }
+
+        /// A view of the same kind to measure with, which never shows.
+        private lazy var scratch = UITextView(frame: .zero, textContainer: nil)
+
+        /// How much a line of text adds to the height at `width`, and what the height is
+        /// besides the lines — worked out by measuring one line and two, as the text view
+        /// spaces its lines by more than its font's line height.
+        func lineMetrics(width: Double) -> (lineHeight: Double, insets: Double) {
+            scratch.font = font
+            scratch.textContainerInset = textContainerInset
+            scratch.textContainer.lineFragmentPadding = textContainer.lineFragmentPadding
+            let proposal = CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+            scratch.text = "A"
+            let one = Double(scratch.sizeThatFits(proposal).height)
+            scratch.text = "A\nA"
+            let two = Double(scratch.sizeThatFits(proposal).height)
+            return (two - one, one - (two - one))
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            let left = textContainerInset.left + textContainer.lineFragmentPadding
+            let width = max(bounds.width - left - textContainerInset.right - 6, 0)
+            let size = placeholderLabel.sizeThatFits(
+                CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+            )
+            placeholderLabel.frame = CGRect(
+                x: left,
+                y: textContainerInset.top,
+                width: width,
+                height: size.height
+            )
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            guard let editor else { return }
+
+            editor.userChanged(text)
+            // The node may have cut what was typed to its limit.
+            if text != editor.text { text = editor.text }
+            updatePlaceholder()
+            // Its height follows its text: lay out again.
+            editor.setNeedsLayout()
+        }
+
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            editor?.editingChanged(true)
+        }
+
+        func textViewDidEndEditing(_ textView: UITextView) {
+            editor?.editingChanged(false)
         }
     }
 
