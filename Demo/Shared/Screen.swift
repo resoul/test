@@ -1384,7 +1384,8 @@
             inbox?.onOpen = { [weak stack] mail in
                 stack?.push(.message(mail.id))
             }
-            return stack
+            // The path comes back after a relaunch, as the URL of its screens.
+            return stack.restorable(using: DemoModel.routes)
         }()
 
         /// The demo's links: `/` is the screen, `/messages/:id` a message over it.

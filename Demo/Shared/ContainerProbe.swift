@@ -104,9 +104,15 @@ enum ContainerProbe {
         }
     }
 
-    private enum InboxRoute: Hashable {
+    private enum InboxRoute: Hashable, Sendable {
         case list
         case detail
+    }
+
+    /// The inbox's screens as URLs, for the path to come back after a relaunch.
+    private static let inboxRoutes = RouteTable<InboxRoute> {
+        RoutePattern("/", .list)
+        RoutePattern("/detail", .detail)
     }
 
     private static func tabs() -> Tabs<String> {
@@ -123,6 +129,7 @@ enum ContainerProbe {
             }
         }
         inbox = stack
+        stack.restorable(using: inboxRoutes)
         return Tabs(
             selection: "inbox",
             [
