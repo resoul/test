@@ -6,6 +6,23 @@
     import Testing
     import UIKit
 
+    /// A switch that is on and a check box that is mixed.
+    @MainActor
+    private final class Toggles: Node {
+        let toggle = Switch(isOn: true, label: "Notifications")
+        let box = Checkbox(.mixed, label: "Select all")
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.row) {
+                toggle
+                box
+            }
+            .gap(10)
+            .padding(10)
+            .alignItems(.start)
+        }
+    }
+
     @MainActor
     private final class Box: Node {
         let size: LayoutSize
@@ -122,6 +139,27 @@
         #expect(elements.allSatisfy { $0.accessibilityFrameInContainerSpace.width > 0 })
         #expect(elements[1].accessibilityActivate())
         #expect(presses.count == 1)
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func aSwitchAndACheckboxAreTogglesWithTheirValues() throws {
+        let toggles = Toggles()
+        let view = NodeView(root: toggles)
+        view.zoom = 1
+        _ = laidOut(view, width: 200, height: 60)
+
+        let elements = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+        #expect(elements.map(\.accessibilityLabel) == ["Notifications", "Select all"])
+        #expect(elements.map { $0.accessibilityValue } == ["1", "2"])
+        if #available(iOS 17, tvOS 17, *) {
+            #expect(elements.allSatisfy { $0.accessibilityTraits.contains(.toggleButton) })
+        }
+        // Activating one turns it over: the switch off, the mixed box on.
+        #expect(elements[0].accessibilityActivate())
+        #expect(elements[1].accessibilityActivate())
+        #expect(!toggles.toggle.isOn)
+        #expect(toggles.box.value == .on)
         view.host.detach()
     }
 
