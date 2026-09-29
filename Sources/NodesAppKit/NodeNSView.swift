@@ -41,7 +41,9 @@
         /// The elements of the items laid out in each list, by item.
         private var accessibilityListItems: [NodeID: [Int: [NodeAccessibilityElement]]] = [:]
         /// The elements in reading order; `nil` after a drawing, until asked for.
-        private var accessibilityOrder: [NSAccessibilityElement]?
+        private var accessibilityOrder: [Any]?
+        /// The views of the tree's embedded nodes.
+        var embedded: [ObjectIdentifier: EmbeddedHolder] = [:]
         private let focusRing = FocusRing()
         /// Return or Space went down on a focused node and has not come up yet.
         private var isSelecting = false
@@ -233,6 +235,7 @@
 
         /// Brings what depends on where the nodes show in line after a drawing.
         private func updateAfterMove() {
+            placeEmbeddedViews()
             accessibilityOrder = nil
             if NSWorkspace.shared.isVoiceOverEnabled {
                 // VoiceOver reads the frame of the element it is on without asking the view
@@ -269,7 +272,7 @@
         }
 
         @discardableResult
-        private func updateAccessibilityElements() -> [NSAccessibilityElement] {
+        private func updateAccessibilityElements() -> [Any] {
             var kept: [NodeID: NodeAccessibilityElement] = [:]
             var keptLists: [NodeID: ListAccessibilityElement] = [:]
             var listItems: [NodeID: [Int: [NodeAccessibilityElement]]] = [:]
@@ -296,11 +299,17 @@
                 kept[item.node] = element
                 return element
             }
-            var order: [NSAccessibilityElement] = []
+            var order: [Any] = []
             for entry in host.accessibilityEntries() {
                 switch entry {
                 case .element(let item):
-                    order.append(element(item, in: top, container: nil))
+                    // An embedded node is its platform view, which speaks for itself.
+                    if let view = embeddedView(of: item.node) {
+                        view.setAccessibilityParent(top)
+                        order.append(view)
+                    } else {
+                        order.append(element(item, in: top, container: nil))
+                    }
                 case .list(let list, let items):
                     let group =
                         accessibilityLists[list.node]
@@ -359,6 +368,10 @@
         }
 
         /// `rect`, in the tree's points, in the view's points.
+        func embeddedRect(_ rect: LayoutRect) -> CGRect {
+            zoomed(rect)
+        }
+
         private func zoomed(_ rect: LayoutRect) -> CGRect {
             CGRect(
                 x: rect.origin.x * factor,

@@ -90,19 +90,30 @@
         }
 
         private func makeHolder(for node: EmbeddedNode) -> EmbeddedHolder? {
-            guard let field = node as? TextField else { return nil }
+            (node as? any UIKitEmbedded)?.makeHolder()
+        }
+    }
 
-            let view = FieldView(field)
-            let holder = EmbeddedHolder(node: field, view: view)
-            holder.watch { [weak view, weak field] in
-                guard let view, let field else { return }
+    /// An embedded node the UIKit adapter can show: it makes the holder of its view and keeps
+    /// the view in step with the node.
+    @MainActor
+    protocol UIKitEmbedded: EmbeddedNode {
+        func makeHolder() -> EmbeddedHolder
+    }
 
-                let text = field.text
+    extension TextField: UIKitEmbedded {
+        func makeHolder() -> EmbeddedHolder {
+            let view = FieldView(self)
+            let holder = EmbeddedHolder(node: self, view: view)
+            holder.watch { [weak view, weak self] in
+                guard let view, let self else { return }
+
+                let text = text
                 if view.text != text { view.text = text }
-                view.placeholder = field.placeholder
-                view.returnKeyType = UIReturnKeyType(field.returnKey)
+                view.placeholder = placeholder
+                view.returnKeyType = UIReturnKeyType(returnKey)
             }
-            field.onEditingRequest = { [weak view] editing in
+            onEditingRequest = { [weak view] editing in
                 guard let view else { return }
 
                 if editing {
@@ -111,9 +122,121 @@
                     view.resignFirstResponder()
                 }
             }
-            let height = Double(view.intrinsicContentSize.height)
-            field.preferredSize = LayoutSize(width: field.preferredSize.width, height: height)
+            preferredSize = LayoutSize(
+                width: preferredSize.width,
+                height: Double(view.intrinsicContentSize.height)
+            )
             return holder
+        }
+    }
+
+    /// A view of UIKit in the tree: the node lays out at the view's own size (or one given),
+    /// the view sits over the drawing at the node's frame, moves with the scrolls around it,
+    /// is cut to what the nodes around it show, goes when the node is hidden, and stands
+    /// where the node does in the order the tree is read in. The view takes its own touches
+    /// and keys.
+    ///
+    ///     let slider = HostedView(make: { UISlider() }) { $0.value = Float(model.level) }
+    ///
+    /// `update` runs when the view is made and again whenever a `State` it read changes, to
+    /// show the model in the view; what the user does in the view goes back to the model
+    /// through the view's own targets and delegates, made in `make`.
+    ///
+    /// Ownership: the tree keeps the node; the adapter keeps the view while the node is in
+    /// the tree, and lets it go after. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    @MainActor
+    public final class HostedView<View: UIView>: EmbeddedNode, UIKitEmbedded {
+        /// How big the node lays out, unless its layout says otherwise.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public enum Sizing: Sendable {
+            /// The view's own size (`intrinsicContentSize`, else what its layout needs at the
+            /// least), measured when the view is made and by `invalidateSize()`.
+            case intrinsic
+            /// This size, before the view exists too.
+            case fixed(LayoutSize)
+        }
+
+        /// The view, while the node is in a tree.
+        ///
+        /// Ownership: the adapter keeps the view. Isolation: MainActor. Errors: none.
+        /// Cancellation: not applicable.
+        public private(set) weak var view: View?
+
+        private let sizing: Sizing
+        private let make: @MainActor () -> View
+        private let update: (@MainActor (View) -> Void)?
+
+        /// Ownership: keeps the closures; they must not keep the node. Isolation: MainActor.
+        /// Errors: none. Cancellation: not applicable.
+        public init(
+            sizing: Sizing = .intrinsic,
+            make: @escaping @MainActor () -> View,
+            update: (@MainActor (View) -> Void)? = nil
+        ) {
+            self.sizing = sizing
+            self.make = make
+            self.update = update
+            super.init()
+            if case .fixed(let size) = sizing {
+                preferredSize = size
+            }
+        }
+
+        /// Measures the view again, for an `.intrinsic` node: call it after the view's content
+        /// changed size. Nothing happens while the node is not in a tree.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public func invalidateSize() {
+            guard case .intrinsic = sizing, let view else { return }
+
+            preferredSize = HostedView.measure(view)
+        }
+
+        /// Gives the view the keyboard, where it takes it.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: `unfocus()`.
+        public func focus() {
+            view?.becomeFirstResponder()
+        }
+
+        /// Takes the keyboard from the view.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public func unfocus() {
+            view?.resignFirstResponder()
+        }
+
+        /// Whether the view has the keyboard now. Not observable: ask when it matters.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var hasKeyboard: Bool { view?.isFirstResponder ?? false }
+
+        func makeHolder() -> EmbeddedHolder {
+            let view = make()
+            self.view = view
+            let holder = EmbeddedHolder(node: self, view: view)
+            if let update {
+                holder.watch { [weak view] in
+                    guard let view else { return }
+
+                    update(view)
+                }
+            }
+            invalidateSize()
+            return holder
+        }
+
+        private static func measure(_ view: UIView) -> LayoutSize {
+            var size = view.intrinsicContentSize
+            if size.width < 0 || size.height < 0 {
+                size = view.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+            }
+            return LayoutSize(
+                width: Double(max(size.width, 0)),
+                height: Double(max(size.height, 0))
+            )
         }
     }
 
