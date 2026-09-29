@@ -18,6 +18,8 @@
 # Files in the folder:
 #   output.log        the full, unfiltered output of the command
 #   command.txt       the command, the deadline and the start time
+#   machine.txt       load, memory pressure, simulators and the busiest processes, at the start
+#                     and at the end
 #   exit-status.txt   how the run ended: `finished <code>` or `deadline <seconds>`
 #   on-deadline/      only if the deadline was hit:
 #     processes.txt     the whole process table, with the run's process group marked
@@ -63,6 +65,22 @@ export RUN_DIR
   echo "deadline: ${deadline}s"
   echo "started:  $(date '+%Y-%m-%d %H:%M:%S')"
 } >"$RUN_DIR/command.txt"
+
+# The state of the machine at the start and at the end: a run that is slow, or fails only when
+# it is, can be told from one on an idle machine only if this was written down.
+machine_state() {
+  {
+    echo "## $1 $(date '+%Y-%m-%d %H:%M:%S')"
+    uptime
+    memory_pressure -Q 2>&1 | head -3
+    echo "booted simulators:"
+    xcrun simctl list devices booted 2>&1
+    echo "busiest processes:"
+    ps -Ao pid,%cpu,%mem,comm -r | head -6
+    echo
+  } >>"$RUN_DIR/machine.txt" 2>&1
+}
+machine_state start
 
 # Job control gives the run its own process group, so the whole tree (the build tool, the test
 # host, whatever they spawned in the group) can be inspected and stopped together without
@@ -151,6 +169,7 @@ while kill -0 "$leader" 2>/dev/null; do
       kill -KILL -- "-$leader" 2>/dev/null
     fi
     wait "$leader" 2>/dev/null
+    machine_state end
     echo "deadline ${deadline}" >"$RUN_DIR/exit-status.txt"
     echo "stopped at the deadline; evidence in $RUN_DIR" >&2
     exit 124
@@ -161,5 +180,6 @@ done
 
 wait "$leader"
 status=$?
+machine_state end
 echo "finished $status" >"$RUN_DIR/exit-status.txt"
 exit "$status"
