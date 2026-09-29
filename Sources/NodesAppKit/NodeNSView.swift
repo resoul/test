@@ -63,6 +63,17 @@
             layer = hostedLayer
             wantsLayer = true
             host.focusLook = .ring
+            // The mouse over the view, wherever the view is, while the app is active.
+            addTrackingArea(
+                NSTrackingArea(
+                    rect: .zero,
+                    options: [
+                        .mouseMoved, .mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect,
+                    ],
+                    owner: self,
+                    userInfo: nil
+                )
+            )
             NSWorkspace.shared.notificationCenter.addObserver(
                 self,
                 selector: #selector(systemSettingsChanged),
@@ -233,6 +244,11 @@
                 color: NSColor.keyboardFocusIndicatorColor.cgColor,
                 in: contentLayer
             )
+            // The nodes may have moved under a mouse at rest.
+            if let pointerAt {
+                host.pointerMoved(to: pointerAt)
+            }
+            updateToolTips()
         }
 
         /// The view is a container: its elements are the tree's.
@@ -441,6 +457,48 @@
         public override func mouseUp(with event: NSEvent) {
             mouseUp(at: point(of: event))
             super.mouseUp(with: event)
+        }
+
+        // MARK: - The pointer
+
+        /// Where the mouse rests over the tree, in its points; `nil` while it is elsewhere.
+        private var pointerAt: LayoutPoint?
+        /// The tips set up as areas of the view, as the host gave them.
+        private var toolTipItems: [ToolTipItem] = []
+
+        /// The node a click would press shows itself under the mouse.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func mouseMoved(with event: NSEvent) {
+            pointerAt = point(of: event)
+            host.pointerMoved(to: pointerAt)
+        }
+
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func mouseEntered(with event: NSEvent) {
+            pointerAt = point(of: event)
+            host.pointerMoved(to: pointerAt)
+        }
+
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func mouseExited(with event: NSEvent) {
+            pointerAt = nil
+            host.pointerMoved(to: nil)
+        }
+
+        /// Sets up an area of the view for each node with a tip. AppKit shows a tip when the
+        /// mouse rests in an area and asks the view for its text, the innermost node's
+        /// there; an area of its own for each node starts a new tip as the mouse moves from
+        /// one node to another.
+        private func updateToolTips() {
+            let items = host.toolTipItems()
+            guard items != toolTipItems else { return }
+
+            toolTipItems = items
+            removeAllToolTips()
+            for item in items {
+                addToolTip(zoomed(item.frame), owner: self, userData: nil)
+            }
         }
 
         /// A press of the mouse under way: where it began, and — once it moved far enough to
@@ -966,6 +1024,21 @@
         /// Errors: none. Cancellation: not applicable.
         public func renderedLayer(for node: Node) -> CALayer? {
             renderer.layer(for: node)
+        }
+    }
+
+    extension NodeNSView: NSViewToolTipOwner {
+        /// The tip of the innermost node with one at `point`.
+        ///
+        /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
+        public func view(
+            _ view: NSView,
+            stringForToolTip tag: NSView.ToolTipTag,
+            point: NSPoint,
+            userData data: UnsafeMutableRawPointer?
+        ) -> String {
+            let at = LayoutPoint(x: Double(point.x) / factor, y: Double(point.y) / factor)
+            return host.toolTip(at: at)?.text ?? ""
         }
     }
 

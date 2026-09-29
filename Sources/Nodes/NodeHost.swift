@@ -236,6 +236,8 @@ public final class NodeHost: CommandTarget {
     /// Nodes of the layout being solved in the background that are not mounted yet.
     private var pending: [Node] = []
     private var pressed: Node?
+    /// The node a press would go to under the pointer, shown so.
+    private var hovered: Node?
     /// The node last under a finger or the mouse going down, where commands go while no
     /// node has the focus.
     private var pointed: NodeID? {
@@ -747,6 +749,9 @@ public final class NodeHost: CommandTarget {
             node = current.supernode
         }
         guard let target = node else { return false }
+        // A node turned off takes the press, and nothing happens: the press does not fall
+        // through to what is behind it.
+        guard target.isInteractive else { return true }
 
         pressed = target
         target.pressChanged(true)
@@ -762,7 +767,7 @@ public final class NodeHost: CommandTarget {
 
         pressed = nil
         target.pressChanged(false)
-        if let hit = root.hitTest(point), hit.isDescendant(of: target) {
+        if target.isInteractive, let hit = root.hitTest(point), hit.isDescendant(of: target) {
             target.onTap?()
         }
     }
@@ -776,6 +781,62 @@ public final class NodeHost: CommandTarget {
 
         pressed = nil
         target.pressChanged(false)
+    }
+
+    /// The pointer — the mouse, or a pointer on iPad — moved to `point`, in the root's
+    /// coordinates, without a button down; `nil` when it left the tree. The node a press
+    /// there would go to shows itself under the pointer (`Node.hoverChanged`); a node turned
+    /// off does not.
+    ///
+    /// Ownership: remembers the node under the pointer until it leaves. Isolation: MainActor.
+    /// Errors: none. Cancellation: not applicable.
+    public func pointerMoved(to point: LayoutPoint?) {
+        var node = point.flatMap { root.hitTest($0) }
+        while let current = node, current.onTap == nil {
+            node = current.supernode
+        }
+        let target = node.flatMap { $0.isInteractive ? $0 : nil }
+        guard target !== hovered else { return }
+
+        hovered?.setHovered(false)
+        hovered = target
+        target?.setHovered(true)
+    }
+
+    /// The tip of the node at `point`, in the root's coordinates — the innermost with a
+    /// `toolTip` — and where it shows, or `nil` when none has one.
+    ///
+    /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    public func toolTip(at point: LayoutPoint) -> ToolTipItem? {
+        var node = root.hitTest(point)
+        while let current = node {
+            if let text = current.shownToolTip, !text.isEmpty,
+                let frame = shownFrame(of: current)
+            {
+                return ToolTipItem(node: current.id, text: text, frame: frame)
+            }
+            node = current.supernode
+        }
+        return nil
+    }
+
+    /// The tips of the nodes showing at the last layout, each with the part of the node that
+    /// shows, in the root's coordinates, in layout order: a tip inside another node's comes
+    /// after it. A platform that asks for tips by area, not by point, sets them up from
+    /// these.
+    ///
+    /// Ownership: returns values. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    public func toolTipItems() -> [ToolTipItem] {
+        var items: [ToolTipItem] = []
+        root.walkVisible(from: .identity) { node, _ in
+            if let text = node.shownToolTip, !text.isEmpty, let frame = shownFrame(of: node) {
+                items.append(ToolTipItem(node: node.id, text: text, frame: frame))
+            }
+            return true
+        }
+        return items
     }
 
     // MARK: - Drag
@@ -1128,7 +1189,9 @@ public final class NodeHost: CommandTarget {
     @discardableResult
     public func selectBegan() -> Bool {
         pointerCancelled()
-        guard let target = focusedNode.flatMap({ mounted[$0] }), target.onTap != nil else {
+        guard let target = focusedNode.flatMap({ mounted[$0] }), target.onTap != nil,
+            target.isInteractive
+        else {
             return false
         }
 
@@ -1145,7 +1208,9 @@ public final class NodeHost: CommandTarget {
 
         pressed = nil
         target.pressChanged(false)
-        target.onTap?()
+        if target.isInteractive {
+            target.onTap?()
+        }
     }
 
     private func collectFocus(
@@ -1249,6 +1314,30 @@ public final class NodeHost: CommandTarget {
         return true
     }
 
+    /// Whether `command` would be carried out from `node` now: by `node` or a node around it,
+    /// or else by `outerResponder` or a responder around it. A control carrying the command
+    /// shows itself enabled then. Reading it under tracking depends on what the handlers
+    /// read.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func canPerform(_ command: Command, from node: Node) -> Bool {
+        enabledHandler(from: node) { $0.command.id == command.id } != nil
+    }
+
+    /// Carries out `command` by `node` or the first node around it, or else the first outer
+    /// responder, that can: a control's command goes where the control is, wherever the
+    /// focus is. Returns whether one did.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    @discardableResult
+    public func perform(_ command: Command, from node: Node) -> Bool {
+        guard let handler = enabledHandler(from: node, where: { $0.command.id == command.id })
+        else { return false }
+
+        handler.perform()
+        return true
+    }
+
     /// The commands the nodes from the focused one out, and then the outer responders, have
     /// handlers for, enabled or not, the nearest first and each once — for the keyboard's list
     /// of shortcuts on iPad.
@@ -1312,8 +1401,11 @@ public final class NodeHost: CommandTarget {
         return focusedNode.flatMap { mounted[$0] } ?? pointed.flatMap { mounted[$0] } ?? root
     }
 
-    private func enabledHandler(where matches: (CommandHandler) -> Bool) -> CommandHandler? {
-        var node: Node? = commandOrigin
+    private func enabledHandler(
+        from origin: Node? = nil,
+        where matches: (CommandHandler) -> Bool
+    ) -> CommandHandler? {
+        var node: Node? = origin ?? commandOrigin
         while let current = node {
             if let handler = current.commandHandlers.first(where: { matches($0) && $0.isEnabled() })
             {
@@ -1353,7 +1445,8 @@ public final class NodeHost: CommandTarget {
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     @discardableResult
     public func activate(_ node: NodeID) -> Bool {
-        guard let action = mounted[node]?.onTap else { return false }
+        guard let target = mounted[node], target.isInteractive, let action = target.onTap
+        else { return false }
 
         action()
         return true
@@ -1509,6 +1602,9 @@ public final class NodeHost: CommandTarget {
             traits.insert(.button)
             traits.remove(.staticText)
         }
+        if !node.isInteractive {
+            traits.insert(.notEnabled)
+        }
         return AccessibilityItem(
             node: node.id,
             frame: node.frame(in: placement),
@@ -1548,6 +1644,7 @@ public final class NodeHost: CommandTarget {
     /// Cancellation: this is the cancellation.
     public func detach() {
         pointerCancelled()
+        pointerMoved(to: nil)
         focus(nil)
         generation &+= 1
         cancelSolving()
