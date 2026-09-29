@@ -6,11 +6,14 @@ import NodesRender
 /// A screen of `EDITOR_PROBE=1` for UI tests of the multi-line editor: notes that grow from two
 /// lines to four and scroll beyond, a line saying how many characters they hold, and a code
 /// field that takes four characters at most, with a line saying what it holds. With
-/// `EDITOR_LOW=1` the notes stand low in a scroll, where the keyboard would cover them.
+/// `EDITOR_LOW=<points>` the notes stand low in a scroll after that much room (`1` for the
+/// default), where the keyboard would cover them.
 @MainActor
 enum EditorProbe {
-    static func content(low: Bool = false) -> any SceneContent {
-        NodeScreen(Page(low: low), title: "Editor")
+    /// `room` is how many points come before the notes when they stand low: enough to put
+    /// them where the keyboard comes, more on a bigger screen.
+    static func content(low: Bool = false, room: Double = 560) -> any SceneContent {
+        NodeScreen(Page(low: low, room: room), title: "Editor")
     }
 
     private final class Page: Node {
@@ -20,10 +23,12 @@ enum EditorProbe {
         let codeValue = Text("Code: none", style: TextStyle(size: 17))
 
         let low: Bool
+        let room: Double
         lazy var scroll = Scroll(.vertical, content: Below(page: self))
 
-        init(low: Bool) {
+        init(low: Bool, room: Double) {
             self.low = low
+            self.room = room
             super.init()
             // The notes standing low grow by five lines, more than the room the keyboard's
             // scroll leaves under them.
@@ -68,7 +73,7 @@ enum EditorProbe {
 
         override func layoutSpec() -> LayoutSpec? {
             FlexContainer(.column) {
-                room.size(width: 50, height: 560)
+                room.size(width: 50, height: .points(page.room))
                 page.notes
                 page.notesLength
                 page.code

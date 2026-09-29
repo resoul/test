@@ -20,7 +20,10 @@ enum ContainerProbe {
         if environment["HOSTED_PROBE"] != nil { return HostedProbe.content() }
         if environment["FIELDS_PROBE"] != nil { return FieldsProbe.content() }
         if environment["EDITOR_PROBE"] != nil {
-            return EditorProbe.content(low: environment["EDITOR_LOW"] != nil)
+            let room = environment["EDITOR_LOW"].flatMap(Double.init).flatMap {
+                $0 >= 100 ? $0 : nil
+            }
+            return EditorProbe.content(low: environment["EDITOR_LOW"] != nil, room: room ?? 560)
         }
         if environment["TOGGLE_PROBE"] != nil {
             return NodeScreen(TogglePage(), title: "Toggles")

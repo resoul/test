@@ -533,6 +533,11 @@
 
             if #available(iOS 17, *) {
                 keyboardLayoutGuide.usesBottomSafeArea = false
+                // A floating keyboard on iPad does not push the page: the guide follows the
+                // docked keyboard only, as the system's own apps do, and the user moves a
+                // floating one. The overlap is worked out in this view's coordinates, so a
+                // window smaller than the screen gets the part of the keyboard over it.
+                keyboardLayoutGuide.followsUndockedKeyboard = false
             }
             // A view tied to the guide: the node view lays out again whenever the guide moves
             // — with the keyboard's animation, and at every frame of a drag down.
