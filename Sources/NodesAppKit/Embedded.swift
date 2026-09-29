@@ -126,6 +126,7 @@
                 let text = text
                 if view.stringValue != text { view.stringValue = text }
                 view.placeholderString = placeholder
+                view.show(validation)
             }
             onEditingRequest = { [weak view] editing in
                 guard let view, let window = view.window else { return }
@@ -181,6 +182,20 @@
     }
 
     extension NSTextField {
+        /// A red edge and the message as the field's help, while the text is not right.
+        fileprivate func show(_ validation: FieldValidation) {
+            wantsLayer = true
+            if case .invalid(let message) = validation {
+                layer?.borderColor = NSColor.systemRed.cgColor
+                layer?.borderWidth = 1
+                layer?.cornerRadius = 6
+                setAccessibilityHelp(message)
+            } else {
+                layer?.borderWidth = 0
+                setAccessibilityHelp(nil)
+            }
+        }
+
         /// What the field is for: how the system fills it in.
         fileprivate func configure(for field: TextField, handler: FieldHandler) {
             delegate = handler

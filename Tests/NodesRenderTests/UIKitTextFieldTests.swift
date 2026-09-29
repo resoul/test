@@ -2,6 +2,7 @@
     import LayoutCore
     import Nodes
     import NodesRender
+    import StateCore
     import Testing
     import UIKit
 
@@ -73,6 +74,40 @@
             let secure = name == "Password" || name == "New password"
             #expect(text.isSecureTextEntry == secure, "\(name)")
         }
+        view.host.detach()
+    }
+
+    @MainActor
+    private final class Address: Node {
+        let email = EmailField(placeholder: "Email")
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { email }
+        }
+    }
+
+    @Test @MainActor
+    func aFieldWhoseTextIsNotRightHasARedEdgeAndTellsWhyToVoiceOver() throws {
+        let address = Address()
+        let view = NodeView(root: address)
+        view.zoom = 1
+        view.frame = CGRect(x: 0, y: 0, width: 300, height: 100)
+        view.layoutIfNeeded()
+        let text = try #require(view.embeddedView(of: address.email.id) as? UITextField)
+        #expect(text.layer.borderWidth == 0)
+        #expect(text.accessibilityHint == nil)
+
+        address.email.userChanged("ada")
+        address.email.validate()
+        StateUpdates.flush()
+        #expect(text.layer.borderWidth == 1)
+        #expect(text.layer.borderColor == UIColor.systemRed.cgColor)
+        #expect(text.accessibilityHint == EmailField.defaultMessage)
+
+        address.email.userChanged("ada@example.com")
+        StateUpdates.flush()
+        #expect(text.layer.borderWidth == 0)
+        #expect(text.accessibilityHint == nil)
         view.host.detach()
     }
 #endif

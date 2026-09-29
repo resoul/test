@@ -3,6 +3,43 @@
     import Nodes
     import StateCore
 
+    /// What checking a field's text found.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public enum FieldValidation: Hashable, Sendable {
+        /// Nothing was checked yet, or there is nothing to check — the field is empty, or its
+        /// text was set by code.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case unchecked
+        /// The text passed.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case valid
+        /// The text did not pass, and the message says why, for the user.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case invalid(String)
+    }
+
+    /// When a field checks its text on its own.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public enum ValidationTiming: Hashable, Sendable {
+        /// After every change the user makes.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case onInput
+        /// When the user leaves the field, and when Return is pressed in it.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case onEndEditing
+        /// Only when Return is pressed in it (`TextField.validate()` at any other time).
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case onSubmit
+    }
+
     /// What the keyboard's Return key says, and what it does in a `TextField`.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
@@ -87,6 +124,7 @@
     open class TextField: EmbeddedNode {
         private let textState: State<String>
         private let editingState = State(false)
+        private let validationState = State(FieldValidation.unchecked)
 
         /// The text in the field. Reading it under tracking depends on it; setting it shows
         /// the new text without calling `onChange`.
@@ -94,7 +132,11 @@
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public var text: String {
             get { textState.value }
-            set { textState.value = newValue }
+            set {
+                textState.value = newValue
+                // What was checked was another text.
+                setValidation(.unchecked)
+            }
         }
 
         /// What the empty field shows.
@@ -124,6 +166,60 @@
         /// Ownership: the field keeps the closure; it must not keep the field. Isolation:
         /// MainActor. Errors: none. Cancellation: set to `nil`.
         public var onSubmit: (@MainActor () -> Void)?
+
+        /// How the text is checked: `nil` checks nothing. A field made for a kind of text has
+        /// one (`EmailField`); the app gives one to any other, or another to that one.
+        ///
+        ///     name.validator = { $0.isEmpty ? .invalid("Enter your name") : .valid }
+        ///
+        /// Ownership: the field keeps the closure; it must not keep the field. Isolation:
+        /// MainActor. Errors: none. Cancellation: set to `nil`.
+        public var validator: (@MainActor (String) -> FieldValidation)?
+
+        /// When the field checks by itself: on leaving it by default. Once a check was made,
+        /// every change the user makes checks again, so that a message goes as soon as the text
+        /// is right. `validate()` checks at any time.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var validationTiming = ValidationTiming.onEndEditing
+
+        /// What the last check found. Reading it under tracking depends on it.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var validation: FieldValidation { validationState.value }
+
+        /// Why the text did not pass, for the user; `nil` unless the last check said so.
+        /// Reading it under tracking depends on it.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var validationMessage: String? {
+            if case .invalid(let message) = validation { return message }
+            return nil
+        }
+
+        /// Called when what a check found is not what the last one did.
+        ///
+        /// Ownership: the field keeps the closure; it must not keep the field. Isolation:
+        /// MainActor. Errors: none. Cancellation: set to `nil`.
+        public var onValidationChange: (@MainActor (FieldValidation) -> Void)?
+
+        /// Checks the text now — a form does it for every field when it is sent — and returns
+        /// what was found: `.unchecked` for a field with nothing to check it by.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        @discardableResult
+        public func validate() -> FieldValidation {
+            let result = validator?(textState.value) ?? .unchecked
+            setValidation(result)
+            return result
+        }
+
+        private func setValidation(_ result: FieldValidation) {
+            guard result != validationState.value else { return }
+
+            validationState.value = result
+            onValidationChange?(result)
+        }
 
         /// Whether the field has the keyboard. Reading it under tracking depends on it.
         ///
@@ -168,6 +264,9 @@
 
             textState.value = text
             onChange?(text)
+            if validationTiming == .onInput || validation != .unchecked {
+                validate()
+            }
         }
 
         /// The field's view took the keyboard, or gave it up.
@@ -175,11 +274,16 @@
             editingState.value = isEditing
             if isEditing {
                 host?.reveal(self)
+            } else if validationTiming == .onEndEditing {
+                validate()
             }
         }
 
         /// The user pressed Return: what the return key says is done.
         package func userSubmitted() {
+            if validationTiming != .onInput {
+                validate()
+            }
             onSubmit?()
             switch returnKey {
             case .next:
@@ -231,5 +335,64 @@
 
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public override var isSecure: Bool { true }
+    }
+
+    /// A field for an email address: the email keyboard, no autocorrection or capitals, what
+    /// the system knows of the user's addresses, and a check of the address's form once the
+    /// user leaves the field.
+    ///
+    ///     let email = EmailField(placeholder: "Email")
+    ///     email.onValidationChange = { _ in model.emailProblem = email.validationMessage }
+    ///
+    /// The check is of the form only — text, an at sign, a domain with a dot — and says nothing
+    /// of whether the address exists or is the user's. An app that knows more replaces
+    /// `validator`. An empty field is `.unchecked`: that a value is needed is the form's rule.
+    ///
+    /// Ownership: the tree keeps the node. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    @MainActor
+    public final class EmailField: TextField {
+        /// What the field says of an address that is not well formed.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public nonisolated static let defaultMessage =
+            "Enter an email address such as name@example.com"
+
+        /// Ownership: the caller keeps the node. Isolation: MainActor. Errors: none.
+        /// Cancellation: not applicable.
+        public init(
+            _ text: String = "",
+            placeholder: String = "",
+            message: String = EmailField.defaultMessage
+        ) {
+            super.init(text, placeholder: placeholder, content: .email)
+            validator = { address in
+                if address.isEmpty { return .unchecked }
+
+                return EmailField.isWellFormed(address) ? .valid : .invalid(message)
+            }
+        }
+
+        /// Whether `address` has the form of an email address: one at sign, text before it,
+        /// and after it a domain of labels of letters, digits and hyphens, at least two, with no
+        /// empty label; no spaces; at most 254 characters. Not whether it exists.
+        ///
+        /// Ownership: none. Isolation: none. Errors: none. Cancellation: not applicable.
+        public nonisolated static func isWellFormed(_ address: String) -> Bool {
+            guard address.count <= 254, !address.contains(where: \.isWhitespace) else {
+                return false
+            }
+
+            let parts = address.split(separator: "@", omittingEmptySubsequences: false)
+            guard parts.count == 2, !parts[0].isEmpty, parts[0].count <= 64 else { return false }
+
+            let labels = parts[1].split(separator: ".", omittingEmptySubsequences: false)
+            guard labels.count >= 2 else { return false }
+
+            return labels.allSatisfy { label in
+                !label.isEmpty && !label.hasPrefix("-") && !label.hasSuffix("-")
+                    && label.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" }
+            }
+        }
     }
 #endif
