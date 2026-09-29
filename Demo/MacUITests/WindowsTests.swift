@@ -47,10 +47,15 @@ final class WindowsTests: XCTestCase {
         XCTAssertTrue(app.wait(for: { $0.windows.count == 2 }, timeout: 10))
         XCTAssertEqual(windows(showing: "Note 1", in: app), 1)
         XCTAssertEqual(windows(showing: "Note 2", in: app), 1)
-        // The new window is the key one: its button is the one pressed.
-        app.buttons["Next note"].firstMatch.click()
-        app.buttons["Next note"].firstMatch.click()
-        XCTAssertTrue(app.staticTexts["Note 3"].waitForExistence(timeout: 5))
+        // The new window is the front one: its button is the one pressed, twice, the second time
+        // when the screen of the first press has come in (a push slides, and the screen going
+        // out is still there while it does).
+        let front = app.windows.element(boundBy: 0)
+        front.buttons["Next note"].click()
+        XCTAssertTrue(front.staticTexts["Note 2"].waitForExistence(timeout: 5))
+        XCTAssertTrue(front.staticTexts["Note 1"].waitForNonExistence(timeout: 5))
+        front.buttons["Next note"].click()
+        XCTAssertTrue(front.staticTexts["Note 3"].waitForExistence(timeout: 5))
         XCTAssertEqual(windows(showing: "Note 2", in: app), 1)
         XCTAssertEqual(windows(showing: "Note 3", in: app), 1)
 
