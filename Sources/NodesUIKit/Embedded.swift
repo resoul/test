@@ -53,8 +53,10 @@
         /// makes the views of new ones and lets go of those gone.
         func placeEmbeddedViews() {
             var kept: [ObjectIdentifier: EmbeddedHolder] = [:]
+            var madeViews = false
             for item in host.embeddedItems() {
                 let id = ObjectIdentifier(item.node)
+                if embedded[id] == nil { madeViews = true }
                 guard let holder = embedded[id] ?? makeHolder(for: item.node) else { continue }
 
                 if holder.clip.superview !== self {
@@ -69,6 +71,12 @@
                 holder.remove()
             }
             embedded = kept
+            if madeViews {
+                // A new view tells its node its size, which the pass in progress has already
+                // gone by, and the host does not ask a view to lay out again from inside a
+                // pass: ask for the next one.
+                setNeedsLayout()
+            }
         }
 
         /// After the keyboard moved and the tree was laid out for it: the field being edited

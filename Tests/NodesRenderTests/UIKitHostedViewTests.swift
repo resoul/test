@@ -93,6 +93,17 @@
     }
 
     @Test @MainActor
+    func aTouchOverAHostedViewInAScrollGoesToTheView() throws {
+        let screen = Screen()
+        let view = view(of: screen)
+        let hosted = try #require(screen.hosted.view)
+
+        let hit = try #require(view.hitTest(CGPoint(x: 40, y: 100), with: nil))
+        #expect(hit === hosted || hit.isDescendant(of: hosted))
+        view.host.detach()
+    }
+
+    @Test @MainActor
     func aViewThatChangesSizeMakesItsNodeLayOutAgain() throws {
         let screen = Screen()
         let view = view(of: screen)

@@ -62,8 +62,10 @@
         func placeEmbeddedViews() {
             var kept: [ObjectIdentifier: EmbeddedHolder] = [:]
             var order: [NSView] = []
+            var madeViews = false
             for item in host.embeddedItems() {
                 let id = ObjectIdentifier(item.node)
+                if embedded[id] == nil { madeViews = true }
                 guard let holder = embedded[id] ?? makeHolder(for: item.node) else { continue }
 
                 if holder.clip.superview !== self {
@@ -80,6 +82,12 @@
                 holder.remove()
             }
             embedded = kept
+            if madeViews {
+                // A new view tells its node its size, which the pass in progress has already
+                // gone by, and the host does not ask a view to lay out again from inside a
+                // pass: ask for the next one.
+                needsLayout = true
+            }
             // In the order of the tree, each above the one before. A view taken out of its
             // superview and added again loses the keyboard, so they are moved only when the
             // order is not right.

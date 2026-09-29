@@ -16,18 +16,23 @@ final class HostedViewTests: XCTestCase {
         button.click()
         XCTAssertTrue(app.staticTexts["Count 1"].waitForExistence(timeout: 5))
 
-        // Scrolled to the end of the page, the button is cut to nothing: no frame to press.
+        // Scrolled to the end of the page, the button is far above the window: its view keeps its
+        // size, the frame is where the scroll has it, and what shows of it is cut to nothing.
         let window = app.windows.firstMatch
-        for _ in 0..<8 where button.frame.height > 0 {
+        for _ in 0..<8 where button.frame.intersects(window.frame) {
             window.scroll(byDeltaX: 0, deltaY: -300)
         }
-        XCTAssertEqual(button.frame.height, 0)
+        XCTAssertFalse(
+            button.frame.intersects(window.frame),
+            "button \(button.frame), window \(window.frame)"
+        )
+        XCTAssertTrue(app.staticTexts["End of page"].frame.intersects(window.frame))
 
-        // And back: it has its size again, and presses.
-        for _ in 0..<8 where button.frame.height == 0 {
+        // And back: it is in the window again, and presses.
+        for _ in 0..<8 where !button.frame.intersects(window.frame) {
             window.scroll(byDeltaX: 0, deltaY: 300)
         }
-        XCTAssertGreaterThan(button.frame.height, 0)
+        XCTAssertTrue(button.frame.intersects(window.frame))
         button.click()
         XCTAssertTrue(app.staticTexts["Count 2"].waitForExistence(timeout: 5))
     }
