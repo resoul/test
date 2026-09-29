@@ -162,6 +162,91 @@
         view.host.detach()
     }
 
+    /// The parent an element says it has, as an object.
+    @MainActor
+    private func parent(of element: NSAccessibilityElement) -> AnyObject? {
+        element.accessibilityParent() as AnyObject?
+    }
+
+    @Test @MainActor
+    func theTopElementsAreTheChildrenOfTheParentAppKitFindsThemUnder() throws {
+        let screen = Screen()
+        let (window, view) = window(of: screen)
+        defer { window.close() }
+        let elements = try #require(view.accessibilityChildren() as? [NSAccessibilityElement])
+        let list = try #require(elements[1] as? ListAccessibilityElement)
+        let rows = try #require(list.accessibilityRows() as? [ListRowAccessibilityElement])
+
+        // The view is skipped, so the window is the parent of the elements at the top of the
+        // tree; the parent a client reads is the one that lists the element as its child.
+        #expect(!view.isAccessibilityElement())
+        for element in elements {
+            #expect(parent(of: element) === window)
+        }
+        let windowChildren = window.accessibilityChildren() as? [AnyObject] ?? []
+        for element in elements {
+            #expect(windowChildren.contains { $0 === element })
+        }
+        // Below the list, each element's parent is the one that holds it.
+        #expect(parent(of: rows[2]) === list)
+        let element = try #require(
+            rows[2].accessibilityChildren()?.first as? NSAccessibilityElement
+        )
+        #expect(parent(of: element) === rows[2])
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func theParentIsTheOneAroundTheViewWhereverTheViewIs() throws {
+        let screen = Screen()
+        let window = NSWindow(
+            contentRect: NSRect(x: 100, y: 100, width: 300, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let around = NSView(frame: CGRect(x: 0, y: 0, width: 300, height: 300))
+        window.contentView = around
+        let view = NodeNSView(root: screen)
+        view.zoom = 1
+        view.frame = CGRect(x: 40, y: 50, width: 200, height: 210)
+        around.addSubview(view)
+        view.layout()
+        let elements = try #require(view.accessibilityChildren() as? [NSAccessibilityElement])
+        let list = try #require(elements[1] as? ListAccessibilityElement)
+
+        // The view sits 40 to the right and 50 down in the window's content; the frames are
+        // on the screen where the elements show, and the parent's space starts at the window
+        // frame's bottom left.
+        for element in [elements[0], elements[2], list] {
+            #expect(parent(of: element) === window)
+        }
+        let title = elements[0].accessibilityFrame()
+        #expect(title == onScreen(CGRect(x: 0, y: 0, width: 200, height: 30), in: view))
+        #expect(
+            elements[0].accessibilityFrameInParentSpace()
+                == CGRect(
+                    x: title.minX - window.frame.minX,
+                    y: title.minY - window.frame.minY,
+                    width: 200,
+                    height: 30
+                )
+        )
+        // The view moves in its superview without a drawing: the frames follow.
+        view.frame.origin = CGPoint(x: 60, y: 10)
+        #expect(
+            elements[2].accessibilityFrame()
+                == onScreen(CGRect(x: 0, y: 150, width: 200, height: 60), in: view)
+        )
+        #expect(
+            list.accessibilityFrame()
+                == onScreen(CGRect(x: 0, y: 30, width: 200, height: 120), in: view)
+        )
+        view.host.detach()
+    }
+
     @Test @MainActor
     func voiceOverMovingToARowNotLaidOutLaysItOut() throws {
         let screen = Screen()
