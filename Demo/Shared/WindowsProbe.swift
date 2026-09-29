@@ -23,17 +23,16 @@ enum WindowsProbe {
         case note(Int)
     }
 
-    private static let noteRoutes = RouteTable<NoteRoute> {
-        RoutePattern(
-            "/notes/:number",
-            route: { .note(try $0.value("number")) },
-            values: { route in
-                guard case .note(let number) = route else { return nil }
-
-                return ["number": String(number)]
-            }
-        )
-    }
+    /// Note 1 is `/`, note 2 `/2`, note 3 `/2/3`: a path is the URL of its last note, and each
+    /// beginning of the URL is a note of its own, up to the eighth.
+    private static let noteRoutes = RouteTable<NoteRoute>(
+        (1...8).map { depth in
+            RoutePattern(
+                "/" + (2...max(depth, 2)).prefix(depth - 1).map(String.init).joined(separator: "/"),
+                .note(depth)
+            )
+        }
+    )
 
     private static func notes() -> Stack<NoteRoute> {
         weak var stack: Stack<NoteRoute>?
