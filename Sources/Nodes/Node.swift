@@ -139,6 +139,15 @@ open class Node: LayoutElement {
     /// MainActor. Errors: none. Cancellation: set to `nil`.
     public var onTap: (@MainActor () -> Void)?
 
+    /// A short text the pointer shows by the node when it rests on it — the mouse on a Mac,
+    /// a pointer on iPad; `nil`, the default, for none. A node inside one with a tip shows
+    /// its own tip, or else the outer one's. Nothing shows it on iPhone or on a TV.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var toolTip: String? {
+        didSet { if toolTip != oldValue { host?.setNeedsRender() } }
+    }
+
     /// The way the node is dragged — a row swiped aside along `.horizontal` — or `nil`, the
     /// default, for none. A drag along it that starts on the node, or on a subnode not
     /// dragged that way itself, goes to `onDrag`, and a tap on it does not happen; a drag the
@@ -430,6 +439,21 @@ open class Node: LayoutElement {
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
     open func pressChanged(_ isPressed: Bool) {}
 
+    /// The pointer came to rest over the node, or left it — to show that a press would go
+    /// to it. Told only to a node with `onTap` that is not turned off, as the mouse on a Mac
+    /// or a pointer on iPad moves; never on iPhone or a TV. The default does nothing.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+    open func hoverChanged(_ isHovered: Bool) {}
+
+    /// Whether presses, the focus and assistive technologies reach the node: `false` for a
+    /// control turned off, which then shows itself so.
+    var isInteractive: Bool { true }
+
+    /// The tip the pointer shows by the node: `toolTip`, or one a control takes from its
+    /// command.
+    var shownToolTip: String? { toolTip }
+
     /// The node joined a host's tree or left it — to start or stop work that only matters
     /// while it can be shown. Called on each change, not on every layout pass. A node that
     /// left can come back while its owner keeps it. The default does nothing.
@@ -703,7 +727,17 @@ open class Node: LayoutElement {
     }
 
     var canBecomeFocused: Bool {
-        isFocusable ?? (onTap != nil)
+        isInteractive && (isFocusable ?? (onTap != nil))
+    }
+
+    /// Whether the pointer rests over the node (`hoverChanged`).
+    private(set) var isHovered = false
+
+    func setHovered(_ isHovered: Bool) {
+        guard isHovered != self.isHovered else { return }
+
+        self.isHovered = isHovered
+        hoverChanged(isHovered)
     }
 
     func setFocused(_ isFocused: Bool) {
@@ -760,6 +794,7 @@ open class Node: LayoutElement {
 
     func unmount() {
         setShown(false)
+        setHovered(false)
         let wasMounted = isMounted
         isMounted = false
         isOnScreen = false

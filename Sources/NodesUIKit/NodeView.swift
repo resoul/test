@@ -74,6 +74,8 @@
         /// A hidden view tied to the keyboard's guide, which lays the view out as the keyboard
         /// moves; `nil` where no keyboard comes over the screen.
         var keyboardProbe: UIView?
+        /// Takes the pointer's moves and requests for tips, where there is a pointer.
+        var pointer: PointerTracker?
 
         /// A view showing `root`.
         ///
@@ -107,6 +109,7 @@
             // Before any scroll, so that a node's drag works outside scrolls too.
             _ = dragPan
             (self as? any KeyboardFollowing)?.followKeyboard()
+            followPointer()
             NotificationCenter.default.addObserver(
                 self,
                 selector: #selector(focusMovementFailed(_:)),
@@ -253,6 +256,7 @@
                     in: contentLayer
                 )
             }
+            pointerContentMoved()
         }
 
         // MARK: - Scrolling

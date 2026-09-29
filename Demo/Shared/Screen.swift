@@ -37,9 +37,9 @@
         override var layoutContent: LeafContent? { .size(width: 56, height: 56) }
     }
 
-    /// "Follow" or "Following", by the profile's state.
+    /// "Follow" or "Following", by the profile's state, with a tip saying what a click does.
     @MainActor
-    final class FollowBadge: Node {
+    final class FollowBadge: Control {
         let label = Text("", style: TextStyle(size: 13, weight: .semibold))
         let profile: Profile
 
@@ -54,13 +54,12 @@
             }
         }
 
-        override func pressChanged(_ isPressed: Bool) {
-            appearance.opacity = isPressed ? 0.6 : 1
-        }
-
-        override func focusChanged(_ isFocused: Bool) {
+        override func stateChanged(from previous: ControlState) {
+            appearance.opacity =
+                state.contains(.pressed) ? 0.6 : state.contains(.hovered) ? 0.85 : 1
             guard (host?.focusLook ?? .lift) == .lift else { return }
 
+            let isFocused = state.contains(.focused)
             appearance.scale = isFocused ? 1.25 : 1
             appearance.shadow = isFocused ? Shadow(opacity: 0.45, radius: 14, y: 10) : nil
         }
@@ -68,6 +67,9 @@
         override func update() {
             let following = profile.isFollowing.value
             label.text = following ? "Following" : "Follow"
+            toolTip =
+                following
+                ? "Stop following \(profile.name.value)" : "Follow \(profile.name.value)"
             let theme = self.theme
             label.style.color = theme.color(following ? .primaryText : .onAccent)
             appearance.background =
