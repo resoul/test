@@ -92,7 +92,10 @@
 
         // The user taps the first tab: the bar tells its delegate, and the tabs follow.
         controller.selectedIndex = 0
-        controller.delegate?.tabBarController?(controller, didSelect: controller.viewControllers![0])
+        controller.delegate?.tabBarController?(
+            controller,
+            didSelect: controller.viewControllers![0]
+        )
         #expect(tabs.selection == .inbox)
     }
 

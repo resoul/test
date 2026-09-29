@@ -12,7 +12,9 @@ struct LayoutDemo: Application {
     private let model = DemoModel()
 
     var scenes: [WindowScene] {
-        WindowScene("main", title: "Layout demo") { model.stack }
+        WindowScene("main", title: "Layout demo") {
+            ContainerProbe.content(ProcessInfo.processInfo.environment) ?? model.stack
+        }
     }
 
     var menuBar: MenuBar {

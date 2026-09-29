@@ -16,6 +16,9 @@
         if let tabs = content as? any PresentedTabs {
             return tabs.makeViewController()
         }
+        if let split = content as? any PresentedSplit {
+            return split.makeViewController()
+        }
         if let screen = content as? ControllerScreen {
             return screen.controller
         }

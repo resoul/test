@@ -350,17 +350,29 @@
     /// A container of the layer — tabs, a split — that can be the window's content, whose
     /// contents then have the window's toolbar to put up.
     @MainActor
-    protocol WindowLevelContainer: NSViewController {}
+    protocol WindowLevelContainer: NSViewController {
+        /// Whether `child` may put up the window's toolbar: the tab that shows, a split's
+        /// content, not its sidebar.
+        func ownsToolbar(_ child: NSViewController) -> Bool
+    }
+
+    extension WindowLevelContainer {
+        func ownsToolbar(_ child: NSViewController) -> Bool { true }
+    }
 
     extension NSViewController {
         /// Whether this controller is the window's content, or in a container of the layer
-        /// that is: the controllers that show the window's toolbar, one at a time.
+        /// that is and lets it: the controllers that show the window's toolbar, one at a time.
         func isWindowLevel(in window: NSWindow) -> Bool {
             var controller: NSViewController? = self
             while let current = controller {
                 if window.contentViewController === current { return true }
 
-                controller = current.parent is WindowLevelContainer ? current.parent : nil
+                guard let parent = current.parent as? WindowLevelContainer,
+                    parent.ownsToolbar(current)
+                else { return false }
+
+                controller = parent
             }
             return false
         }
