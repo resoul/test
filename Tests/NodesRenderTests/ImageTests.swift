@@ -956,14 +956,26 @@
         #expect(image.decodedPixelSize?.width == 400)
     }
 
-    @Test @MainActor
-    func imageLeavingTheTreeCancelsItsDownloadAndResumesOnReturn() async throws {
+    /// The image at `path` waits for a download that the server holds; the image leaves the
+    /// tree and comes back after `leave` has run in between. It checks what holds whatever
+    /// the interleaving: the download of a leaving image is given up, nothing is kept, and
+    /// the image loads once it returns.
+    ///
+    /// `whileRequestIs` is what the test knows when it makes the image leave: `started` only
+    /// after the stub server has seen the request, `unknown` as soon as the cache has a
+    /// waiter — the request of the session may or may not have begun by then.
+    @MainActor
+    private func imageLeavesAndReturns(
+        _ path: String,
+        whileRequestIs: RequestKnowledge,
+        checkingTheLeave check: (URL, Image, ImageCache) async throws -> Void
+    ) async throws {
         let directory = temporaryCache()
         defer { try? FileManager.default.removeItem(at: directory) }
         let cache = stubCache(directory)
-        let url = URL(string: "https://image-cache.test/away-held.webp")!
-        // The server answers only when the test lets it: the image leaves while its download
-        // is certainly under way.
+        let url = URL(string: "https://image-cache.test/\(path)")!
+        // The server answers only when the test lets it, so a download is under way, from the
+        // moment the request reaches the server, until the test lets it finish.
         stubHeld.withLock { _ = $0.insert(url.path) }
         defer { stubHeld.withLock { _ = $0.remove(url.path) } }
         let image = Image(source: .url(url), pipeline: ImagePipeline(cache: cache))
@@ -971,26 +983,28 @@
         let host = NodeHost(root: shelf, size: LayoutSize(width: 600, height: 600))
         defer { host.detach() }
         host.layoutIfNeeded()
+        // A waiter in the cache is the image asking for the download, not the session's
+        // request having begun: the request starts on the session's own thread, later.
         while await cache.downloadWaiters(for: url) < 1 { await Task.yield() }
+        if whileRequestIs == .started {
+            let began = ContinuousClock.now
+            while stubRequests.withLock({ $0[url.path, default: 0] }) < 1 {
+                try #require(
+                    ContinuousClock.now - began < .seconds(60),
+                    "the request did not reach the stub server in 60 s"
+                )
+                try await Task.sleep(for: .milliseconds(5))
+            }
+        }
 
         shelf.shows = false
         host.layoutIfNeeded()
         while await cache.downloadWaiters(for: url) > 0 { await Task.yield() }
-        // The request was cancelled on the server's side.
-        for _ in 0..<1000 where !stubStopped.withLock({ $0.contains(url.path) }) {
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        // Should this fail, the state says why: whether the request reached the server, was
-        // cancelled there, and what the image and the cache hold.
-        let state = """
-            requests \(stubRequests.withLock { $0[url.path, default: 0] }), \
-            stopped \(stubStopped.withLock { $0.contains(url.path) }), \
-            waiters \(await cache.downloadWaiters(for: url)), phase \(image.phase)
-            """
-        #expect(stubStopped.withLock { $0.contains(url.path) }, "\(state)")
-        #expect(image.phase == .loading, "\(state)")
-        #expect(image.pixelSize == nil, "\(state)")
-        #expect(try await cache.cachedData(for: url) == nil, "\(state)")
+        try await check(url, image, cache)
+        // Whatever the request did, nothing is kept and the image waits.
+        #expect(image.phase == .loading, "\(stubState(url, image))")
+        #expect(image.pixelSize == nil, "\(stubState(url, image))")
+        #expect(try await cache.cachedData(for: url) == nil, "\(stubState(url, image))")
 
         stubHeld.withLock { _ = $0.remove(url.path) }
         shelf.shows = true
@@ -999,11 +1013,61 @@
         for _ in 0..<1000 where image.phase != .ready {
             try await Task.sleep(for: .milliseconds(5))
         }
-        #expect(
-            image.phase == .ready,
-            "phase \(image.phase), requests \(stubRequests.withLock { $0[url.path, default: 0] })"
-        )
+        #expect(image.phase == .ready, "\(stubState(url, image))")
         #expect(image.pixelSize == LayoutSize(width: 1, height: 1))
+    }
+
+    private enum RequestKnowledge {
+        case started
+        case unknown
+    }
+
+    /// Whether the request of `url` reached the stub server, was cancelled there, and what
+    /// the image holds: what a failing check says.
+    @MainActor
+    private func stubState(_ url: URL, _ image: Image) -> String {
+        """
+        requests \(stubRequests.withLock { $0[url.path, default: 0] }), \
+        stopped \(stubStopped.withLock { $0.contains(url.path) }), phase \(image.phase)
+        """
+    }
+
+    /// The request has reached the server, which is holding the answer: the image leaving must
+    /// make the server see the request cancelled.
+    @Test @MainActor
+    func imageLeavingTheTreeAfterItsRequestBeganCancelsTheRequest() async throws {
+        try await imageLeavesAndReturns("away-held-began.webp", whileRequestIs: .started) {
+            url,
+            image,
+            _ in
+            for _ in 0..<1000 where !stubStopped.withLock({ $0.contains(url.path) }) {
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            #expect(stubStopped.withLock { $0.contains(url.path) }, "\(stubState(url, image))")
+        }
+    }
+
+    /// The image leaves as soon as it asked for the download, when the request may not have
+    /// begun. Then the server never sees it, or sees it and its cancellation: what must not
+    /// happen is a request that reached the server and is left running.
+    @Test @MainActor
+    func imageLeavingTheTreeBeforeItsRequestBeganLeavesNoRequestRunning() async throws {
+        try await imageLeavesAndReturns("away-held-early.webp", whileRequestIs: .unknown) {
+            url,
+            image,
+            _ in
+            func leftRunning() -> Bool {
+                stubRequests.withLock { $0[url.path, default: 0] } > 0
+                    && !stubStopped.withLock { $0.contains(url.path) }
+            }
+            // A cancellation reaches the server after the waiter is gone; look twice, with time
+            // in between for a late one.
+            for _ in 0..<200 where leftRunning() {
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            try await Task.sleep(for: .milliseconds(200))
+            #expect(!leftRunning(), "\(stubState(url, image))")
+        }
     }
 
     /// A button showing only an icon.
