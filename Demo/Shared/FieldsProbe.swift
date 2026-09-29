@@ -8,8 +8,10 @@ import NodesRender
 /// saying how long the password typed is — the model gets what the field hides.
 @MainActor
 enum FieldsProbe {
-    static func content() -> any SceneContent {
-        NodeScreen(Page(), title: "Fields")
+    static func content(bar: Bool = false) -> any SceneContent {
+        let page = Page()
+        if bar { page.keyboardBar = .navigation }
+        return NodeScreen(page, title: "Fields")
     }
 
     private final class Page: Node {
