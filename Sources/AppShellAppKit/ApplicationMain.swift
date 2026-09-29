@@ -168,6 +168,12 @@
             window.identifier = NSUserInterfaceItemIdentifier("scene." + session.kind.id)
             window.isRestorable = true
             window.contentViewController = contentController(for: session.content)
+            // The window's toasts show over its content.
+            if let content = window.contentView {
+                let overlay = ToastOverlay(session: session)
+                overlay.frame = content.bounds
+                content.addSubview(overlay)
+            }
             if window.title.isEmpty {
                 window.title = session.kind.title
             }

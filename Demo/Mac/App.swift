@@ -35,6 +35,9 @@ struct LayoutDemo: Application {
     }
 
     func started(_ shell: Shell) {
+        if ProcessInfo.processInfo.environment["TOAST_PROBE"] != nil {
+            ToastProbe.install(on: shell)
+        }
         model.askToDelete(from: ProcessInfo.processInfo.environment)
         model.openMessages(from: ProcessInfo.processInfo.environment)
         model.openCompose(from: ProcessInfo.processInfo.environment)

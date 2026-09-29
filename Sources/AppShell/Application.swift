@@ -312,6 +312,12 @@ public final class SceneSession: CommandResponder {
 
     private let activationState = State(SceneActivation.background)
 
+    // The toast over the window: what shows, and the timer that takes it away.
+    let toastState = State<ShownToast?>(nil)
+    var toastTimer: Task<Void, Never>?
+    var toastDeadline: Date?
+    var toastRemaining: Double?
+
     /// How much the scene is in use; `.background` while it does not show. Reading it under
     /// tracking depends on it.
     ///
@@ -564,6 +570,7 @@ public final class Shell: CommandResponder {
     /// stack in it of its screens.
     package func sessionClosed(_ session: SceneSession) {
         sessionsState.value.removeAll { $0 === session }
+        session.dismissToast()
         (session.content as? any ClosableContent)?.closeContent()
         session.content.outer = nil
         session.outer = nil
