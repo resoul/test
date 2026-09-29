@@ -17,6 +17,12 @@ struct LayoutDemo: Application {
         }
     }
 
+    /// The demo puts its state back only when asked (`RESTORATION_PROBE`): the UI tests of the
+    /// rest start from a clean screen.
+    var restoresState: Bool {
+        ProcessInfo.processInfo.environment["RESTORATION_PROBE"] != nil
+    }
+
     var menuBar: MenuBar {
         MenuBar { DemoModel.menu }
     }

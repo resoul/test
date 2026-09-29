@@ -121,8 +121,9 @@
 
             // What the last run kept is put back before the screens are made, so that the first
             // thing shown is where the user was; a link that came since is handled after.
-            if let data = platform.stateRestorationActivity?.userInfo?[Self.restorationKey]
-                as? Data
+            if shell.application.restoresState,
+                let data = platform.stateRestorationActivity?.userInfo?[Self.restorationKey]
+                    as? Data
             {
                 session.restore(from: data)
             }
@@ -142,7 +143,9 @@
 
         /// The system asks for the scene's state when the app goes to the background.
         func stateRestorationActivity(for scene: UIScene) -> NSUserActivity? {
-            guard let data = session?.restorationData() else { return nil }
+            guard ShellApplicationDelegate.shell?.application.restoresState == true,
+                let data = session?.restorationData()
+            else { return nil }
 
             let activity = NSUserActivity(activityType: Self.restorationType)
             activity.addUserInfoEntries(from: [Self.restorationKey: data])

@@ -75,6 +75,8 @@
 
         /// The app is asked for its state: each kind of scene keeps that of its first window.
         func application(_ app: NSApplication, willEncodeRestorableState coder: NSCoder) {
+            guard shell.application.restoresState else { return }
+
             var kept: Set<String> = []
             for session in shell.sessions where !kept.contains(session.kind.id) {
                 guard let data = session.restorationData() else { continue }
@@ -90,6 +92,8 @@
         /// The state comes, before the first window is made or after it: a window takes what
         /// its kind kept, once.
         func application(_ app: NSApplication, didDecodeRestorableState coder: NSCoder) {
+            guard shell.application.restoresState else { return }
+
             for kind in shell.application.scenes.map(\.id) {
                 guard
                     let data = coder.decodeObject(

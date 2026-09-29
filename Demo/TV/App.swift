@@ -32,6 +32,12 @@ struct LayoutDemo: Application {
         }
     }
 
+    /// The demo puts its state back only when asked (`RESTORATION_PROBE`): the UI tests of the
+    /// rest start from a clean screen.
+    var restoresState: Bool {
+        ProcessInfo.processInfo.environment["RESTORATION_PROBE"] != nil
+    }
+
     func started(_ shell: Shell) {
         // Play/Pause on the remote asks for the focus on Ada's badge, from wherever it is.
         let badge = model.firstBadge
