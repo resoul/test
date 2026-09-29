@@ -113,6 +113,8 @@
     @MainActor
     final class ShellSceneDelegate: UIResponder, UIWindowSceneDelegate {
         var window: UIWindow?
+        /// The window over the scene's, where its toasts show.
+        private var toastWindow: ToastWindow?
         private var session: SceneSession?
 
         /// Where the kind of a scene is kept in its scene session, and in the activity that asks
@@ -183,6 +185,7 @@
             }
             window.makeKeyAndVisible()
             self.window = window
+            toastWindow = ToastWindow(scene: scene, session: session)
 
             shell.firstSceneShown()
             for context in connectionOptions.urlContexts {
@@ -227,6 +230,8 @@
         /// content — the system may connect the scene again — until it is discarded.
         func sceneDidDisconnect(_ scene: UIScene) {
             session?.setActivation(.background)
+            toastWindow?.isHidden = true
+            toastWindow = nil
             window = nil
             session = nil
         }

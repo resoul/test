@@ -13,7 +13,7 @@ import ThemeCore
 /// system button inside the tree (`HostedProbe`), `FIELDS_PROBE=1` text fields (`FieldsProbe`; with `KEYBOARD_BAR=1` the
 /// bar above the keyboard),
 /// `EDITOR_PROBE=1` the multi-line editor (`EditorProbe`), `SELECT_PROBE=1` the option
-/// menu (`SelectProbe`).
+/// menu (`SelectProbe`), `TOAST_PROBE=1` toasts (`ToastProbe`).
 @MainActor
 enum ContainerProbe {
     static func content(_ environment: [String: String]) -> (any SceneContent)? {
@@ -24,6 +24,7 @@ enum ContainerProbe {
             return FieldsProbe.content(bar: environment["KEYBOARD_BAR"] != nil)
         }
         if environment["SELECT_PROBE"] != nil { return SelectProbe.content() }
+        if environment["TOAST_PROBE"] != nil { return ToastProbe.content() }
         if environment["EDITOR_PROBE"] != nil {
             let room = environment["EDITOR_LOW"].flatMap(Double.init).flatMap {
                 $0 >= 100 ? $0 : nil

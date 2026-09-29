@@ -190,7 +190,19 @@ open class Node: LayoutElement {
     public var onMoveCommand: (@MainActor (FocusMove) -> Bool)?
 
     /// The commands the node carries out (`handle(_:isEnabled:perform:)`).
-    var commandHandlers: [CommandHandler] = []
+    var commandHandlers: [CommandHandler] = [] {
+        didSet { handlersRevision?.value += 1 }
+    }
+
+    /// Changes whenever a handler is added or taken away, for whoever asked what the nodes can
+    /// do; made when first asked.
+    private var handlersRevision: State<Int>?
+
+    /// Reading the handlers under tracking depends on their changing.
+    func trackHandlers() {
+        if handlersRevision == nil { handlersRevision = State(0) }
+        _ = handlersRevision?.value
+    }
 
     /// Makes the node a focus section: when the remote moves the focus toward any part of
     /// the node, the focus goes to a node inside it — the one focused there last, else the

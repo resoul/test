@@ -168,6 +168,20 @@
             window.identifier = NSUserInterfaceItemIdentifier("scene." + session.kind.id)
             window.isRestorable = true
             window.contentViewController = contentController(for: session.content)
+            // The window's toasts show over its content. They stand beside the content view, not
+            // in it: a view of nodes speaks to assistive technologies for its own tree only, and
+            // would leave the toast out.
+            if let content = window.contentView, let frameView = content.superview {
+                let overlay = ToastOverlay(session: session)
+                overlay.translatesAutoresizingMaskIntoConstraints = false
+                frameView.addSubview(overlay, positioned: .above, relativeTo: content)
+                NSLayoutConstraint.activate([
+                    overlay.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+                    overlay.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+                    overlay.topAnchor.constraint(equalTo: content.topAnchor),
+                    overlay.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+                ])
+            }
             if window.title.isEmpty {
                 window.title = session.kind.title
             }

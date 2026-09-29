@@ -1,3 +1,4 @@
+import StateCore
 /// A key of a keyboard shortcut.
 ///
 /// A character key is written as a string literal — `"f"`, `"8"`, `"["` — and is kept in
@@ -248,7 +249,21 @@ extension Node {
 @MainActor
 open class CommandResponder: CommandTarget {
     /// The commands the responder carries out.
-    var commandHandlers: [CommandHandler] = []
+    var commandHandlers: [CommandHandler] = [] {
+        didSet { handlersRevision?.value += 1 }
+    }
+
+    /// Changes whenever a handler is added or taken away, for whoever asked what the responders
+    /// can do (`nearestHandler`): a button turned off because nothing carried out its command
+    /// turns on when something does. Made when first asked, so that the responders nobody asks
+    /// cost nothing.
+    private var handlersRevision: State<Int>?
+
+    /// Reading the handlers under tracking depends on their changing.
+    func trackHandlers() {
+        if handlersRevision == nil { handlersRevision = State(0) }
+        _ = handlersRevision?.value
+    }
 
     /// The responder around this one, where the commands it does not carry out go on — the
     /// container around a screen, the window around a container.
@@ -336,6 +351,7 @@ open class CommandResponder: CommandTarget {
     func nearestHandler(where matches: (CommandHandler) -> Bool) -> CommandHandler? {
         var responder: CommandResponder? = self
         while let current = responder {
+            current.trackHandlers()
             if let handler = current.commandHandlers.first(where: matches) {
                 return handler
             }

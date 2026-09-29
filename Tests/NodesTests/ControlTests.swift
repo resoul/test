@@ -189,6 +189,32 @@ func aControlsCommandGoesWhereTheControlIsAndTurnsItOnAndOff() {
 }
 
 @Test @MainActor
+func aControlsCommandTurnsOnWhenAHandlerIsAddedLaterAndOffWhenItIsTakenAway() {
+    let row = Row()
+    let outer = CommandResponder()
+    row.chip.command = .archive
+    let host = NodeHost(root: row, size: LayoutSize(width: 400, height: 60))
+    host.outerResponder = outer
+    host.layoutIfNeeded()
+    // Nothing carries the command out yet: an app registers its handlers once its window is up.
+    #expect(row.chip.state == .disabled)
+
+    outer.handle(.archive) {}
+    StateUpdates.flush()
+    #expect(row.chip.state == [])
+
+    outer.removeHandler(for: .archive)
+    StateUpdates.flush()
+    #expect(row.chip.state == .disabled)
+
+    // A node's own handler, added after the control mounted, counts as well.
+    row.handle(.archive) {}
+    StateUpdates.flush()
+    #expect(row.chip.state == [])
+    host.detach()
+}
+
+@Test @MainActor
 func theInnermostTipShowsAndAControlTakesItsCommandsTitle() throws {
     let row = Row()
     row.toolTip = "A row"
