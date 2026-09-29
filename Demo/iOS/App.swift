@@ -23,6 +23,7 @@ struct LayoutDemo: Application {
         model.askToDelete(from: ProcessInfo.processInfo.environment)
         model.openMessages(from: ProcessInfo.processInfo.environment)
         model.openCompose(from: ProcessInfo.processInfo.environment)
+        model.openForm(from: ProcessInfo.processInfo.environment)
     }
 
     func open(_ request: OpenRequest) -> OpenResult {

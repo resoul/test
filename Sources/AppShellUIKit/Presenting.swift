@@ -264,8 +264,9 @@
         }
     }
 
-    /// The heights a sheet stops at. A TV has no sheets that stop part of the way: there
-    /// the conformance is unavailable, and a cast to it finds none.
+    /// The heights a sheet stops at. A TV has no sheets that stop part of the way: there the
+    /// conformance is unavailable. A cast still finds it at run time, and it does nothing:
+    /// the controller has no sheet controller there.
     @MainActor
     protocol SheetHeights {
         /// Gives the sheet the presentation's heights, before it shows.
@@ -346,8 +347,9 @@
         }
     }
 
-    /// Where a popover points. A TV has no popovers: there the conformance is unavailable,
-    /// and a cast to it finds none.
+    /// Where a popover points. A TV has no popovers: there the conformance is unavailable.
+    /// A cast still finds it at run time, and it does nothing: the alert has no popover
+    /// controller there.
     @MainActor
     protocol PopoverAnchoring {
         /// Points the popover at the middle of `view`, without an arrow.

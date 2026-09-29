@@ -33,6 +33,25 @@ public enum ScrollAlignment: Sendable, Hashable {
     case end
 }
 
+/// What a drag of a scroll does to the platform's keyboard.
+///
+/// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+public enum KeyboardDismissal: Sendable, Hashable {
+    /// Nothing: the keyboard stays.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    case none
+    /// The keyboard goes away as the drag begins.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    case onDrag
+    /// The keyboard follows the finger down, and goes away when the finger takes it off the
+    /// screen; drawn back up, it stays.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    case interactive
+}
+
 /// The direction a `Scroll` moves its content in.
 ///
 /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
@@ -652,6 +671,14 @@ public final class Scroll: Node {
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public var isPaging = false {
         didSet { if isPaging != oldValue { host?.setNeedsRender() } }
+    }
+
+    /// What a drag of the scroll does to the platform's keyboard. A list under a field that
+    /// sends — a chat — lets the keyboard follow the finger down.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var keyboardDismissal = KeyboardDismissal.none {
+        didSet { if keyboardDismissal != oldValue { host?.setNeedsRender() } }
     }
 
     /// The page that shows, from 0: the one whose start is nearest the offset.

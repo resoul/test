@@ -46,7 +46,9 @@ let package = Package(
         ),
         .target(
             name: "NodesUIKit",
-            dependencies: ["Nodes", "NodesRender", "LayoutCore", "LayoutUIKit", "ThemeCore"]
+            dependencies: [
+                "Nodes", "NodesRender", "LayoutCore", "LayoutUIKit", "StateCore", "ThemeCore",
+            ]
         ),
         .target(
             name: "NodesAppKit",
