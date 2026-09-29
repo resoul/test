@@ -260,6 +260,7 @@
             font = .preferredFont(forTextStyle: .body)
             adjustsFontForContentSizeCategory = true
             accessibilityIdentifier = field.placeholder
+            isSecureTextEntry = field.isSecure
             switch field.content {
             case .text:
                 break
@@ -269,15 +270,36 @@
             case .email:
                 textContentType = .emailAddress
                 keyboardType = .emailAddress
-                autocapitalizationType = .none
-                autocorrectionType = .no
-                spellCheckingType = .no
+                typedByHand()
+            case .password:
+                textContentType = .password
+                typedByHand()
+            case .newPassword:
+                textContentType = .newPassword
+                typedByHand()
+            case .phone:
+                textContentType = .telephoneNumber
+                keyboardType = .phonePad
+            case .oneTimeCode:
+                textContentType = .oneTimeCode
+                keyboardType = .numberPad
+            case .url:
+                textContentType = .URL
+                keyboardType = .URL
+                typedByHand()
             }
             addTarget(self, action: #selector(changed), for: .editingChanged)
         }
 
         required init?(coder: NSCoder) {
             nil
+        }
+
+        /// Text that is not words: no capitals, no autocorrection, no spell checking.
+        private func typedByHand() {
+            autocapitalizationType = .none
+            autocorrectionType = .no
+            spellCheckingType = .no
         }
 
         @objc private func changed() {

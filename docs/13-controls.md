@@ -438,6 +438,35 @@ VoiceOver (вид ставится родителем элементов дер�
 по умолчанию, следующий — измеренный; вид, у которого меняется собственный размер без вызова
 `invalidateSize()`; несколько `HostedView` с общим первым ответчиком (порядок Tab между видами).
 
+## C3, шаг 1: SecureField и виды содержимого (2026-09-30)
+
+**Статус: сделан; модель, адаптеры и UI-тест iOS проверены, UI-тест Mac не запускался.**
+
+- `TextContent` получил `.password`, `.newPassword`, `.phone`, `.oneTimeCode`, `.url`.
+  UIKit: `textContentType` (`.password`, `.newPassword`, `.telephoneNumber`, `.oneTimeCode`,
+  `.URL`), клавиатура (`.phonePad`, `.numberPad`, `.URL`), для паролей, email и адресов — без
+  заглавных, автокоррекции и проверки орфографии. AppKit: `NSTextField.contentType`.
+- `SecureField: TextField` (`TextField` стал `open`): `isSecure == true`, содержимое по умолчанию
+  `.password`. UIKit — `isSecureTextEntry`, AppKit — `NSSecureTextField`. Остальное — как у
+  `TextField` (Return `.next` находит и такое поле, `text` — то, что набрано).
+- AppKit: делегат и обработчики вынесены в `FieldHandler`, его держит вид (делегат — слабая
+  ссылка); `FieldView` и `SecureFieldView` пользуются им.
+- Демо: `FIELDS_PROBE=1` — имя, пароль, телефон и строка «Password has N characters».
+
+Проверено: `TextFieldTests` (SecureField — поле, скрывает набранное, `.next` доходит до него),
+`UIKitTextFieldTests` на iPhone 17 (клавиатура и содержимое для каждого вида, скрытие только у
+защищённых), `AppKitTextFieldTests` на Mac (содержимое, `NSSecureTextField` только у защищённых).
+
+UI-тест iOS `SecureFieldTests` (iPhone 17) прошёл: поле находится как защищённое (не как
+обычное), набранное доходит до модели («Password has 6 characters»), значение поля — не цифры,
+Return с Next переводит клавиатуру на поле телефона. Первый прогон упал на поиске экранной
+кнопки «Next» — на симуляторе Return нажимается через `typeText("\n")`, как в `KeyboardTests`.
+
+Не проверено: UI-тест Mac `SecureFieldTests` (ввод в защищённое поле); что система предлагает сохранённый пароль и сильный пароль (нужен
+аккаунт и подключённая связка ключей); tvOS — `keyboardType` и `textContentType` там
+присваиваются, поле на TV не проверялось; вставка в защищённое поле и то, что содержимое не
+попадает в историю буфера обмена — это поведение системного вида, нашим кодом не проверено.
+
 ## Решение для истории — 2026-09-28
 
 Зафиксировано по просьбе пользователя после обсуждения восьми вопросов и сверки плана
