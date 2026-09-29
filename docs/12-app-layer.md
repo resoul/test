@@ -890,8 +890,8 @@ iOS и TV проходят. UI-тест Mac-демо (`PresentationTests.testAnA
 
 ## A3, часть 3: вкладки и `Split` (2026-09-29)
 
-**Статус: в работе.** Дизайн ниже принят до реализации; итоги реализации и проверки
-допишутся здесь же.
+**Статус: реализовано на iPhone, Mac и TV; на iPad UI-тесты демо не проходят (дефект 217).**
+Модель, адаптеры UIKit и AppKit и UI-тесты — ниже, в «Итогах».
 
 Что нужно от обоих: выбор сохраняется при смене размеров; невыбранная вкладка не получает
 команд и не считается показанной; sidebar доступен в компактном варианте и на TV; окно Mac
@@ -899,16 +899,20 @@ iOS и TV проходят. UI-тест Mac-демо (`PresentationTests.testAnA
 боковой панели и содержимого свои экраны, у содержимого — свой `Stack`.
 
 ```swift
-let tabs = Tabs(selection: MailTab.inbox) {
-    Tab(MailTab.inbox, title: "Inbox", symbol: "tray") { inboxStack }
-    Tab(MailTab.search, title: "Search", symbol: "magnifyingglass") { searchScreen }
-}
+let tabs = Tabs<MailTab>(
+    selection: .inbox,
+    [
+        Tab(.inbox, title: "Inbox", symbol: "tray", content: inboxStack),
+        Tab(.search, title: "Search", symbol: "magnifyingglass", content: searchScreen),
+    ]
+)
 tabs.select(.search)                       // выбор из кода: Bool, есть ли такая вкладка
 tabs.selection                             // наблюдаемо
 
-let split = Split(sidebar: NodeScreen(MailboxesNode(store: store), title: "Mailboxes")) {
-    inboxStack                              // Stack или Screen
-}
+let split = Split(
+    sidebar: NodeScreen(MailboxesNode(store: store), title: "Mailboxes"),
+    content: inboxStack                     // Stack или Screen
+)
 split.showContent()                         // компактно: показать содержимое; showSidebar() — боковую панель
 ```
 
@@ -935,9 +939,9 @@ split.showContent()                         // компактно: показа�
   не подходит, пользуется вкладками.
 - **UIKit.** `Tabs` — `UITabBarController` (классический, вкладки из `tabBarItem`; режимы боковой
   панели iPadOS 18 не задействуем — минимум iOS 16). `Split` — `UISplitViewController` в
-  стиле двух колонок; что он делает с `StackNavigationController` в компактном виде,
-  проверяется на Simulator (ждёт: стек содержимого сливается со стеком боковой панели, а
-  наш стек ведёт свой путь).
+  стиле двух колонок. Проверено на iPhone 17 Simulator: в компактном виде стеки не
+  сливаются — навигационный контроллер содержимого кладётся поверх боковой панели целиком,
+  и путь нашего стека остаётся при уходе к боковой панели и возврате.
 - **AppKit.** `Tabs` — `NSTabViewController` со вкладками сверху (`segmentedControlOnTop`, чтобы
   панель окна осталась для команд); `Split` — `NSSplitViewController` с боковой панелью.
   Панель окна принадлежит выбранной ветке: стек, ставший видимым, ставит на окно свою
@@ -945,6 +949,40 @@ split.showContent()                         // компактно: показа�
 - **Проверки.** Модельные тесты `AppShellTests` (выбор, показ, цепочка команд, `Split`);
   адаптеры на iPhone 17, iPad и Apple TV Simulator и на Mac; UI-тесты демо на трёх
   платформах: выбор сохраняется при повороте (iPad) и смене размера окна (Mac), Menu на TV.
+
+### Итоги (2026-09-29)
+
+- `AppShell`: `Tabs<ID>`, `Tab<ID>`, `TabContent`, `Split`, `SplitContent`; `Screen` и `Stack`
+  получили сигнал «контейнер показывает или скрывает» (`setShown`): невыбранная вкладка не
+  вызывает `appeared()`, а экран, пришедший в скрытый стек, получает его, когда стек
+  показан. Закрытие сцены отпускает содержимое через `ClosableContent` для стека, вкладок,
+  split и одиночного экрана.
+- `AppShellUIKit`: `TabsController` (`UITabBarController`), `SplitController`
+  (`UISplitViewController`, две колонки). Split узнаёт, что он на экране, только после того,
+  как контроллер решил, сколько колонок видно (на следующем ходе очереди после
+  `viewDidAppear`): иначе содержимое на iPhone на миг «появлялось» и «исчезало», потому что
+  контроллер сворачивается позже первого появления.
+- `AppShellAppKit`: `TabsViewController` (`NSTabViewController`, вкладки сверху),
+  `SplitViewController` (`NSSplitViewController`). Панель окна принадлежит контроллеру, что
+  показан сейчас: стек в вкладках или содержимое split ставит свою панель вместо панели
+  прежнего (`WindowLevelContainer`); боковая панель split панель окна не ставит.
+- Демо: `ContainerProbe` (`TABS_PROBE=1`, `SPLIT_PROBE=1`) — общий для трёх демо.
+
+Проверено: модельные тесты; тесты адаптеров на Mac; тесты адаптеров на iPhone 17 и iPad Pro 13
+Simulator (в том числе split на iPhone: боковая панель первой, содержимое поверх, переход
+пользователя туда и обратно; на iPad: обе колонки). UI-тесты демо `ContainerTests`, пройденные
+в прогонах пользователя, по одному: iPhone (вкладки сохраняют состояние; split — боковая
+панель первой, «назад» из содержимого к ней), TV (split не прячет боковую панель), Mac
+(вкладки сохраняют состояние, панель окна следует за вкладкой).
+
+Не проверено: UI-тесты TV для вкладок и Mac для split — написаны, не запускались; UI-тесты на iPad — демо на iPad Pro 13 Simulator показывает белое окно без
+содержимого, и тесты вкладок, split и прежний `StackTests` падают одинаково (дефект 217; на
+`main` до вкладок не проверялось); поворот iPhone и iPad с открытым содержимым split;
+вкладки со `Split` внутри; плавающая боковая панель iPad и режимы боковой панели iPadOS 18;
+`Menu` на TV с содержимого вкладки (возврат к панели вкладок), Menu из содержимого split к
+боковой панели на TV (задумано, не сделано); панель у боковой панели split (заголовок
+показывается, кнопки команд — нет); вкладки как содержимое модального показа; устройство —
+только Simulator.
 
 ## Решения (приняты 2026-09-28)
 
