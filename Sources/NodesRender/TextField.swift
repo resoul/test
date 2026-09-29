@@ -46,6 +46,28 @@
         ///
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         case email
+        /// The password of an account that exists: the system offers the saved one. No
+        /// autocorrection, no capitals.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case password
+        /// The password of an account being made or changed: the system offers a strong one.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case newPassword
+        /// A telephone number: the number pad.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case phone
+        /// A code sent to the user — by SMS, by email — which the system offers to fill in from
+        /// the message: the number pad.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case oneTimeCode
+        /// A web address: the URL keyboard, no autocorrection, no capitals.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case url
     }
 
     /// A field of one line of text, which the platform's own text field shows and edits:
@@ -62,7 +84,7 @@
     /// Ownership: the tree keeps the node. Isolation: MainActor. Errors: none. Cancellation:
     /// not applicable.
     @MainActor
-    public final class TextField: EmbeddedNode {
+    open class TextField: EmbeddedNode {
         private let textState: State<String>
         private let editingState = State(false)
 
@@ -82,6 +104,11 @@
 
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public let content: TextContent
+
+        /// Whether the field shows what is typed: a secure field shows dots.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        open var isSecure: Bool { false }
 
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public var returnKey = ReturnKey.default
@@ -105,7 +132,11 @@
 
         /// Ownership: the caller keeps the node. Isolation: MainActor. Errors: none.
         /// Cancellation: not applicable.
-        public init(_ text: String = "", placeholder: String = "", content: TextContent = .text) {
+        public init(
+            _ text: String = "",
+            placeholder: String = "",
+            content: TextContent = .text
+        ) {
             textState = State(text)
             self.placeholder = placeholder
             self.content = content
@@ -173,5 +204,32 @@
 
             return fields[index + 1]
         }
+    }
+
+    /// A field for a password: it shows dots for what is typed, does not offer the text to
+    /// autocorrection or the pasteboard's history, and lets the system fill in a saved password
+    /// (`content` `.password`) or suggest a strong one (`.newPassword`). Everything else is a
+    /// `TextField`'s: Return with `.next` goes to the next field, `text` is the password as
+    /// typed.
+    ///
+    ///     let password = SecureField(placeholder: "Password")
+    ///     password.onSubmit = { model.signIn(password: password.text) }
+    ///
+    /// Ownership: the tree keeps the node. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    @MainActor
+    public final class SecureField: TextField {
+        /// Ownership: the caller keeps the node. Isolation: MainActor. Errors: none.
+        /// Cancellation: not applicable.
+        public override init(
+            _ text: String = "",
+            placeholder: String = "",
+            content: TextContent = .password
+        ) {
+            super.init(text, placeholder: placeholder, content: content)
+        }
+
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public override var isSecure: Bool { true }
     }
 #endif

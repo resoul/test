@@ -118,7 +118,7 @@
 
     extension TextField: AppKitEmbedded {
         func makeHolder() -> EmbeddedHolder {
-            let view = FieldView(self)
+            let view: NSTextField = isSecure ? SecureFieldView(self) : FieldView(self)
             let holder = EmbeddedHolder(node: self, view: view)
             holder.watch { [weak view, weak self] in
                 guard let view, let self else { return }
@@ -144,31 +144,14 @@
         }
     }
 
-    /// A text field showing a `TextField` node: what the user types goes to the node.
-    final class FieldView: NSTextField, NSTextFieldDelegate {
+    /// Tells a `TextField` what its view does: what the user types, when editing begins and
+    /// ends, Return. The view keeps it, as the view's delegate is not kept.
+    @MainActor
+    final class FieldHandler: NSObject, NSTextFieldDelegate {
         weak var field: TextField?
 
         init(_ field: TextField) {
             self.field = field
-            super.init(frame: .zero)
-            delegate = self
-            isEditable = true
-            isBezeled = true
-            bezelStyle = .roundedBezel
-            font = .systemFont(ofSize: NSFont.systemFontSize)
-            setAccessibilityIdentifier(field.placeholder)
-            switch field.content {
-            case .text:
-                break
-            case .name:
-                contentType = .name
-            case .email:
-                contentType = .emailAddress
-            }
-        }
-
-        required init?(coder: NSCoder) {
-            nil
         }
 
         func controlTextDidBeginEditing(_ notification: Notification) {
@@ -176,7 +159,9 @@
         }
 
         func controlTextDidChange(_ notification: Notification) {
-            field?.userChanged(stringValue)
+            guard let view = notification.object as? NSTextField else { return }
+
+            field?.userChanged(view.stringValue)
         }
 
         func controlTextDidEndEditing(_ notification: Notification) {
@@ -192,6 +177,66 @@
 
             field?.userSubmitted()
             return true
+        }
+    }
+
+    extension NSTextField {
+        /// What the field is for: how the system fills it in.
+        fileprivate func configure(for field: TextField, handler: FieldHandler) {
+            delegate = handler
+            isEditable = true
+            isBezeled = true
+            bezelStyle = .roundedBezel
+            font = .systemFont(ofSize: NSFont.systemFontSize)
+            setAccessibilityIdentifier(field.placeholder)
+            switch field.content {
+            case .text:
+                break
+            case .name:
+                contentType = .name
+            case .email:
+                contentType = .emailAddress
+            case .password:
+                contentType = .password
+            case .newPassword:
+                contentType = .newPassword
+            case .phone:
+                contentType = .telephoneNumber
+            case .oneTimeCode:
+                contentType = .oneTimeCode
+            case .url:
+                contentType = .URL
+            }
+        }
+    }
+
+    /// A text field showing a `TextField` node: what the user types goes to the node.
+    final class FieldView: NSTextField {
+        private let handler: FieldHandler
+
+        init(_ field: TextField) {
+            handler = FieldHandler(field)
+            super.init(frame: .zero)
+            configure(for: field, handler: handler)
+        }
+
+        required init?(coder: NSCoder) {
+            nil
+        }
+    }
+
+    /// A field showing a `SecureField` node: dots for what is typed.
+    final class SecureFieldView: NSSecureTextField {
+        private let handler: FieldHandler
+
+        init(_ field: TextField) {
+            handler = FieldHandler(field)
+            super.init(frame: .zero)
+            configure(for: field, handler: handler)
+        }
+
+        required init?(coder: NSCoder) {
+            nil
         }
     }
 
