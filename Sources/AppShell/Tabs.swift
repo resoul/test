@@ -58,12 +58,26 @@ public struct Tab<ID: Hashable> {
     /// Ownership: kept. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public let content: any TabContent
 
+    /// What names the tab in a snapshot (`SceneSession.restorationData()`): the tab's id
+    /// written as text unless the app gave another. It must not change between launches, and
+    /// differ from tab to tab.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public let restorationKey: String
+
     /// Ownership: keeps `content`, which must not be in another place. Isolation: MainActor.
     /// Errors: none. Cancellation: not applicable.
-    public init(_ id: ID, title: String, symbol: String? = nil, content: any TabContent) {
+    public init(
+        _ id: ID,
+        title: String,
+        symbol: String? = nil,
+        restorationKey: String? = nil,
+        content: any TabContent
+    ) {
         self.id = id
         self.title = title
         self.symbol = symbol
+        self.restorationKey = restorationKey ?? String(describing: id)
         self.content = content
     }
 }
@@ -111,6 +125,9 @@ public final class Tabs<ID: Hashable>: CommandResponder, SceneContent {
     private let tabs: [Tab<ID>]
     private let selectionState: State<ID>
     private var isOnScreen = false
+    /// Picked from code or by the user since the tabs were made, or restored: a snapshot that
+    /// comes after is older than that.
+    private var isTouched = false
 
     /// The platform's container showing the tabs, while there is one: the tabs are shown in
     /// one place, and asking the adapter again gives the same container.
@@ -139,6 +156,10 @@ public final class Tabs<ID: Hashable>: CommandResponder, SceneContent {
             "The ids of tabs must differ"
         )
         precondition(tabs.contains { $0.id == selection }, "The selection is not a tab")
+        precondition(
+            Set(tabs.map(\.restorationKey)).count == tabs.count,
+            "The restoration keys of tabs must differ"
+        )
         self.tabs = tabs
         selectionState = State(selection)
         super.init()
@@ -163,6 +184,7 @@ public final class Tabs<ID: Hashable>: CommandResponder, SceneContent {
         guard selectionState.value != id else { return true }
 
         selectionState.value = id
+        isTouched = true
         updateShown()
         return true
     }
@@ -206,5 +228,57 @@ extension Tabs: PresentedTabs {
 
         isOnScreen = onScreen
         updateShown()
+    }
+}
+
+extension Tabs: Restorable {
+    func makeSnapshot() -> RestorationSnapshot.Container? {
+        let picked = selection
+        var kept: [String: RestorationSnapshot.Container] = [:]
+        for tab in tabs {
+            if let snapshot = (tab.content as? any Restorable)?.makeSnapshot() {
+                kept[tab.restorationKey] = snapshot
+            }
+        }
+        let key = tabs.first { $0.id == picked }?.restorationKey ?? tabs[0].restorationKey
+        return .tabs(selection: key, tabs: kept)
+    }
+
+    func restore(
+        _ snapshot: RestorationSnapshot.Container,
+        issues: inout [RestorationIssue]
+    ) -> Bool {
+        guard case .tabs(let key, let kept) = snapshot else {
+            issues.append(.shapeMismatch)
+            return false
+        }
+
+        var applied = false
+        // What each tab kept is put back on its own, whichever tab is picked after.
+        for (tabKey, inner) in kept {
+            guard let tab = tabs.first(where: { $0.restorationKey == tabKey }),
+                let content = tab.content as? any Restorable
+            else {
+                issues.append(.unknownTab(tabKey))
+                continue
+            }
+
+            applied = content.restore(inner, issues: &issues) || applied
+        }
+        guard !isTouched else {
+            issues.append(.alreadyNavigated)
+            return applied
+        }
+
+        guard let tab = tabs.first(where: { $0.restorationKey == key }) else {
+            issues.append(.unknownTab(key))
+            return applied
+        }
+
+        if tab.id != selection {
+            applied = select(tab.id) || applied
+        }
+        isTouched = true
+        return applied
     }
 }
