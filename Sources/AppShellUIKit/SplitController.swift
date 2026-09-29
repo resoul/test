@@ -1,5 +1,6 @@
 #if canImport(UIKit)
     import AppShell
+    import Foundation
     import Nodes
     import StateCore
     import UIKit
@@ -73,16 +74,35 @@
             show(contentShown ? .secondary : .primary)
         }
 
-        /// Room is short when the width is compact: the controller collapses for it, but not
-        /// yet when it is about to appear, and the split must know before its screens appear.
-        override func viewWillAppear(_ animated: Bool) {
-            super.viewWillAppear(animated)
-            model.setCollapsed(isCollapsed || traitCollection.horizontalSizeClass == .compact)
+        /// Whether room is short for both columns, as far as the controller knows: it collapses
+        /// for a compact width, but a window not yet in a scene has no size class, and the
+        /// controller collapses only after it appeared.
+        private var isNarrow: Bool {
+            isCollapsed || traitCollection.horizontalSizeClass == .compact
         }
 
+        override func viewWillAppear(_ animated: Bool) {
+            super.viewWillAppear(animated)
+            model.setCollapsed(isNarrow)
+        }
+
+        /// The screens appear once the controller has decided how many columns show: it may
+        /// collapse after it appeared, and a content that appeared for that moment would
+        /// disappear at once. The split learns how much room there is first, and only then that
+        /// it is on screen.
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
-            model.setOnScreen(true)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, viewIfLoaded?.window != nil else { return }
+
+                model.setCollapsed(isNarrow)
+                model.setOnScreen(true)
+            }
+        }
+
+        override func viewDidLayoutSubviews() {
+            super.viewDidLayoutSubviews()
+            model.setCollapsed(isNarrow)
         }
 
         override func viewDidDisappear(_ animated: Bool) {
