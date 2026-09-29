@@ -559,13 +559,34 @@
 
             revealAfterPass = host.passes
             let duration = UIView.inheritedAnimationDuration
-            if duration > 0 {
-                withAnimation(.easeInOut(duration: duration)) {
+            if let animation = keyboardAnimation(duration: duration) {
+                withAnimation(animation) {
                     host.keyboardInset = inset
                 }
             } else {
                 host.keyboardInset = inset
             }
+        }
+
+        /// The animation the system moves the keyboard with, as the tree moves with it: the
+        /// view tied to the keyboard's guide is animated by the same block, and the animation
+        /// it was given is the system's own — a spring on current systems, with its
+        /// physical numbers. Where it is not a spring, the block's duration with an ease is
+        /// the nearest there is; `nil` outside any animation.
+        func keyboardAnimation(duration: Double) -> Animation? {
+            if let layer = keyboardProbe?.layer {
+                for key in layer.animationKeys() ?? [] {
+                    if let spring = layer.animation(forKey: key) as? CASpringAnimation {
+                        return .spring(
+                            mass: Double(spring.mass),
+                            stiffness: Double(spring.stiffness),
+                            damping: Double(spring.damping),
+                            duration: spring.settlingDuration
+                        )
+                    }
+                }
+            }
+            return duration > 0 ? .easeInOut(duration: duration) : nil
         }
     }
 #endif
