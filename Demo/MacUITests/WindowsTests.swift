@@ -3,16 +3,17 @@ import XCTest
 /// Several windows and the settings window (`WINDOWS_PROBE`; see `WindowsProbe`): a new window
 /// from the File menu has its own path, and every window comes back after a relaunch with its
 /// own; the settings window is one, opens from the app's menu, and is not there at launch.
-/// The first launch ignores the state the last run kept, so each test starts from one clean
-/// window.
+/// The state is kept between runs of a test, and a launch that ignores it does not keep its
+/// own either, so the test that relaunches brings what the last run left to one window at the
+/// start of its path, and the one that does not relaunch ignores it.
 final class WindowsTests: XCTestCase {
     @MainActor
-    private func launch(keepingState: Bool = false) -> XCUIApplication {
+    private func launch(ignoringSavedState: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["WINDOWS_PROBE"] = "1"
         app.launchEnvironment["RESTORATION_PROBE"] = "1"
         app.launchArguments += ["-NSQuitAlwaysKeepsWindows", "YES"]
-        if !keepingState {
+        if ignoringSavedState {
             app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
         }
         app.launch()
@@ -23,6 +24,21 @@ final class WindowsTests: XCTestCase {
     @MainActor
     private func windows(showing text: String, in app: XCUIApplication) -> Int {
         app.windows.containing(.staticText, identifier: text).count
+    }
+
+    /// Closes the windows the last run left but one, and takes that one back to the first note.
+    @MainActor
+    private func makeOneWindowAtTheStart(of app: XCUIApplication) {
+        while app.windows.count > 1 {
+            let count = app.windows.count
+            app.windows.element(boundBy: 0).buttons[XCUIIdentifierCloseWindow].click()
+            XCTAssertTrue(app.wait(for: { $0.windows.count < count }, timeout: 10))
+        }
+        for _ in 0..<10 where !app.staticTexts["Note 1"].waitForExistence(timeout: 2) {
+            app.windows.firstMatch.buttons["Back"].click()
+        }
+        XCTAssertTrue(app.staticTexts["Note 1"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.windows.count, 1)
     }
 
     @MainActor
@@ -37,8 +53,8 @@ final class WindowsTests: XCTestCase {
     func testANewWindowHasItsOwnPathAndEveryWindowComesBackWithItsOwn() {
         continueAfterFailure = false
         var app = launch()
-        XCTAssertTrue(app.staticTexts["Note 1"].waitForExistence(timeout: 20))
-        XCTAssertEqual(app.windows.count, 1)
+        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 20))
+        makeOneWindowAtTheStart(of: app)
         app.buttons["Next note"].click()
         XCTAssertTrue(app.staticTexts["Note 2"].waitForExistence(timeout: 5))
 
@@ -62,7 +78,7 @@ final class WindowsTests: XCTestCase {
         // Quit from the menu, as a user does, and open the app again.
         choose("Quit \(app.menuBars.menuBarItems.element(boundBy: 1).title)", inMenu: 1, of: app)
         XCTAssertTrue(app.wait(for: .notRunning, timeout: 20))
-        app = launch(keepingState: true)
+        app = launch()
 
         XCTAssertTrue(app.staticTexts["Note 2"].waitForExistence(timeout: 20))
         XCTAssertTrue(app.wait(for: { $0.windows.count == 2 }, timeout: 10))
@@ -73,7 +89,7 @@ final class WindowsTests: XCTestCase {
     @MainActor
     func testTheSettingsWindowIsOneOpensFromTheAppMenuAndIsNotThereAtLaunch() {
         continueAfterFailure = false
-        let app = launch()
+        let app = launch(ignoringSavedState: true)
         XCTAssertTrue(app.staticTexts["Note 1"].waitForExistence(timeout: 20))
         XCTAssertEqual(app.windows.count, 1)
         XCTAssertEqual(windows(showing: "Settings screen", in: app), 0)
