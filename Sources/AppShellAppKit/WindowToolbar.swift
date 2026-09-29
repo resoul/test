@@ -29,9 +29,13 @@
             }
         }
 
-        /// Puts the toolbar on `window`, unless the window has a toolbar of its own.
+        /// Puts the toolbar up on the window, in place of another of the layer's: what shows now
+        /// has the toolbar, as a tab picked or a split's content is. A toolbar the app put up
+        /// itself stays.
         func attach(to window: NSWindow) {
-            if window.toolbar == nil {
+            guard window.toolbar !== toolbar else { return }
+
+            if window.toolbar == nil || window.toolbar?.delegate is WindowToolbar {
                 window.toolbar = toolbar
             }
         }

@@ -22,6 +22,9 @@ struct LayoutDemo: Application {
             if let probe = ScreenController.probe(environment) {
                 return ControllerScreen(ScreenController(probe))
             }
+            if let probe = ContainerProbe.content(environment) {
+                return probe
+            }
             if environment["STACK_PROBE"] != nil {
                 return StackProbe.makeStack()
             }

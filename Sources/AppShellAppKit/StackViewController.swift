@@ -93,13 +93,13 @@
 
         /// Shown in a window whose keyboard is nowhere, the stack gives it to the top screen:
         /// its keys and the menus' commands reach it from the start. As the window's content,
-        /// it puts up the window's toolbar.
+        /// or in the tabs or the split that are, it puts up the window's toolbar.
         override func viewDidAppear() {
             super.viewDidAppear()
             guard let window = view.window else { return }
 
             modalPresenter.hostAppeared()
-            if window.contentViewController === self {
+            if isWindowLevel(in: window) {
                 toolbar.attach(to: window)
             }
             guard window.firstResponder === window, let shown, let controller = controllers[shown]
@@ -301,8 +301,8 @@
     }
 
     /// Shows a screen of nodes: its tree in a node view filling the controller's view. The
-    /// tree's commands go on to the screen. As a window's content, it puts up the window's
-    /// toolbar with the screen's commands.
+    /// tree's commands go on to the screen. As a window's content, or in the tabs or the split
+    /// that are, it puts up the window's toolbar with the screen's commands.
     final class ScreenViewController: NSViewController {
         let screen: NodeScreen
         let nodeView: NodeNSView
@@ -331,7 +331,7 @@
         override func viewDidAppear() {
             super.viewDidAppear()
             modalPresenter.hostAppeared()
-            guard let window = view.window, window.contentViewController === self else { return }
+            guard let window = view.window, isWindowLevel(in: window) else { return }
 
             if toolbar == nil {
                 toolbar = WindowToolbar(hasBack: false)
@@ -344,6 +344,37 @@
             let watch = Observer { [weak self] in self?.watchToolbar() }
             toolbarWatch = watch
             toolbar?.show(watch.track { screen.toolbar })
+        }
+    }
+
+    /// A container of the layer — tabs, a split — that can be the window's content, whose
+    /// contents then have the window's toolbar to put up.
+    @MainActor
+    protocol WindowLevelContainer: NSViewController {
+        /// Whether `child` may put up the window's toolbar: the tab that shows, a split's
+        /// content, not its sidebar.
+        func ownsToolbar(_ child: NSViewController) -> Bool
+    }
+
+    extension WindowLevelContainer {
+        func ownsToolbar(_ child: NSViewController) -> Bool { true }
+    }
+
+    extension NSViewController {
+        /// Whether this controller is the window's content, or in a container of the layer
+        /// that is and lets it: the controllers that show the window's toolbar, one at a time.
+        func isWindowLevel(in window: NSWindow) -> Bool {
+            var controller: NSViewController? = self
+            while let current = controller {
+                if window.contentViewController === current { return true }
+
+                guard let parent = current.parent as? WindowLevelContainer,
+                    parent.ownsToolbar(current)
+                else { return false }
+
+                controller = parent
+            }
+            return false
         }
     }
 #endif

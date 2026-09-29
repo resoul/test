@@ -131,6 +131,9 @@ public final class Stack<Route: Hashable>: CommandResponder {
     private var nextEntry: UInt64 = 0
     private var nextMove: UInt64 = 0
     private var isClosed = false
+    /// The container around the stack — tabs, a split — hides it: its top screen is not the
+    /// one shown, whatever the presenter confirmed.
+    private var isHidden = false
 
     /// Counts the changes of `path`.
     ///
@@ -389,10 +392,21 @@ public final class Stack<Route: Hashable>: CommandResponder {
             top.screen.isPresented = false
             top.screen.disappeared()
         }
-        if let shown = entries.last {
+        if let shown = entries.last, !isHidden {
             shown.screen.isPresented = true
             shown.screen.appeared()
         }
+    }
+
+    /// The container around the stack shows it or hides it: the screen on top follows, and one
+    /// that came while it was hidden is told when the stack is shown.
+    func setShown(_ shown: Bool) {
+        guard shown == isHidden else { return }
+
+        isHidden = !shown
+        guard let top = confirmed.last else { return }
+
+        top.screen.setShown(shown)
     }
 
     /// Lets go of the screens of `entries` no path or move has any more.
