@@ -86,6 +86,31 @@ public struct Animation: Sendable, Hashable {
         )
     }
 
+    /// A spring given by the physical numbers Core Animation's springs have — what a system
+    /// spring, the keyboard's, reports — running for `duration`, the time the system gives for
+    /// it to settle. The response is the period of an undamped swing, `2π·√(mass / stiffness)`;
+    /// the damping ratio is `damping / (2·√(stiffness · mass))`.
+    ///
+    ///     Animation.spring(mass: 1, stiffness: 555, damping: 47.1, duration: 0.658)
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public static func spring(
+        mass: Double,
+        stiffness: Double,
+        damping: Double,
+        duration: Double
+    ) -> Animation {
+        let mass = max(mass, 0.0001)
+        let stiffness = max(stiffness, 0.0001)
+        return Animation(
+            duration: duration,
+            curve: .spring(
+                response: 2 * Double.pi * (mass / stiffness).squareRoot(),
+                dampingRatio: max(damping, 0) / (2 * (stiffness * mass).squareRoot())
+            )
+        )
+    }
+
     /// The animation of changes made right now, set by `withAnimation`.
     @MainActor static var current: Animation?
 }
