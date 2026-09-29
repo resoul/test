@@ -33,6 +33,8 @@ enum HostedProbe {
         let button: HostedView<Control>
         let filler = Filler()
         let end = Text("End of page", style: TextStyle(size: 17))
+        let toEnd = Button("Page end") {}
+        let toStart = Button("Page start") {}
         lazy var scroll = Scroll(.vertical, content: Content(page: self))
 
         override init() {
@@ -52,10 +54,30 @@ enum HostedProbe {
 
                 counter.text = "Count \(tally.count)"
             }
+            // Buttons of the tree, outside the scroll, that move it: the way to scroll that
+            // does not depend on a wheel or a swipe.
+            toEnd.onTap = { [weak self] in
+                guard let self else { return }
+
+                scroll.scrollToReveal(end)
+            }
+            toStart.onTap = { [weak self] in
+                guard let self else { return }
+
+                scroll.scrollToReveal(heading)
+            }
         }
 
         override func layoutSpec() -> LayoutSpec? {
-            FlexContainer(.column) { scroll }
+            FlexContainer(.column) {
+                FlexContainer(.row) {
+                    toEnd
+                    toStart
+                }
+                .gap(16)
+                .padding(24)
+                scroll.flex(grow: 1, shrink: 1)
+            }
         }
     }
 

@@ -1,7 +1,9 @@
 import XCTest
 
 /// A view of the platform inside the tree (`HOSTED_PROBE`; see `HostedProbe`): a system
-/// button that presses, and that goes out of sight with the scroll around it and comes back.
+/// button that presses, and that goes out of sight with the scroll around it and comes back —
+/// moved by buttons of the tree, not the wheel, which XCUITest turns on a Mac by amounts that
+/// do not tell how far the page went.
 final class HostedViewTests: XCTestCase {
     @MainActor
     func testASystemButtonInTheTreePressesAndScrollsAwayWithItsScroll() {
@@ -19,8 +21,10 @@ final class HostedViewTests: XCTestCase {
         // Scrolled to the end of the page, the button is far above the window: its view keeps its
         // size, the frame is where the scroll has it, and what shows of it is cut to nothing.
         let window = app.windows.firstMatch
-        for _ in 0..<8 where button.frame.intersects(window.frame) {
-            window.scroll(byDeltaX: 0, deltaY: -300)
+        app.buttons["Page end"].click()
+        XCTAssertTrue(app.staticTexts["End of page"].waitForExistence(timeout: 5))
+        for _ in 0..<20 where button.frame.intersects(window.frame) {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
         }
         XCTAssertFalse(
             button.frame.intersects(window.frame),
@@ -29,8 +33,9 @@ final class HostedViewTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["End of page"].frame.intersects(window.frame))
 
         // And back: it is in the window again, and presses.
-        for _ in 0..<8 where !button.frame.intersects(window.frame) {
-            window.scroll(byDeltaX: 0, deltaY: 300)
+        app.buttons["Page start"].click()
+        for _ in 0..<20 where !button.frame.intersects(window.frame) {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
         }
         XCTAssertTrue(button.frame.intersects(window.frame))
         button.click()
