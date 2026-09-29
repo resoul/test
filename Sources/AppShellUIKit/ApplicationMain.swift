@@ -85,6 +85,11 @@
         /// Where the kind of a scene is kept in its scene session.
         private static let kindKey = "sceneKind"
 
+        /// The activity that carries the scene's snapshot (`SceneSession.restorationData()`)
+        /// across launches, and where in it the data is.
+        private static let restorationType = "restoration"
+        private static let restorationKey = "snapshot"
+
         func scene(
             _ scene: UIScene,
             willConnectTo platform: UISceneSession,
@@ -114,6 +119,14 @@
                 )
             }
 
+            // What the last run kept is put back before the screens are made, so that the first
+            // thing shown is where the user was; a link that came since is handled after.
+            if shell.application.restoresState,
+                let data = platform.stateRestorationActivity?.userInfo?[Self.restorationKey]
+                    as? Data
+            {
+                session.restore(from: data)
+            }
             let window = UIWindow(windowScene: scene)
             window.rootViewController = contentController(for: session.content)
             if scene.title?.isEmpty ?? true {
@@ -126,6 +139,17 @@
             for context in connectionOptions.urlContexts {
                 shell.open(context.url, in: session)
             }
+        }
+
+        /// The system asks for the scene's state when the app goes to the background.
+        func stateRestorationActivity(for scene: UIScene) -> NSUserActivity? {
+            guard ShellApplicationDelegate.shell?.application.restoresState == true,
+                let data = session?.restorationData()
+            else { return nil }
+
+            let activity = NSUserActivity(activityType: Self.restorationType)
+            activity.addUserInfoEntries(from: [Self.restorationKey: data])
+            return activity
         }
 
         func scene(_ scene: UIScene, openURLContexts contexts: Set<UIOpenURLContext>) {

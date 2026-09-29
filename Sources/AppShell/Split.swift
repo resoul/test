@@ -57,6 +57,9 @@ public final class Split: CommandResponder, SceneContent, TabContent {
     private let contentShownState = State(false)
     private var isCollapsed = false
     private var isOnScreen = false
+    /// The choice of column was made since the split was made — from code or by the user — or
+    /// restored: a snapshot that comes after is older than that.
+    private var isTouched = false
 
     /// Whether the content, not the sidebar, shows where room is short for both. Reading it
     /// under tracking depends on it.
@@ -142,6 +145,7 @@ extension Split: PresentedSplit {
         guard shown != contentShownState.value else { return }
 
         contentShownState.value = shown
+        isTouched = true
         updateShown()
     }
 
@@ -157,5 +161,44 @@ extension Split: PresentedSplit {
 
         isOnScreen = onScreen
         updateShown()
+    }
+}
+
+extension Split: Restorable {
+    func makeSnapshot() -> RestorationSnapshot.Container? {
+        .split(
+            contentShown: isContentShown,
+            content: (content as? any Restorable)?.makeSnapshot()
+        )
+    }
+
+    func restore(
+        _ snapshot: RestorationSnapshot.Container,
+        issues: inout [RestorationIssue]
+    ) -> Bool {
+        guard case .split(let shown, let inner) = snapshot else {
+            issues.append(.shapeMismatch)
+            return false
+        }
+
+        var applied = false
+        if let inner {
+            if let content = content as? any Restorable {
+                applied = content.restore(inner, issues: &issues)
+            } else {
+                issues.append(.shapeMismatch)
+            }
+        }
+        guard !isTouched else {
+            issues.append(.alreadyNavigated)
+            return applied
+        }
+
+        if shown != isContentShown {
+            setContentShown(shown)
+            applied = true
+        }
+        isTouched = true
+        return applied
     }
 }

@@ -1,3 +1,4 @@
+import Foundation
 import Nodes
 import StateCore
 
@@ -134,6 +135,16 @@ public final class Stack<Route: Hashable>: CommandResponder {
     /// The container around the stack — tabs, a split — hides it: its top screen is not the
     /// one shown, whatever the presenter confirmed.
     private var isHidden = false
+    /// How the stack's path goes to a snapshot and comes back, once it opted in.
+    private var restoration: Restoration?
+
+    private struct Restoration {
+        /// The URL of the longest beginning of `path` that has one and that the app allows.
+        let url: @MainActor ([Route]) -> String?
+        /// The path a URL stands for, or the longest beginning of it that is one; `nil` and
+        /// the issue when no beginning is.
+        let path: @MainActor (String, inout [RestorationIssue]) -> [Route]?
+    }
 
     /// Counts the changes of `path`.
     ///
@@ -435,3 +446,99 @@ package protocol PresentedStack: CommandResponder {
 }
 
 extension Stack: PresentedStack {}
+
+extension Stack where Route: Sendable {
+    /// Makes the stack keep its path across launches (`SceneSession.restorationData()`): as the
+    /// URL of the longest beginning of the path that `routes` can write and `allowing` lets come
+    /// back — a route the app keeps to itself (an account, a payment) is where the saved path
+    /// stops. Restoring reads the URL with `routes`; one that does not read whole is cut back
+    /// segment by segment to the longest beginning that does, and one that starts elsewhere
+    /// than at this stack's root is turned down.
+    ///
+    /// Ownership: the stack keeps `routes` and the closure, which must not keep the stack.
+    /// Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    @discardableResult
+    public func restorable(
+        using routes: RouteTable<Route>,
+        allowing: @escaping @MainActor (Route) -> Bool = { _ in true }
+    ) -> Self {
+        restoration = Restoration(
+            url: { path in
+                var allowed = path
+                if let stop = path.firstIndex(where: { !allowing($0) }) {
+                    allowed = Array(path[..<stop])
+                }
+                var count = allowed.count
+                while count > 0 {
+                    if let url = routes.url(for: Array(allowed[..<count])) { return url }
+
+                    count -= 1
+                }
+                return nil
+            },
+            path: { url, issues in
+                guard let components = URLComponents(string: url) else {
+                    issues.append(.unknownPath(url))
+                    return nil
+                }
+
+                let segments = components.percentEncodedPath.split(separator: "/").map(String.init)
+                let query = components.percentEncodedQuery.map { "?" + $0 } ?? ""
+                for count in stride(from: segments.count, through: 0, by: -1) {
+                    // The query belongs to the whole URL, not to a beginning of it.
+                    let candidate =
+                        "/" + segments[..<count].joined(separator: "/")
+                        + (count == segments.count ? query : "")
+                    guard var path = try? routes.path(for: candidate), !path.isEmpty else {
+                        continue
+                    }
+
+                    if count < segments.count {
+                        issues.append(.pathTrimmed(url))
+                    }
+                    if let stop = path.firstIndex(where: { !allowing($0) }) {
+                        issues.append(.routeNotAllowed(url))
+                        path = Array(path[..<stop])
+                    }
+                    return path.isEmpty ? nil : path
+                }
+                issues.append(.unknownPath(url))
+                return nil
+            }
+        )
+        return self
+    }
+}
+
+extension Stack: Restorable {
+    func makeSnapshot() -> RestorationSnapshot.Container? {
+        guard let restoration, let url = restoration.url(path) else { return nil }
+
+        return .stack(url: url)
+    }
+
+    func restore(
+        _ snapshot: RestorationSnapshot.Container,
+        issues: inout [RestorationIssue]
+    ) -> Bool {
+        guard case .stack(let url) = snapshot, let restoration else {
+            issues.append(.shapeMismatch)
+            return false
+        }
+
+        // A stack asked to show something since it was made is newer than the snapshot.
+        guard revision == 0 else {
+            issues.append(.alreadyNavigated)
+            return false
+        }
+
+        guard let path = restoration.path(url, &issues) else { return false }
+
+        guard path.first == desired.first?.route else {
+            issues.append(.rootMismatch(url))
+            return false
+        }
+
+        return setPath(path) == .accepted
+    }
+}

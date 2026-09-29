@@ -30,6 +30,10 @@
         let shell: Shell
         /// The window of each session.
         private var windows: [ObjectIdentifier: NSWindow] = [:]
+        /// What the last run kept of each kind of scene (`SceneSession.restorationData()`),
+        /// until a scene of the kind takes it.
+        private var restorations: [String: Data] = [:]
+        private static let restorationPrefix = "restoration."
 
         init(shell: Shell) {
             self.shell = shell
@@ -63,7 +67,53 @@
             shell.sessions.forEach(updateActivation(of:))
         }
 
+        // MARK: - State restoration
+
+        func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
+            true
+        }
+
+        /// The app is asked for its state: each kind of scene keeps that of its first window.
+        func application(_ app: NSApplication, willEncodeRestorableState coder: NSCoder) {
+            guard shell.application.restoresState else { return }
+
+            var kept: Set<String> = []
+            for session in shell.sessions where !kept.contains(session.kind.id) {
+                guard let data = session.restorationData() else { continue }
+
+                kept.insert(session.kind.id)
+                coder.encode(
+                    data as NSData,
+                    forKey: Self.restorationPrefix + session.kind.id
+                )
+            }
+        }
+
+        /// The state comes, before the first window is made or after it: a window takes what
+        /// its kind kept, once.
+        func application(_ app: NSApplication, didDecodeRestorableState coder: NSCoder) {
+            guard shell.application.restoresState else { return }
+
+            for kind in shell.application.scenes.map(\.id) {
+                guard
+                    let data = coder.decodeObject(
+                        of: NSData.self,
+                        forKey: Self.restorationPrefix + kind
+                    ) as Data?
+                else { continue }
+
+                restorations[kind] = data
+                if let session = shell.sessions.first(where: { $0.kind.id == kind }) {
+                    restorations[kind] = nil
+                    session.restore(from: data)
+                }
+            }
+        }
+
         private func show(_ session: SceneSession) {
+            if let data = restorations.removeValue(forKey: session.kind.id) {
+                session.restore(from: data)
+            }
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 640, height: 560),
                 styleMask: [.titled, .closable, .resizable, .miniaturizable],
@@ -71,6 +121,10 @@
                 defer: false
             )
             window.isReleasedWhenClosed = false
+            // A window without an identifier has no state of its own for the system to keep,
+            // and the app's state, with the scene's snapshot, is kept along with the windows'.
+            window.identifier = NSUserInterfaceItemIdentifier("scene." + session.kind.id)
+            window.isRestorable = true
             window.contentViewController = contentController(for: session.content)
             if window.title.isEmpty {
                 window.title = session.kind.title

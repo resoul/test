@@ -52,6 +52,14 @@ public protocol Application {
     /// applicable.
     var menuBar: MenuBar { get }
 
+    /// Whether the app keeps the state of its scenes across launches and puts it back
+    /// (`SceneSession.restorationData()`). The default is `true`; the containers that opted in
+    /// (`Stack.restorable(using:allowing:)`) are what is kept.
+    ///
+    /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    var restoresState: Bool { get }
+
     /// The app started and its first scene shows: the place for the app's own commands
     /// (`shell.handle(.newMessage) { ... }`), which come after every scene's. The default
     /// does nothing.
@@ -72,6 +80,10 @@ extension Application {
     /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: not
     /// applicable.
     public var menuBar: MenuBar { MenuBar {} }
+
+    /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    public var restoresState: Bool { true }
 
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public func started(_ shell: Shell) {}

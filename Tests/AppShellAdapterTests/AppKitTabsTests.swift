@@ -118,6 +118,20 @@
     }
 
     @Test @MainActor
+    func tabsMadeWithAnotherTabPickedShowThatTabWhenTheViewLoads() throws {
+        let (tabs, _, _) = makeTabs()
+        // As after the state of the last run is put back: picked before there is a view.
+        tabs.select(.search)
+        let controller = try #require(tabs.makeViewController() as? NSTabViewController)
+        let window = window(showing: controller)
+        defer { window.close() }
+
+        #expect(controller.selectedTabViewItemIndex == 1)
+        #expect(controller.tabView.selectedTabViewItem === controller.tabViewItems[1])
+        #expect(tabs.selection == .search)
+    }
+
+    @Test @MainActor
     func onlyTheSelectedTabsScreenAppearsAndThePickedOneReplacesIt() throws {
         let (tabs, _, search) = makeTabs()
         let controller = try #require(tabs.makeViewController() as? NSTabViewController)

@@ -37,6 +37,10 @@
     final class TabsViewController: NSTabViewController, WindowLevelContainer {
         let model: any PresentedTabs
         private var watch: Observer?
+        /// The controller is choosing a tab itself — when its view loads, where it picks the
+        /// first, and when the tabs pick one from code: what it tells the tabs is not the
+        /// user's pick.
+        private var isApplying = true
 
         init(tabs: any PresentedTabs) {
             model = tabs
@@ -50,12 +54,19 @@
                 }
                 addTabViewItem(item)
             }
-            selectedTabViewItemIndex = tabs.selectedIndex
-            follow()
         }
 
         required init?(coder: NSCoder) {
             nil
+        }
+
+        /// The tabs are picked once the view is there: a selection set before it loads changes
+        /// the content but not the control on top, which then shows another tab than the one
+        /// shown — as after the state of the last run is put back.
+        override func viewDidLoad() {
+            super.viewDidLoad()
+            follow()
+            isApplying = false
         }
 
         /// The selection of the tabs shows: a pick from code moves the control, and one of the
@@ -65,13 +76,16 @@
             self.watch = watch
             let index = watch.track { model.selectedIndex }
             if selectedTabViewItemIndex != index {
+                let wasApplying = isApplying
+                isApplying = true
                 selectedTabViewItemIndex = index
+                isApplying = wasApplying
             }
         }
 
         override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
             super.tabView(tabView, didSelect: tabViewItem)
-            if let tabViewItem, let index = tabViewItems.firstIndex(of: tabViewItem) {
+            if !isApplying, let tabViewItem, let index = tabViewItems.firstIndex(of: tabViewItem) {
                 model.pick(index: index)
             }
         }
