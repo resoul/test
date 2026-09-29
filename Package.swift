@@ -46,7 +46,7 @@ let package = Package(
         .target(name: "Nodes", dependencies: ["LayoutCore", "StateCore", "ThemeCore"]),
         .target(
             name: "NodesRender",
-            dependencies: ["Nodes", "LayoutCore", "StateCore", "ThemeCore"]
+            dependencies: ["Nodes", "LayoutCore", "StateCore", "ThemeCore", "RichTextCore"]
         ),
         .target(
             name: "NodesUIKit",
@@ -83,6 +83,7 @@ let package = Package(
             name: "NodesRenderTests",
             dependencies: [
                 "Nodes", "NodesRender", "NodesUIKit", "NodesAppKit", "LayoutCore", "ThemeCore",
+                "RichTextCore",
             ]
         ),
         .testTarget(

@@ -734,6 +734,28 @@ public final class NodeHost: CommandTarget {
 
     // MARK: - Pointer
 
+    /// The node a press at `point`, in the root's coordinates, goes to: `node` or the nearest
+    /// node around it that has `onTap` or takes a press at that place.
+    private func tapTarget(from node: Node?, at point: LayoutPoint) -> Node? {
+        var node = node
+        while let current = node {
+            if current.onTap != nil || current.takesPress(at: localPoint(point, in: current)) {
+                return current
+            }
+            node = current.supernode
+        }
+        return nil
+    }
+
+    /// `point`, in the root's coordinates, in the coordinates of `node`.
+    private func localPoint(_ point: LayoutPoint, in node: Node) -> LayoutPoint {
+        let placement = placementInRoot(of: node)
+        return LayoutPoint(
+            x: (point.x - placement.origin.x) / placement.scale,
+            y: (point.y - placement.origin.y) / placement.scale
+        )
+    }
+
     /// A finger or the mouse went down at `point`, in the root's coordinates. Returns whether
     /// a node with `onTap` is under it — the node then shows itself pressed. When it returns
     /// `false`, the adapter passes the event on.
@@ -743,12 +765,9 @@ public final class NodeHost: CommandTarget {
     @discardableResult
     public func pointerDown(at point: LayoutPoint) -> Bool {
         pointerCancelled()
-        var node = root.hitTest(point)
-        pointed = node?.id
-        while let current = node, current.onTap == nil {
-            node = current.supernode
-        }
-        guard let target = node else { return false }
+        let hit = root.hitTest(point)
+        pointed = hit?.id
+        guard let target = tapTarget(from: hit, at: point) else { return false }
         // A node turned off takes the press, and nothing happens: the press does not fall
         // through to what is behind it.
         guard target.isInteractive else { return true }
@@ -768,7 +787,7 @@ public final class NodeHost: CommandTarget {
         pressed = nil
         target.pressChanged(false)
         if target.isInteractive, let hit = root.hitTest(point), hit.isDescendant(of: target) {
-            target.onTap?()
+            target.tapped(at: localPoint(point, in: target))
         }
     }
 
@@ -791,11 +810,9 @@ public final class NodeHost: CommandTarget {
     /// Ownership: remembers the node under the pointer until it leaves. Isolation: MainActor.
     /// Errors: none. Cancellation: not applicable.
     public func pointerMoved(to point: LayoutPoint?) {
-        var node = point.flatMap { root.hitTest($0) }
-        while let current = node, current.onTap == nil {
-            node = current.supernode
-        }
-        let target = node.flatMap { $0.isInteractive ? $0 : nil }
+        let hit = point.flatMap { root.hitTest($0) }
+        let found = point.flatMap { tapTarget(from: hit, at: $0) }
+        let target = found.flatMap { $0.isInteractive ? $0 : nil }
         guard target !== hovered else { return }
 
         hovered?.setHovered(false)
@@ -1189,7 +1206,7 @@ public final class NodeHost: CommandTarget {
     @discardableResult
     public func selectBegan() -> Bool {
         pointerCancelled()
-        guard let target = focusedNode.flatMap({ mounted[$0] }), target.onTap != nil,
+        guard let target = focusedNode.flatMap({ mounted[$0] }), target.isTappable,
             target.isInteractive
         else {
             return false
@@ -1209,7 +1226,7 @@ public final class NodeHost: CommandTarget {
         pressed = nil
         target.pressChanged(false)
         if target.isInteractive {
-            target.onTap?()
+            target.tapped(at: nil)
         }
     }
 
