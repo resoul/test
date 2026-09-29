@@ -58,6 +58,20 @@ open class Screen: CommandResponder {
         didSet { presentation?.reconcile() }
     }
 
+    /// The container around the screen — tabs, a split — shows it or not now: `appeared()` or
+    /// `disappeared()` follow when that changes what the screen is. A screen in a stack is the
+    /// stack's to tell; this is for one a container shows by itself.
+    func setShown(_ shown: Bool) {
+        guard shown != isPresented else { return }
+
+        isPresented = shown
+        if shown {
+            appeared()
+        } else {
+            disappeared()
+        }
+    }
+
     /// Only the screens of the layer and of its adapters derive from it: the adapters show
     /// each kind their own way.
     package init(title: String) {

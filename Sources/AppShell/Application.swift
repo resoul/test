@@ -401,8 +401,7 @@ public final class Shell: CommandResponder {
     /// stack in it of its screens.
     package func sessionClosed(_ session: SceneSession) {
         sessionsState.value.removeAll { $0 === session }
-        (session.content as? any PresentedStack)?.close()
-        (session.content as? Screen)?.presentation?.dismiss()
+        (session.content as? any ClosableContent)?.closeContent()
         session.content.outer = nil
         session.outer = nil
     }
