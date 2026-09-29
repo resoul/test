@@ -21,10 +21,14 @@ final class ContainerTests: XCTestCase {
     @MainActor
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
+    /// Seconds to wait for the first screen after launch: an iPad Simulator under load shows
+    /// it much later than an iPhone one (defect 217).
+    private let firstShow: TimeInterval = 60
+
     @MainActor
     func testATabKeepsItsStateWhileAnotherIsPicked() {
         let app = launch("TABS_PROBE")
-        XCTAssertTrue(app.staticTexts["Inbox list"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["Inbox list"].waitForExistence(timeout: firstShow))
         app.buttons["Open detail"].tap()
         XCTAssertTrue(app.staticTexts["Inbox detail"].waitForExistence(timeout: 5))
 
@@ -48,7 +52,7 @@ final class ContainerTests: XCTestCase {
     func testWhereRoomIsShortTheSplitShowsTheSidebarFirstAndGoesBackToIt() throws {
         try XCTSkipIf(isPad, "An iPad has room for both columns")
         let app = launch("SPLIT_PROBE")
-        XCTAssertTrue(app.staticTexts["Folders"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["Folders"].waitForExistence(timeout: firstShow))
         XCTAssertFalse(app.staticTexts["Inbox folder"].exists)
 
         app.buttons["Sent"].tap()
@@ -68,7 +72,7 @@ final class ContainerTests: XCTestCase {
     func testWithRoomForBothTheSplitShowsTheSidebarBesideTheContent() throws {
         try XCTSkipUnless(isPad, "An iPhone has room for one column")
         let app = launch("SPLIT_PROBE")
-        XCTAssertTrue(app.staticTexts["Folders"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["Folders"].waitForExistence(timeout: firstShow))
         XCTAssertTrue(app.staticTexts["Inbox folder"].waitForExistence(timeout: 5))
 
         app.buttons["Sent"].tap()
