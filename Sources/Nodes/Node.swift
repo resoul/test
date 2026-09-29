@@ -106,6 +106,9 @@ open class Node: LayoutElement {
         return self
     }
 
+    /// The bar above the keyboard set on this node; see `keyboardBar`.
+    var keyboardBarStorage: KeyboardBar?
+
     /// How the node presents itself to assistive technologies; see `Accessibility`.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.

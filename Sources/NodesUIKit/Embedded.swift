@@ -126,6 +126,10 @@
     extension TextField: UIKitEmbedded {
         func makeHolder() -> EmbeddedHolder {
             let view = FieldView(self)
+            if let bar = makeKeyboardBar(for: self) {
+                view.inputAccessoryView = bar.view
+                view.onBeginEditing = bar.refresh
+            }
             let holder = EmbeddedHolder(node: self, view: view)
             holder.watch { [weak view, weak self] in
                 guard let view, let self else { return }
@@ -266,6 +270,8 @@
     /// A text field showing a `TextField` node: what the user types goes to the node.
     final class FieldView: UITextField, UITextFieldDelegate {
         weak var field: TextField?
+        /// What to do when the field takes the keyboard: the keyboard bar's turn.
+        var onBeginEditing: (@MainActor () -> Void)?
 
         init(_ field: TextField) {
             self.field = field
@@ -341,6 +347,7 @@
         }
 
         func textFieldDidBeginEditing(_ textField: UITextField) {
+            onBeginEditing?()
             field?.editingChanged(true)
         }
 
@@ -352,6 +359,48 @@
             field?.userSubmitted()
             return false
         }
+    }
+
+    /// The bar above the keyboard a text input shows (`KeyboardBar`), as a view of the
+    /// keyboard's kind holding a tree of nodes, and what to do when the input takes the
+    /// keyboard: the bar's buttons are made right for where the input is. `nil` for none.
+    @MainActor
+    func makeKeyboardBar(for input: any TextInputNode) -> (
+        view: UIView, refresh: @MainActor () -> Void
+    )? {
+        let root: Node
+        var refresh: @MainActor () -> Void = {}
+        switch input.effectiveKeyboardBar {
+        case .none:
+            return nil
+        case .navigation:
+            let bar = KeyboardNavigationBar(input: input)
+            refresh = { bar.refresh() }
+            root = bar
+        case .custom(let make):
+            root = make()
+        }
+
+        let content = NodeView(root: root)
+        content.zoom = 1
+        content.translatesAutoresizingMaskIntoConstraints = false
+        let container = UIInputView(
+            frame: CGRect(x: 0, y: 0, width: 0, height: 44),
+            inputViewStyle: .keyboard
+        )
+        container.allowsSelfSizing = true
+        container.addSubview(content)
+        // As high as its tree, at the width of the screen: the system gives the width.
+        let width = UIScreen.main.bounds.width
+        let height = max(content.sizeThatFits(CGSize(width: width, height: 10_000)).height, 44)
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            content.topAnchor.constraint(equalTo: container.topAnchor),
+            content.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            container.heightAnchor.constraint(equalToConstant: height),
+        ])
+        return (container, refresh)
     }
 
     extension UITextField.ViewMode {
@@ -367,6 +416,10 @@
     extension TextEditor: UIKitEmbedded {
         func makeHolder() -> EmbeddedHolder {
             let view = EditorView(self)
+            if let bar = makeKeyboardBar(for: self) {
+                view.inputAccessoryView = bar.view
+                view.onBeginEditing = bar.refresh
+            }
             let holder = EmbeddedHolder(node: self, view: view)
             holder.watch { [weak view, weak self] in
                 guard let view, let self else { return }
@@ -416,6 +469,8 @@
     /// view has no placeholder, so a label stands where the first line goes while it is empty.
     final class EditorView: UITextView, UITextViewDelegate {
         weak var editor: TextEditor?
+        /// What to do when the editor takes the keyboard: the keyboard bar's turn.
+        var onBeginEditing: (@MainActor () -> Void)?
         let placeholderLabel = UILabel()
 
         init(_ editor: TextEditor) {
@@ -493,6 +548,7 @@
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {
+            onBeginEditing?()
             editor?.editingChanged(true)
         }
 

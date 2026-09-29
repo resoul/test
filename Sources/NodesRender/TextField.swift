@@ -330,14 +330,9 @@
             }
         }
 
-        /// The next field of the tree after this one, in the tree's order.
-        private func nextField() -> TextField? {
-            guard let fields = host?.embeddedItems().compactMap({ $0.node as? TextField }),
-                let index = fields.firstIndex(where: { $0 === self }),
-                index + 1 < fields.count
-            else { return nil }
-
-            return fields[index + 1]
+        /// The next text input of the tree after this one, in the tree's order.
+        private func nextField() -> (any TextInputNode)? {
+            neighbor(1)
         }
     }
 

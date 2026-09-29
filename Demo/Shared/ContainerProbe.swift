@@ -10,7 +10,8 @@ import ThemeCore
 /// environment: `TABS_PROBE=1` shows tabs (an inbox stack, a search screen, a settings screen
 /// with a counter), `SPLIT_PROBE=1` a split (folders in the sidebar, a stack of the folder's
 /// messages as the content), `TOGGLE_PROBE=1` a switch and a check box, `HOSTED_PROBE=1` a
-/// system button inside the tree (`HostedProbe`), `FIELDS_PROBE=1` text fields (`FieldsProbe`),
+/// system button inside the tree (`HostedProbe`), `FIELDS_PROBE=1` text fields (`FieldsProbe`; with `KEYBOARD_BAR=1` the
+/// bar above the keyboard),
 /// `EDITOR_PROBE=1` the multi-line editor (`EditorProbe`).
 @MainActor
 enum ContainerProbe {
@@ -18,7 +19,9 @@ enum ContainerProbe {
         if environment["TABS_PROBE"] != nil { return tabs() }
         if environment["SPLIT_PROBE"] != nil { return split() }
         if environment["HOSTED_PROBE"] != nil { return HostedProbe.content() }
-        if environment["FIELDS_PROBE"] != nil { return FieldsProbe.content() }
+        if environment["FIELDS_PROBE"] != nil {
+            return FieldsProbe.content(bar: environment["KEYBOARD_BAR"] != nil)
+        }
         if environment["EDITOR_PROBE"] != nil {
             let room = environment["EDITOR_LOW"].flatMap(Double.init).flatMap {
                 $0 >= 100 ? $0 : nil
