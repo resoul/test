@@ -404,6 +404,64 @@
         }
     }
 
+    extension Select: AppKitEmbedded {
+        func makeHolder() -> EmbeddedHolder {
+            let popUp = PopUpView()
+            let holder = EmbeddedHolder(node: self, view: popUp)
+            holder.watch { [weak popUp, weak self] in
+                guard let popUp, let self else { return }
+
+                let chosen = selection
+                let options = options
+                popUp.removeAllItems()
+                // With nothing chosen the placeholder stands first, turned off, and shows.
+                if chosen == nil {
+                    popUp.addItem(withTitle: placeholder)
+                    popUp.lastItem?.isEnabled = false
+                }
+                for option in options {
+                    popUp.addItem(withTitle: self.title(option))
+                }
+                let offset = chosen == nil ? 1 : 0
+                popUp.choose = { [weak self] index in
+                    let position = index - offset
+                    guard let self, options.indices.contains(position) else { return }
+
+                    userChose(options[position])
+                }
+                if let chosen, let index = options.firstIndex(of: chosen) {
+                    popUp.selectItem(at: index)
+                } else {
+                    popUp.selectItem(at: 0)
+                }
+                popUp.isEnabled = isEnabled
+                popUp.sizeToFit()
+                let size = popUp.intrinsicContentSize
+                preferredSize = LayoutSize(width: Double(size.width), height: Double(size.height))
+            }
+            return holder
+        }
+    }
+
+    /// A pop-up button showing a `Select` node: what the user picks goes to the node.
+    final class PopUpView: NSPopUpButton {
+        var choose: (@MainActor (Int) -> Void)?
+
+        init() {
+            super.init(frame: .zero, pullsDown: false)
+            target = self
+            action = #selector(picked)
+        }
+
+        required init?(coder: NSCoder) {
+            nil
+        }
+
+        @objc private func picked() {
+            choose?(indexOfSelectedItem)
+        }
+    }
+
     /// A view of AppKit in the tree: the node lays out at the view's own size (or one given),
     /// the view sits over the drawing at the node's frame, moves with the scrolls around it,
     /// is cut to what the nodes around it show, goes when the node is hidden, and stands

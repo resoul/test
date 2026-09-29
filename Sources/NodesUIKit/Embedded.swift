@@ -403,6 +403,73 @@
         return (container, refresh)
     }
 
+    extension Select: UIKitEmbedded {
+        func makeHolder() -> EmbeddedHolder {
+            let button = UIButton(type: .system)
+            var configuration = UIButton.Configuration.bordered()
+            configuration.image = UIImage(systemName: "chevron.up.chevron.down")
+            configuration.imagePlacement = .trailing
+            configuration.imagePadding = 8
+            button.configuration = configuration
+            if #available(iOS 14, tvOS 17, *) {
+                // The system's menu opens on a touch, with a check mark by the chosen option.
+                button.showsMenuAsPrimaryAction = true
+            } else {
+                // Before tvOS 17 a button has no menu: a list of the options opens instead.
+                button.addAction(
+                    UIAction { [weak self, weak button] _ in
+                        guard let self, let button else { return }
+
+                        presentOptions(from: button)
+                    },
+                    for: .primaryActionTriggered
+                )
+            }
+            let holder = EmbeddedHolder(node: self, view: button)
+            holder.watch { [weak button, weak self] in
+                guard let button, let self else { return }
+
+                let chosen = selection
+                button.configuration?.title = label
+                if #available(iOS 14, tvOS 17, *) {
+                    button.menu = UIMenu(
+                        children: options.map { option in
+                            UIAction(
+                                title: self.title(option),
+                                state: option == chosen ? .on : .off
+                            ) { [weak self] _ in
+                                self?.userChose(option)
+                            }
+                        }
+                    )
+                }
+                button.isEnabled = isEnabled
+                let size = button.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+                preferredSize = LayoutSize(width: Double(size.width), height: Double(size.height))
+            }
+            return holder
+        }
+
+        /// The options as an alert of actions, where a button has no menu of its own.
+        private func presentOptions(from button: UIButton) {
+            guard var presenter = button.window?.rootViewController else { return }
+
+            while let presented = presenter.presentedViewController {
+                presenter = presented
+            }
+            let alert = UIAlertController(title: placeholder, message: nil, preferredStyle: .alert)
+            for option in options {
+                alert.addAction(
+                    UIAlertAction(title: title(option), style: .default) { [weak self] _ in
+                        self?.userChose(option)
+                    }
+                )
+            }
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+            presenter.present(alert, animated: true)
+        }
+    }
+
     extension UITextField.ViewMode {
         init(_ button: ClearButton) {
             switch button {
