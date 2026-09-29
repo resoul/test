@@ -48,4 +48,33 @@ final class TextEditorTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Code: 1234"].waitForExistence(timeout: 5))
         XCTAssertEqual(code.value as? String, "1234")
     }
+
+    @MainActor
+    func testAnEditorLowOnThePageIsKeptAboveTheKeyboardAsItGrows() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["EDITOR_PROBE"] = "1"
+        app.launchEnvironment["EDITOR_LOW"] = "1"
+        app.launch()
+
+        let notes = app.textViews["Notes"]
+        XCTAssertTrue(notes.waitForExistence(timeout: 20))
+        notes.tap()
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 15))
+        let above = { notes.frame.maxY <= keyboard.frame.minY + 1 }
+        for _ in 0..<20 where !above() {
+            usleep(250_000)
+        }
+        XCTAssertTrue(above(), "notes \(notes.frame), keyboard \(keyboard.frame)")
+
+        // More lines: the editor is taller, and its end is still above the keyboard.
+        let least = notes.frame.height
+        notes.typeText("one\ntwo\nthree\nfour\nfive")
+        for _ in 0..<20 where !(notes.frame.height > least + 60 && above()) {
+            usleep(250_000)
+        }
+        XCTAssertGreaterThan(notes.frame.height, least + 60)
+        XCTAssertTrue(above(), "notes \(notes.frame), keyboard \(keyboard.frame)")
+    }
 }

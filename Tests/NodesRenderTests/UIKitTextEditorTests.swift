@@ -136,4 +136,77 @@
         #expect(boxed.field.text == "123")
         view.host.detach()
     }
+
+    @MainActor
+    private final class Filler: Node {
+        override var layoutContent: LeafContent? { .size(LayoutSize(width: 50, height: 500)) }
+    }
+
+    /// A page taller than the view, the editor at its end, in a scroll. The room the keyboard
+    /// takes is the page's own: the view follows the system's keyboard, which a test has none
+    /// of, and the mechanics under test do not depend on where the number comes from.
+    @MainActor
+    private final class Page: Node {
+        let filler = Filler()
+        let editor = TextEditor(placeholder: "Notes")
+        let keyboard = State(0.0)
+        lazy var scroll = Scroll(.vertical, content: Content(page: self))
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { scroll.flex(grow: 1, shrink: 1) }
+                .padding(bottom: keyboard.value)
+        }
+    }
+
+    @MainActor
+    private final class Content: Node {
+        unowned let page: Page
+
+        init(page: Page) {
+            self.page = page
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                page.filler
+                page.editor
+            }
+            .padding(10)
+        }
+    }
+
+    @Test @MainActor
+    func anEditorBeingEditedIsKeptAboveTheKeyboardAsItGrows() throws {
+        let page = Page()
+        page.editor.minLines = 1
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 300, height: 600))
+        let view = NodeView(root: page)
+        view.zoom = 1
+        view.frame = window.bounds
+        window.addSubview(view)
+        window.isHidden = false
+        settle(view)
+
+        let frame = { () -> LayoutRect? in
+            view.host.embeddedItems().first { $0.node === page.editor }?.frame
+        }
+        // The keyboard is up, over the bottom 300, and then the editor takes it, as when a field
+        // is touched.
+        page.keyboard.value = 300
+        settle(view)
+        page.editor.beginEditing()
+        settle(view)
+        let before = try #require(frame())
+        #expect(page.editor.isEditing)
+        #expect(before.origin.y + before.size.height <= 300 + 0.5)
+
+        // Six more lines: the editor is taller, and its end is still above the keyboard.
+        page.editor.text = Array(repeating: "line", count: 7).joined(separator: "\n")
+        settle(view)
+        let after = try #require(frame())
+        #expect(after.size.height > before.size.height + 60)
+        #expect(after.origin.y + after.size.height <= 300 + 0.5)
+        view.host.detach()
+        window.isHidden = true
+    }
 #endif
