@@ -68,7 +68,17 @@
                 // Over the scrolls' physics, which are views too, so that touches reach it.
                 bringSubviewToFront(holder.clip)
                 holder.place(frame: zoomed(item.frame), shown: item.shownFrame.map(zoomed))
-                if holder.fit?(item.frame.size.width) == true { madeViews = true }
+                if holder.fit?(item.frame.size.width) == true {
+                    madeViews = true
+                    // An editor being edited grew or shrank: once the next pass has laid it out
+                    // so, it is kept above the keyboard, where its new last line would be under
+                    // it.
+                    if holder.view.isFirstResponder
+                        || holder.view.subviews.contains(where: \.isFirstResponder)
+                    {
+                        revealAfterPass = host.passes
+                    }
+                }
                 kept[id] = holder
             }
             for (id, holder) in embedded where kept[id] == nil {

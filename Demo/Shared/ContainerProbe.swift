@@ -19,7 +19,9 @@ enum ContainerProbe {
         if environment["SPLIT_PROBE"] != nil { return split() }
         if environment["HOSTED_PROBE"] != nil { return HostedProbe.content() }
         if environment["FIELDS_PROBE"] != nil { return FieldsProbe.content() }
-        if environment["EDITOR_PROBE"] != nil { return EditorProbe.content() }
+        if environment["EDITOR_PROBE"] != nil {
+            return EditorProbe.content(low: environment["EDITOR_LOW"] != nil)
+        }
         if environment["TOGGLE_PROBE"] != nil {
             return NodeScreen(TogglePage(), title: "Toggles")
         }
