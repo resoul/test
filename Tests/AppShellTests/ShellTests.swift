@@ -141,3 +141,122 @@ func aClosedSceneLetsGoOfItsContentAndOnlyAClosableSceneCloses() throws {
     #expect(stack.push(.message(1)) == .rejected(.closed))
     #expect(stack.outer == nil)
 }
+
+@MainActor
+private struct WindowedApp: Application {
+    init() {}
+
+    var scenes: [WindowScene] {
+        // The settings scene comes first: it must still not be the one that opens at launch.
+        WindowScene("settings", title: "Settings", role: .settings) {
+            NodeScreen(Node(), title: "Settings")
+        }
+        WindowScene("main", title: "Notes") {
+            Stack(root: Route.inbox) { _ in NodeScreen(Node()) }
+        }
+        WindowScene("library", allowsMultiple: false) { NodeScreen(Node(), title: "Library") }
+    }
+}
+
+/// What the platform was asked for, and what it takes.
+@MainActor
+private final class Platform {
+    var opened: [String] = []
+    var takes = true
+
+    func attach(to shell: Shell) {
+        shell.platformScenes = PlatformScenes(
+            canOpen: { [unowned self] _ in takes },
+            open: { [unowned self] kind in opened.append(kind.id) }
+        )
+    }
+}
+
+@Test @MainActor
+func aNewSceneOpensOnlyWhereThePlatformTakesAnotherAndTheLaunchKindIsNotTheSettings() throws {
+    let shell = Shell(application: WindowedApp())
+    let platform = Platform()
+
+    // Before the adapter says what it can open, nothing does; the commands are off.
+    #expect(shell.openScene() == .unsupported)
+    #expect(!shell.canPerform(.newWindow))
+    #expect(!shell.canPerform(.openSettings))
+
+    platform.attach(to: shell)
+    #expect(shell.openScene() == .opened)
+    #expect(shell.openScene("main") == .opened)
+    #expect(shell.openScene("nowhere") == .unsupported)
+    #expect(platform.opened == ["main", "main"])
+    #expect(try #require(shell.makeSession()).kind.id == "main")
+
+    // An iPhone: one screen, no other scene, and the commands say so.
+    platform.takes = false
+    #expect(shell.openScene() == .unsupported)
+    #expect(!shell.canPerform(.newWindow))
+    #expect(platform.opened == ["main", "main"])
+}
+
+@Test @MainActor
+func theCommandsOpenTheLaunchKindAndTheSettings() {
+    let shell = Shell(application: WindowedApp())
+    let platform = Platform()
+    platform.attach(to: shell)
+
+    #expect(shell.perform(.newWindow))
+    #expect(shell.perform(.openSettings))
+    #expect(platform.opened == ["main", "settings"])
+}
+
+@Test @MainActor
+func aKindThatTakesOneAtATimeBringsItsSceneForwardAndTheSettingsAreOne() throws {
+    let shell = Shell(application: WindowedApp())
+    let platform = Platform()
+    platform.attach(to: shell)
+    #expect(!(shell.application.scenes.first { $0.id == "settings" }?.allowsMultiple ?? true))
+
+    // None yet: it opens.
+    #expect(shell.openScene("library") == .opened)
+    let library = try #require(shell.makeSession("library"))
+    var brought = 0
+    library.activatePlatformScene = { brought += 1 }
+    #expect(shell.openScene("library") == .activated)
+    #expect(brought == 1)
+    #expect(platform.opened == ["library"])
+
+    let settings = try #require(shell.makeSession("settings"))
+    var shown = 0
+    settings.activatePlatformScene = { shown += 1 }
+    #expect(shell.perform(.openSettings))
+    #expect(shown == 1)
+    #expect(platform.opened == ["library"])
+
+    // Closed for good, it opens again.
+    shell.sessionClosed(library)
+    #expect(shell.openScene("library") == .opened)
+    #expect(platform.opened == ["library", "library"])
+}
+
+@Test @MainActor
+func scenesOfOneKindKeepTheirOwnPathsAndALinkGoesToTheSceneItCameTo() throws {
+    reset()
+    let shell = Shell(application: MailApp())
+    let first = try #require(shell.makeSession("main"))
+    let second = try #require(shell.makeSession("main"))
+    shell.firstSceneShown()
+    let firstStack = try #require(first.content as? Stack<Route>)
+    let secondStack = try #require(second.content as? Stack<Route>)
+
+    firstStack.setPath([.inbox, .message(1)])
+    #expect(secondStack.path == [.inbox])
+    #expect(shell.open(URL(string: "mail:/messages/7")!, in: second) == .opened)
+    #expect(firstStack.path == [.inbox, .message(1)])
+    #expect(secondStack.path == [.inbox, .message(7)])
+
+    // Closing one for good leaves the other as it was.
+    shell.sessionClosed(first)
+    #expect(shell.sessions.count == 1)
+    #expect(secondStack.path == [.inbox, .message(7)])
+    // Without a scene named, a link goes to the first one left.
+    #expect(shell.open(URL(string: "mail:/messages/8")!) == .opened)
+    #expect(secondStack.path == [.inbox, .message(8)])
+}

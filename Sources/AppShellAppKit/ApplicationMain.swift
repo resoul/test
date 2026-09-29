@@ -30,20 +30,41 @@
         let shell: Shell
         /// The window of each session.
         private var windows: [ObjectIdentifier: NSWindow] = [:]
-        /// What the last run kept of each kind of scene (`SceneSession.restorationData()`),
-        /// until a scene of the kind takes it.
-        private var restorations: [String: Data] = [:]
-        private static let restorationPrefix = "restoration."
+        /// What the last run kept of its windows, in the order they were open, until a window of
+        /// the kind takes it.
+        private var pending: [KeptWindow] = []
+        private static let restorationKey = "windows"
+        /// Whether the first window is made: the kept state that comes before waits for it.
+        private var hasLaunched = false
+
+        /// One window as the last run left it: its kind, and the state of its containers when
+        /// any opted in — a window with none still comes back, as it was the first time.
+        private struct KeptWindow: Codable {
+            var kind: String
+            var state: Data?
+        }
 
         init(shell: Shell) {
             self.shell = shell
         }
 
         func applicationDidFinishLaunching(_ notification: Notification) {
-            NSApplication.shared.mainMenu = NSMenu(standardAround: shell.application.menuBar)
+            let scenes = shell.application.scenes
+            NSApplication.shared.mainMenu = NSMenu(
+                standardAround: shell.application.menuBar,
+                newWindow: scenes.first { $0.role == .standard }?.allowsMultiple ?? false,
+                settings: scenes.contains { $0.role == .settings }
+            )
+            shell.platformScenes = PlatformScenes(canOpen: { _ in true }) { [weak self] kind in
+                guard let self, let session = shell.makeSession(kind.id) else { return }
+
+                show(session)
+            }
             if let session = shell.makeSession() {
                 show(session)
             }
+            hasLaunched = true
+            openKeptWindows()
             NSApplication.shared.activate(ignoringOtherApps: true)
             shell.firstSceneShown()
         }
@@ -73,47 +94,68 @@
             true
         }
 
-        /// The app is asked for its state: each kind of scene keeps that of its first window.
+        /// The app is asked for its state: every window is kept, in the order they opened, each
+        /// with the state of its own containers.
         func application(_ app: NSApplication, willEncodeRestorableState coder: NSCoder) {
             guard shell.application.restoresState else { return }
 
-            var kept: Set<String> = []
-            for session in shell.sessions where !kept.contains(session.kind.id) {
-                guard let data = session.restorationData() else { continue }
+            let windows = shell.sessions.filter { $0.kind.role == .standard }.map {
+                KeptWindow(kind: $0.kind.id, state: $0.restorationData())
+            }
+            guard let data = try? JSONEncoder().encode(windows) else { return }
 
-                kept.insert(session.kind.id)
-                coder.encode(
-                    data as NSData,
-                    forKey: Self.restorationPrefix + session.kind.id
-                )
+            coder.encode(data as NSData, forKey: Self.restorationKey)
+        }
+
+        /// The state comes, before the first window is made or after it: each window takes what
+        /// the window of its place kept, and the ones the last run had more of open.
+        func application(_ app: NSApplication, didDecodeRestorableState coder: NSCoder) {
+            guard shell.application.restoresState,
+                let data = coder.decodeObject(of: NSData.self, forKey: Self.restorationKey)
+                    as Data?,
+                let windows = try? JSONDecoder().decode([KeptWindow].self, from: data)
+            else { return }
+
+            pending = windows
+            shell.sessions.forEach(putBackState(in:))
+            if hasLaunched {
+                openKeptWindows()
             }
         }
 
-        /// The state comes, before the first window is made or after it: a window takes what
-        /// its kind kept, once.
-        func application(_ app: NSApplication, didDecodeRestorableState coder: NSCoder) {
-            guard shell.application.restoresState else { return }
+        /// Puts into `session` what the first kept window of its kind held, once.
+        private func putBackState(in session: SceneSession) {
+            guard let index = pending.firstIndex(where: { $0.kind == session.kind.id }) else {
+                return
+            }
 
-            for kind in shell.application.scenes.map(\.id) {
-                guard
-                    let data = coder.decodeObject(
-                        of: NSData.self,
-                        forKey: Self.restorationPrefix + kind
-                    ) as Data?
+            let kept = pending.remove(at: index)
+            if let state = kept.state {
+                session.restore(from: state)
+            }
+        }
+
+        /// Opens a window for each kept one no window took: the app had more than one open.
+        private func openKeptWindows() {
+            let kept = pending
+            pending = []
+            for window in kept {
+                let kinds = shell.application.scenes
+                guard let kind = kinds.first(where: { $0.id == window.kind }),
+                    kind.allowsMultiple
+                        || !shell.sessions.contains(where: { $0.kind.id == kind.id }),
+                    let session = shell.makeSession(kind.id)
                 else { continue }
 
-                restorations[kind] = data
-                if let session = shell.sessions.first(where: { $0.kind.id == kind }) {
-                    restorations[kind] = nil
-                    session.restore(from: data)
+                if let state = window.state {
+                    session.restore(from: state)
                 }
+                show(session)
             }
         }
 
         private func show(_ session: SceneSession) {
-            if let data = restorations.removeValue(forKey: session.kind.id) {
-                session.restore(from: data)
-            }
+            putBackState(in: session)
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 640, height: 560),
                 styleMask: [.titled, .closable, .resizable, .miniaturizable],
@@ -131,10 +173,26 @@
             }
             window.setContentSize(NSSize(width: 640, height: 560))
             window.delegate = self
-            window.center()
+            if let key = NSApplication.shared.keyWindow, windows.values.contains(key) {
+                // A new window steps down and to the right of the one in front, so that it does
+                // not hide it exactly.
+                window.cascadeTopLeft(
+                    from: NSPoint(x: key.frame.minX + 26, y: key.frame.maxY - 26)
+                )
+            } else {
+                window.center()
+            }
             windows[ObjectIdentifier(session)] = window
             session.canClose = true
             session.closePlatformScene = { [weak window] in window?.performClose(nil) }
+            session.activatePlatformScene = { [weak window] in
+                guard let window else { return }
+
+                if window.isMiniaturized {
+                    window.deminiaturize(nil)
+                }
+                window.makeKeyAndOrderFront(nil)
+            }
             window.makeKeyAndOrderFront(nil)
             updateActivation(of: session)
         }
@@ -193,9 +251,16 @@
         /// AppKit's own actions; Close Window is `Command.closeWindow`, carried out by the
         /// window whose content has the keyboard.
         ///
+        /// With `newWindow`, File starts with New Window (`Command.newWindow`); with `settings`,
+        /// the app's menu has Settings… (`Command.openSettings`) after About.
+        ///
         /// Ownership: returns a new menu. Isolation: MainActor. Errors: none. Cancellation:
         /// not applicable.
-        public convenience init(standardAround bar: MenuBar) {
+        public convenience init(
+            standardAround bar: MenuBar,
+            newWindow: Bool = false,
+            settings: Bool = false
+        ) {
             self.init(title: "")
             let name = ProcessInfo.processInfo.processName
 
@@ -206,6 +271,10 @@
                 keyEquivalent: ""
             )
             app.addItem(.separator())
+            if settings {
+                app.addItem(NSMenuItem(Command.openSettings))
+                app.addItem(.separator())
+            }
             app.addItem(
                 withTitle: "Hide \(name)",
                 action: #selector(NSApplication.hide(_:)),
@@ -231,6 +300,9 @@
             addItem(submenu(app))
 
             let file = NSMenu(title: "File")
+            if newWindow {
+                file.addItem(NSMenuItem(Command.newWindow))
+            }
             file.addItem(NSMenuItem(Command.closeWindow))
             addItem(submenu(file))
 

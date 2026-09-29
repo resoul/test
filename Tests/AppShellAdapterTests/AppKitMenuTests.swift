@@ -19,4 +19,27 @@
         #expect(quit.action == #selector(NSApplication.terminate(_:)))
         #expect(NSApplication.shared.windowsMenu === menu.items.last?.submenu)
     }
+
+    @Test @MainActor
+    func theMenusHaveNewWindowAndSettingsOnlyWhenTheAppHasThem() throws {
+        let plain = NSMenu(standardAround: MenuBar {})
+        #expect(plain.items[1].submenu?.items.map(\.title) == ["Close Window"])
+        #expect(!(plain.items[0].submenu?.items.map(\.title).contains("Settings…") ?? true))
+
+        let menu = NSMenu(standardAround: MenuBar {}, newWindow: true, settings: true)
+        let file = try #require(menu.items[1].submenu)
+        #expect(file.items.map(\.title) == ["New Window", "Close Window"])
+        #expect(file.items[0].keyEquivalent == "n")
+        #expect(file.items[0].action == #selector(NodeNSView.performCommand(_:)))
+        // Settings… follows About, before Hide.
+        let app = try #require(menu.items[0].submenu)
+        let titles = app.items.map(\.title)
+        #expect(
+            titles.prefix(4).map { $0.hasPrefix("About") ? "About" : $0 } == [
+                "About", "", "Settings…", "",
+            ]
+        )
+        let settings = try #require(app.items.first { $0.title == "Settings…" })
+        #expect(settings.keyEquivalent == ",")
+    }
 #endif

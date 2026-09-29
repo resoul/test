@@ -12,9 +12,14 @@ struct LayoutDemo: Application {
     private let model = DemoModel()
 
     var scenes: [WindowScene] {
-        WindowScene("main", title: "Layout demo") {
-            ContainerProbe.content(ProcessInfo.processInfo.environment) ?? model.stack
-        }
+        // Several windows are a probe of their own: each makes its content anew.
+        if let probe = WindowsProbe.scenes(ProcessInfo.processInfo.environment) { return probe }
+
+        return [
+            WindowScene("main", title: "Layout demo") {
+                ContainerProbe.content(ProcessInfo.processInfo.environment) ?? model.stack
+            }
+        ]
     }
 
     /// The demo puts its state back only when asked (`RESTORATION_PROBE`): the UI tests of the

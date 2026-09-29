@@ -38,8 +38,8 @@ public protocol Application {
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     init()
 
-    /// The kinds of scene the app has; the first one opens when it starts. Asked when a scene
-    /// opens: each scene makes its content anew.
+    /// The kinds of scene the app has; the first standard one opens when it starts. Asked when a
+    /// scene opens: each scene makes its content anew.
     ///
     /// Ownership: returns values. Isolation: MainActor. Errors: none. Cancellation: not
     /// applicable.
@@ -120,6 +120,19 @@ extension Screen: PresentationContent {}
 /// Cancellation: not applicable.
 @MainActor
 public struct WindowScene {
+    /// What a kind of scene is for.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public enum Role: Hashable, Sendable {
+        /// A scene of the app's own content: the first of these opens at launch, and a new one
+        /// opens on request (`Shell.openScene`, Command-N) where the platform takes more than one.
+        case standard
+        /// The app's settings window, Command-comma on a Mac: one at most, never at launch,
+        /// opened from the app's menu; where the platform keeps settings elsewhere (iPad, iPhone,
+        /// Apple TV) it does not open.
+        case settings
+    }
+
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public let id: String
 
@@ -128,6 +141,15 @@ public struct WindowScene {
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public let title: String
 
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public let role: Role
+
+    /// Whether the app can have more than one scene of this kind at a time. A request for
+    /// another brings the one there forward. Never for the settings window.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public let allowsMultiple: Bool
+
     let makeContent: @MainActor () -> any SceneContent
 
     /// Ownership: keeps `content`, which must make new content each time. Isolation:
@@ -135,10 +157,14 @@ public struct WindowScene {
     public init(
         _ id: String,
         title: String = "",
+        role: Role = .standard,
+        allowsMultiple: Bool = true,
         content: @escaping @MainActor () -> any SceneContent
     ) {
         self.id = id
         self.title = title
+        self.role = role
+        self.allowsMultiple = allowsMultiple && role == .standard
         makeContent = content
     }
 }
@@ -238,6 +264,27 @@ public enum OpenResult: Hashable, Sendable {
     case queueFull
 }
 
+/// What became of a request for a scene (`Shell.openScene`).
+///
+/// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+public enum SceneOpenResult: Hashable, Sendable {
+    /// The platform was asked for a new scene: on a Mac its window is there at once, on iPad
+    /// the system connects it a moment later, and its session joins `Shell.sessions` then.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    case opened
+    /// The kind takes one scene at a time and has one: it is brought forward.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    case activated
+    /// The app has no such kind, or the platform does not take another scene of it — iPhone
+    /// and Apple TV have one screen, an iPad app takes more only when its `Info.plist` says so.
+    /// Nothing changed; the app shows what it means to in place.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    case unsupported
+}
+
 /// A scene of the running app, as `UISceneSession`: its content, its activation, and the
 /// commands of a window — closing it. It lasts while the scene exists, across the platform
 /// letting go of its views and connecting them again: the content and its stack's path stay.
@@ -278,6 +325,9 @@ public final class SceneSession: CommandResponder {
     /// What closes the platform's scene; it reports back with `Shell.sessionClosed`.
     package var closePlatformScene: (@MainActor () -> Void)?
 
+    /// What brings the platform's scene forward, and back if the system let go of its views.
+    package var activatePlatformScene: (@MainActor () -> Void)?
+
     init(kind: WindowScene, content: any SceneContent) {
         self.kind = kind
         self.content = content
@@ -298,6 +348,14 @@ public final class SceneSession: CommandResponder {
         closePlatformScene?()
     }
 
+    /// Brings the scene forward: its window becomes the key one on a Mac, the scene comes to the
+    /// front on iPad.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func activate() {
+        activatePlatformScene?()
+    }
+
     /// For platform adapters: the platform's scene changed its activation.
     package func setActivation(_ activation: SceneActivation) {
         activationState.value = activation
@@ -313,6 +371,44 @@ extension Command {
         title: "Close Window",
         shortcut: Shortcut("w", [.command])
     )
+}
+
+extension Command {
+    /// A new window of the app's first standard kind of scene: Command-N. Enabled where the
+    /// platform takes another scene (`Shell.openScene`).
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public static let newWindow = Command(
+        "newWindow",
+        title: "New Window",
+        shortcut: Shortcut("n", [.command])
+    )
+
+    /// The app's settings window: Command-comma. Enabled where the app has a scene of the
+    /// settings role and the platform opens it.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public static let openSettings = Command(
+        "openSettings",
+        title: "Settings…",
+        shortcut: Shortcut(",", [.command])
+    )
+}
+
+/// What the platform gives the shell to open scenes.
+package struct PlatformScenes {
+    /// Whether the platform takes a new scene of the kind now.
+    package var canOpen: @MainActor (WindowScene) -> Bool
+    /// Asks the platform for a new scene of the kind.
+    package var open: @MainActor (WindowScene) -> Void
+
+    package init(
+        canOpen: @escaping @MainActor (WindowScene) -> Bool,
+        open: @escaping @MainActor (WindowScene) -> Void
+    ) {
+        self.canOpen = canOpen
+        self.open = open
+    }
 }
 
 /// The running app: its scenes, its activation, its links, and the commands no scene carries
@@ -334,6 +430,9 @@ public final class Shell: CommandResponder {
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public var linkQueueLimit = 16
+
+    /// How the platform opens scenes; the adapter sets it.
+    package var platformScenes: PlatformScenes?
 
     /// The sessions of the app's scenes, in the order they opened. Reading it under tracking
     /// depends on it.
@@ -357,6 +456,57 @@ public final class Shell: CommandResponder {
     package init(application: any Application) {
         self.application = application
         super.init()
+        handle(
+            .newWindow,
+            isEnabled: { [weak self] in self?.canOpenScene(self?.launchKind) ?? false }
+        ) { [weak self] in
+            self?.openScene()
+        }
+        handle(
+            .openSettings,
+            isEnabled: { [weak self] in self?.canOpenScene(self?.settingsKind) ?? false }
+        ) { [weak self] in
+            guard let id = self?.settingsKind?.id else { return }
+
+            self?.openScene(id)
+        }
+    }
+
+    /// The kind that opens at launch and for a new window: the first standard one.
+    private var launchKind: WindowScene? {
+        application.scenes.first { $0.role == .standard }
+    }
+
+    private var settingsKind: WindowScene? {
+        application.scenes.first { $0.role == .settings }
+    }
+
+    private func canOpenScene(_ kind: WindowScene?) -> Bool {
+        guard let kind, let platformScenes else { return false }
+
+        return platformScenes.canOpen(kind)
+    }
+
+    /// Opens a new scene of the kind `id` — the one that opens at launch when `nil` — where the
+    /// platform takes another: a window on a Mac, a scene on iPad when the app says it takes
+    /// more than one. A kind that takes one at a time and has one brings it forward instead.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: the result says what became of it.
+    /// Cancellation: not applicable.
+    @discardableResult
+    public func openScene(_ id: String? = nil) -> SceneOpenResult {
+        let kinds = application.scenes
+        guard let kind = id.map({ id in kinds.first { $0.id == id } }) ?? launchKind,
+            let platformScenes, platformScenes.canOpen(kind)
+        else { return .unsupported }
+
+        if !kind.allowsMultiple, let existing = sessions.first(where: { $0.kind.id == kind.id }) {
+            existing.activate()
+            return .activated
+        }
+
+        platformScenes.open(kind)
+        return .opened
     }
 
     /// Opens `url` in the app — in `session`, else the app picks: at once when its first
@@ -378,11 +528,12 @@ public final class Shell: CommandResponder {
 
     // MARK: - For platform adapters
 
-    /// Makes a session of the scene kind `id` — the first kind when `nil` — with new content,
-    /// in the chain of commands: content, session, app. `nil` when the app has no such kind.
+    /// Makes a session of the scene kind `id` — the one that opens at launch when `nil` — with
+    /// new content, in the chain of commands: content, session, app. `nil` when the app has no
+    /// such kind.
     package func makeSession(_ id: String? = nil) -> SceneSession? {
         let kinds = application.scenes
-        guard let kind = id.map({ id in kinds.first { $0.id == id } }) ?? kinds.first else {
+        guard let kind = id.map({ id in kinds.first { $0.id == id } }) ?? launchKind else {
             return nil
         }
 

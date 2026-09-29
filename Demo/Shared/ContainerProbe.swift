@@ -57,7 +57,7 @@ enum ContainerProbe {
     }
 
     /// A screen of a title, a line of text and buttons.
-    private final class Page: Node {
+    final class Page: Node {
         let text: Text
         let buttons: [Button]
 
