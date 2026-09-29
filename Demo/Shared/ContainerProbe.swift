@@ -14,7 +14,7 @@ import ThemeCore
 /// bar above the keyboard),
 /// `EDITOR_PROBE=1` the multi-line editor (`EditorProbe`), `SELECT_PROBE=1` the option
 /// menu (`SelectProbe`), `TOAST_PROBE=1` toasts (`ToastProbe`), `RICH_PROBE=1` styled text and links
-/// (`RichProbe`).
+/// (`RichProbe`), `RICH_EDITOR_PROBE=1` the rich text editor (`RichEditorProbe`).
 @MainActor
 enum ContainerProbe {
     static func content(_ environment: [String: String]) -> (any SceneContent)? {
@@ -27,6 +27,9 @@ enum ContainerProbe {
         if environment["SELECT_PROBE"] != nil { return SelectProbe.content() }
         if environment["TOAST_PROBE"] != nil { return ToastProbe.content() }
         if environment["RICH_PROBE"] != nil { return RichProbe.content() }
+        if environment["RICH_EDITOR_PROBE"] != nil {
+            return RichEditorProbe.content(quote: environment["RICH_EDITOR_QUOTE"] != nil)
+        }
         if environment["EDITOR_PROBE"] != nil {
             let room = environment["EDITOR_LOW"].flatMap(Double.init).flatMap {
                 $0 >= 100 ? $0 : nil
