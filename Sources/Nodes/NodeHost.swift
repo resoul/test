@@ -245,6 +245,7 @@ public final class NodeHost: CommandTarget {
     }
     /// Counts the moves of where commands start — the focus, the node last pressed.
     private let originChanges = State(0)
+    private let keyboardInsetState = State(0.0)
     /// The node a drag under way moves.
     private var dragged: Node?
     private var generation: UInt64 = 0
@@ -997,8 +998,29 @@ public final class NodeHost: CommandTarget {
         }
     }
 
-    /// Scrolls every scroll around `node`, the innermost first, so that the node shows.
-    private func reveal(_ node: Node) {
+    /// How far the platform's keyboard comes up over the bottom of the tree, in the root's
+    /// points; 0 while it is away. The adapter sets it as the keyboard moves — during an
+    /// animation of the keyboard, inside the animation; while a finger drags the keyboard
+    /// down, at every frame. A layout that keeps a field or a bar above the keyboard reads
+    /// it, and depends on it under tracking:
+    ///
+    ///     FlexContainer(.column) { scroll.flex(grow: 1); composer }
+    ///         .padding(bottom: keyboardInset)
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var keyboardInset: Double {
+        get { keyboardInsetState.value }
+        set {
+            let inset = max(newValue, 0)
+            if keyboardInsetState.value != inset { keyboardInsetState.value = inset }
+        }
+    }
+
+    /// Scrolls every scroll around `node`, the innermost first, so that the node shows — a
+    /// field being edited, above the keyboard.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public func reveal(_ node: Node) {
         var current = node.supernode
         while let ancestor = current {
             if let scroll = ancestor as? Scroll {
@@ -1395,7 +1417,7 @@ public final class NodeHost: CommandTarget {
 
     /// The part of `node` that shows within the nodes around it that clip their content, in
     /// the root's coordinates; `nil` when none of it shows.
-    private func shownFrame(of node: Node) -> LayoutRect? {
+    func shownFrame(of node: Node) -> LayoutRect? {
         let own = frameInRoot(of: node)
         var minX = own.origin.x
         var minY = own.origin.y
@@ -1417,7 +1439,7 @@ public final class NodeHost: CommandTarget {
         return LayoutRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
     }
 
-    private func frameInRoot(of node: Node) -> LayoutRect {
+    func frameInRoot(of node: Node) -> LayoutRect {
         placementInRoot(of: node).rect(LayoutRect(origin: .zero, size: node.frame.size))
     }
 

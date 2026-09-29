@@ -31,7 +31,7 @@
         /// second.
         private var accessibilityByNode: [NodeID: NodeAccessibilityElement] = [:]
         /// The elements in reading order; `nil` after a drawing, until asked for.
-        private var accessibilityOrder: [UIAccessibilityElement]?
+        private var accessibilityOrder: [Any]?
         /// A container for each list laid out by where it shows, kept while the list is.
         private var accessibilityLists: [NodeID: ListAccessibilityContainer] = [:]
         /// The focus items of the tree, one per focusable node, kept while the node is: the
@@ -66,6 +66,14 @@
         private var scrollDrivers: [NodeID: ScrollDriver] = [:]
         /// The display's frames, while a scroll moves frame by frame.
         private var frameLink: CADisplayLink?
+        /// The views of the tree's embedded nodes.
+        var embedded: [ObjectIdentifier: EmbeddedHolder] = [:]
+        /// The layout pass in which the keyboard last moved: the first pass after it scrolls
+        /// the field being edited into view.
+        var revealAfterPass: Int?
+        /// A hidden view tied to the keyboard's guide, which lays the view out as the keyboard
+        /// moves; `nil` where no keyboard comes over the screen.
+        var keyboardProbe: UIView?
 
         /// A view showing `root`.
         ///
@@ -98,6 +106,7 @@
             }
             // Before any scroll, so that a node's drag works outside scrolls too.
             _ = dragPan
+            (self as? any KeyboardFollowing)?.followKeyboard()
             NotificationCenter.default.addObserver(
                 self,
                 selector: #selector(focusMovementFailed(_:)),
@@ -161,7 +170,7 @@
         }
 
         /// `zoom`, or the device's, kept positive.
-        private var factor: Double {
+        var factor: Double {
             let zoom = zoom ?? (traitCollection.userInterfaceIdiom == .tv ? 2 : 1)
             return zoom > 0 ? zoom : 1
         }
@@ -176,6 +185,7 @@
             defer { isLayingOut = false }
 
             updateConditions()
+            (self as? any KeyboardFollowing)?.readKeyboard()
             let content = LayoutSize(
                 width: Double(bounds.width) / factor,
                 height: Double(bounds.height) / factor
@@ -195,6 +205,7 @@
                 effectiveUserInterfaceLayoutDirection == .rightToLeft ? .rightToLeft : .leftToRight
             host.focusLook = isTV ? .lift : .ring
             host.layoutIfNeeded()
+            revealEditingField()
             if host.needsRender {
                 renderer.render(
                     host.root,
@@ -227,6 +238,7 @@
 
         /// Brings what depends on where the nodes show in line after a drawing.
         private func updateAfterMove() {
+            placeEmbeddedViews()
             accessibilityOrder = nil
             if UIAccessibility.isVoiceOverRunning {
                 // VoiceOver reads the frame of the element it is on without asking the view
@@ -463,11 +475,13 @@
         /// Cancellation: none.
         public override func focusItems(in rect: CGRect) -> [any UIFocusItem] {
             // The scroll views giving the scrolls' physics are subviews, but hold nothing to
-            // focus: the scrolls' own focus containers stand for them.
+            // focus: the scrolls' own focus containers stand for them. Nor does the view
+            // following the keyboard.
             let own = super.focusItems(in: rect).filter { item in
-                !scrollDrivers.values.contains { driver in
-                    (item as? UIView).map(driver.owns) ?? false
-                }
+                guard let view = item as? UIView else { return true }
+
+                return view !== keyboardProbe
+                    && !scrollDrivers.values.contains { driver in driver.owns(view) }
             }
             return own + topFocusItems.filter { $0.frame.intersects(rect) }
         }
@@ -1096,7 +1110,7 @@
             return nil
         }
 
-        private func updateAccessibilityElements() -> [UIAccessibilityElement] {
+        private func updateAccessibilityElements() -> [Any] {
             var kept: [NodeID: NodeAccessibilityElement] = [:]
             var keptLists: [NodeID: ListAccessibilityContainer] = [:]
             func element(
@@ -1112,11 +1126,16 @@
                 kept[item.node] = element
                 return element
             }
-            var order: [UIAccessibilityElement] = []
+            var order: [Any] = []
             for entry in host.accessibilityEntries() {
                 switch entry {
                 case .element(let item):
-                    order.append(element(item, in: self))
+                    // An embedded node is its platform view, which speaks for itself.
+                    if let view = embeddedView(of: item.node) {
+                        order.append(view)
+                    } else {
+                        order.append(element(item, in: self))
+                    }
                 case .list(let list, let items):
                     let container =
                         accessibilityLists[list.node]
@@ -1223,7 +1242,7 @@
         }
 
         /// A frame in the tree's points, in the view's.
-        fileprivate func zoomed(_ frame: LayoutRect) -> CGRect {
+        func zoomed(_ frame: LayoutRect) -> CGRect {
             CGRect(
                 x: frame.origin.x * factor,
                 y: frame.origin.y * factor,
@@ -1398,6 +1417,12 @@
             physics.frame = frame
             // A pager comes to rest quickly, on the page the drag's end picks.
             physics.decelerationRate = scroll.isPaging ? .fast : .normal
+            physics.keyboardDismissMode =
+                switch scroll.keyboardDismissal {
+                case .none: .none
+                case .onDrag: .onDrag
+                case .interactive: .interactive
+                }
             if scroll.isZoomable {
                 // The content as laid out; the scroll view scales it itself.
                 // Its transform is the scroll view's: it reads the scale from it.

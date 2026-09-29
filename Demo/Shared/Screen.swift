@@ -1049,6 +1049,10 @@
         case home
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         case message(Int)
+        /// A form of two fields under a long text, for the keyboard.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case form
     }
 
     /// A message opened from the inbox: who wrote it, its subject, a few lines and a reply.
@@ -1103,6 +1107,76 @@
             }
             .gap(12)
             .padding(24)
+        }
+    }
+
+    /// A form under a long text: the platform's own fields, which the keyboard does not
+    /// cover. Return in Name goes to Email; a drag of the text down takes the keyboard with
+    /// the finger.
+    @MainActor
+    final class FormNode: Node {
+        let scroll = Scroll(.vertical)
+        let name = TextField(placeholder: "Name", content: .name)
+        let email = TextField(placeholder: "Email", content: .email)
+        let summary = Text("", style: TextStyle(size: 15, colorRole: .secondaryText))
+
+        override init() {
+            super.init()
+            scroll.keyboardDismissal = .interactive
+            scroll.content = Content(form: self)
+            name.returnKey = .next
+            email.returnKey = .done
+            name.onChange = { [weak self] _ in self?.resummarize() }
+            email.onChange = { [weak self] _ in self?.resummarize() }
+            resummarize()
+        }
+
+        override func update() {
+            appearance.background = theme.color(.background)
+        }
+
+        private func resummarize() {
+            summary.text = "Signing up \(name.text.isEmpty ? "nobody" : name.text) at "
+                + (email.text.isEmpty ? "no address" : email.text)
+            setNeedsLayout()
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            // The keyboard takes the bottom: the scroll ends above it.
+            FlexContainer(.column) {
+                scroll.flex(grow: 1, shrink: 1)
+            }
+            .padding(bottom: keyboardInset)
+        }
+
+        final class Content: Node {
+            private weak var form: FormNode?
+            let intro = Text(
+                String(
+                    repeating: "The fields are at the end of this long text, low on the screen: "
+                        + "the keyboard would cover them, and the text scrolls them above it. ",
+                    count: 12
+                ),
+                style: TextStyle(size: 17)
+            )
+
+            init(form: FormNode) {
+                self.form = form
+                super.init()
+            }
+
+            override func layoutSpec() -> LayoutSpec? {
+                guard let form else { return nil }
+
+                return FlexContainer(.column) {
+                    intro
+                    form.name
+                    form.email
+                    form.summary
+                }
+                .gap(12)
+                .padding(24)
+            }
         }
     }
 
@@ -1266,6 +1340,8 @@
                         screen.map(DemoModel.compose(over:))
                     }
                     return screen
+                case .form:
+                    return NodeScreen(FormNode(), title: "Sign Up")
                 case .message(let id):
                     let message = MessageNode(inbox?.mail(id))
                     let screen = NodeScreen(message, title: inbox?.mail(id)?.sender ?? "")
@@ -1350,6 +1426,16 @@
             let sheet = Presentation(NodeScreen(compose, title: "New Message"))
             compose.onClose = { [weak sheet] in sheet?.dismiss() }
             screen.present(sheet)
+        }
+
+        /// Opens the form over the screen at launch — the UI tests start there. Launch
+        /// arguments: `OPEN_FORM=1` in the environment.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public func openForm(from environment: [String: String]) {
+            guard environment["OPEN_FORM"] != nil else { return }
+
+            stack.setPath([.home, .form])
         }
 
         /// Opens a new message over the screen at launch, as ⌘N would — the UI tests start

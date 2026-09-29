@@ -147,7 +147,9 @@
                 }
                 self.end(move)
             }
-            guard let outgoing, view.window != nil,
+            // A window not on screen shows no slide, and the end of an animation there is
+            // not certain to come: the move ends at once.
+            guard let outgoing, view.window?.isVisible == true,
                 !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
             else {
                 finish()
