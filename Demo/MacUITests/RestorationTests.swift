@@ -1,8 +1,8 @@
 import XCTest
 
 /// The state of the containers across launches (`TABS_PROBE`; `ContainerProbe`): the tab that
-/// was picked, and the path of the stack in another tab, come back after the app is quit and
-/// opened again.
+/// was picked, and the path of the stack in another tab, come back after the app is quit with
+/// Command-Q and opened again.
 final class RestorationTests: XCTestCase {
     @MainActor
     func testThePickedTabAndTheStacksPathComeBackAfterARelaunch() {
@@ -18,9 +18,12 @@ final class RestorationTests: XCTestCase {
         let radio = app.radioButtons["Search"]
         (radio.exists ? radio : app.buttons["Search"]).click()
         XCTAssertTrue(app.staticTexts["Search screen"].waitForExistence(timeout: 5))
-        sleep(2)
 
-        app.terminate()
+        // Quit as a user does: the app is asked for its state on the way out, which a
+        // terminated process is not.
+        app.typeKey("q", modifierFlags: .command)
+        let gone = NSPredicate { _, _ in app.state == .notRunning }
+        wait(for: [expectation(for: gone, evaluatedWith: nil)], timeout: 20)
         app.launch()
 
         XCTAssertTrue(app.staticTexts["Search screen"].waitForExistence(timeout: 20))

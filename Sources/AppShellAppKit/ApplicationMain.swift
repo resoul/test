@@ -117,6 +117,10 @@
                 defer: false
             )
             window.isReleasedWhenClosed = false
+            // A window without an identifier has no state of its own for the system to keep,
+            // and the app's state, with the scene's snapshot, is kept along with the windows'.
+            window.identifier = NSUserInterfaceItemIdentifier("scene." + session.kind.id)
+            window.isRestorable = true
             window.contentViewController = contentController(for: session.content)
             if window.title.isEmpty {
                 window.title = session.kind.title
