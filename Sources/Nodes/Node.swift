@@ -142,6 +142,29 @@ open class Node: LayoutElement {
     /// MainActor. Errors: none. Cancellation: set to `nil`.
     public var onTap: (@MainActor () -> Void)?
 
+    /// Whether the node takes a press at `point`, in its own coordinates, although it has no
+    /// `onTap`: text takes a press on a link and leaves the rest to what is behind it. A node
+    /// that takes it is tapped, on release, through `tapped(at:)`, and shows itself pressed.
+    /// The default is `false`.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    open func takesPress(at point: LayoutPoint) -> Bool { false }
+
+    /// Whether the remote's select button can tap the node when it has focus: by default
+    /// whether it has `onTap`. A node that takes presses at points overrides it to say whether
+    /// it has one place to tap.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    open var isTappable: Bool { onTap != nil }
+
+    /// The node was tapped: at `point`, in its own coordinates, or `nil` when the tap did not
+    /// come from a place (the select button). The default calls `onTap`.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    open func tapped(at point: LayoutPoint?) {
+        onTap?()
+    }
+
     /// A short text the pointer shows by the node when it rests on it — the mouse on a Mac,
     /// a pointer on iPad; `nil`, the default, for none. A node inside one with a tip shows
     /// its own tip, or else the outer one's. Nothing shows it on iPhone or on a TV.
@@ -742,7 +765,7 @@ open class Node: LayoutElement {
     }
 
     var canBecomeFocused: Bool {
-        isInteractive && (isFocusable ?? (onTap != nil))
+        isInteractive && (isFocusable ?? isTappable)
     }
 
     /// Whether the pointer rests over the node (`hoverChanged`).

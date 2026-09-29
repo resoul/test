@@ -4,6 +4,7 @@
     import os
     import LayoutCore
     import Nodes
+    import RichTextCore
     import ThemeCore
     import QuartzCore
 
@@ -151,6 +152,33 @@
             didSet { if text != oldValue { contentChanged() } }
         }
 
+        /// Styled text shown instead of `text`, or `nil` to show `text`. Its blocks are set one
+        /// under another, in the node's style with the marks of each run on top: bold, italic,
+        /// a monospaced font, strikethrough, underline and links, which show in the theme's
+        /// accent color and underlined. A quote gets a bar beside it and code a plate behind
+        /// it; code lines that do not fit wrap at any character rather than being cut. With
+        /// `maxLines`, the lines are counted over all blocks.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var rich: RichText? {
+            didSet { if rich != oldValue { contentChanged() } }
+        }
+
+        /// Called with the link the reader taps in `rich`. Without it, links look like links
+        /// and do nothing.
+        ///
+        /// Each link is also an action of the text for assistive technologies, named by the
+        /// link's words — so the text is read once and the links are its actions, not extra
+        /// elements — which means `accessibilityActions` of a text that shows links belongs to
+        /// the text. The remote's select button opens a link when the text has only one; a
+        /// text with several is not offered to it.
+        ///
+        /// Ownership: the node keeps the closure; it must not keep the node. Isolation:
+        /// MainActor. Errors: none. Cancellation: not applicable.
+        public var onLink: (@MainActor (URL) -> Void)? {
+            didSet { linksChanged() }
+        }
+
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public var style: TextStyle {
             didSet { if style != oldValue { restyle() } }
@@ -173,6 +201,24 @@
 
         private var isRightToLeft: Bool { host?.direction == .rightToLeft }
 
+        /// What the blocks of `rich` measured at; kept across edits, since a block that was
+        /// not touched is found again by its content.
+        private let richMeasurements = RichTextMeasurements()
+
+        /// Block layouts made for drawing and for finding links, by what they depend on. They
+        /// are the layouts the measurer's numbers come from, made again here with colors.
+        private var richLayouts: [RichLayoutKey: RichBlockLayout] = [:]
+
+        private struct RichLayoutKey: Hashable {
+            let block: RichText.Block
+            let width: Double
+            let metrics: RichMetrics
+            let colors: RichColors
+        }
+
+        /// The color links and quote bars take from the theme.
+        private var shownAccent = Theme.standard.resolved(for: .standard).color(.accent)
+
         /// Ownership: the caller owns the node. Isolation: MainActor. Errors: none.
         /// Cancellation: not applicable.
         public init(_ text: String = "", style: TextStyle = TextStyle()) {
@@ -180,6 +226,16 @@
             self.style = style
             shown = style.resolved(in: Theme.standard.resolved(for: .standard))
             super.init()
+        }
+
+        /// Shows styled text; see `rich`.
+        ///
+        /// Ownership: the caller owns the node. Isolation: MainActor. Errors: none.
+        /// Cancellation: not applicable.
+        public convenience init(rich: RichText, style: TextStyle = TextStyle()) {
+            self.init(rich.plainText, style: style)
+            self.rich = rich
+            linksChanged()
         }
 
         /// Follows the node's theme: its fonts and colors, at the reader's text size.
@@ -192,6 +248,14 @@
         /// Takes the theme's values into the shown style: a new font lays the text out
         /// again, a new color only draws it again.
         private func restyle() {
+            let accent = theme.color(.accent)
+            if accent != shownAccent {
+                shownAccent = accent
+                if rich != nil {
+                    revision &+= 1
+                    host?.setNeedsRender()
+                }
+            }
             let now = style.resolved(in: theme)
             guard now != shown else { return }
 
@@ -209,18 +273,149 @@
 
         /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
         public override var layoutContent: LeafContent? {
-            .measured(TextMeasurer(text: text, style: shown, measurements: measurements))
+            if let rich {
+                return .measured(
+                    RichTextMeasurer(
+                        text: rich,
+                        metrics: RichMetrics(shown, rightToLeft: isRightToLeft),
+                        maxLines: shown.maxLines.map { max(1, $0) },
+                        measurements: richMeasurements
+                    )
+                )
+            }
+            return .measured(TextMeasurer(text: text, style: shown, measurements: measurements))
         }
 
         /// Ownership: draws into `context`. Isolation: MainActor. Errors: none.
         /// Cancellation: none.
         public func draw(in context: CGContext, size: CGSize) {
+            if rich != nil {
+                richLayout(width: Double(size.width))?
+                    .draw(in: context, size: size, colors: richColors)
+                return
+            }
             TextLayout(text: text, style: shown, rightToLeft: isRightToLeft)
                 .draw(in: context, size: size)
         }
 
+        private var richColors: RichColors {
+            RichColors(
+                text: shown.color ?? Color(red: 0, green: 0, blue: 0),
+                link: shownAccent,
+                bar: shownAccent
+            )
+        }
+
+        /// The rich text laid out at `width`: the one layout that draws it and tells which link
+        /// a point is on.
+        private func richLayout(width: Double) -> RichPlacedLayout? {
+            guard let rich else { return nil }
+
+            let metrics = RichMetrics(shown, rightToLeft: isRightToLeft)
+            let colors = richColors
+            if richLayouts.count > 256 { richLayouts = [:] }
+            let blocks = rich.blocks.map { block -> RichBlockLayout in
+                let key = RichLayoutKey(
+                    block: block,
+                    width: width,
+                    metrics: metrics,
+                    colors: colors
+                )
+                if let known = richLayouts[key] { return known }
+
+                let made = RichBlockLayout(block, width: width, metrics: metrics, colors: colors)
+                richLayouts[key] = made
+                return made
+            }
+            return RichPlacedLayout(
+                blocks: blocks,
+                width: width,
+                metrics: metrics,
+                maxLines: shown.maxLines.map { max(1, $0) }
+            )
+        }
+
+        /// The links of `rich`: the words of each and where it leads. Neighbouring runs that
+        /// share a link — a link with a bold word in it — are one link.
+        var links: [(text: String, url: URL)] {
+            guard let rich else { return [] }
+
+            var found: [(text: String, url: URL)] = []
+            for block in rich.blocks {
+                var last: URL?
+                for run in block.runs {
+                    guard let url = run.link else {
+                        last = nil
+                        continue
+                    }
+                    if url == last, !found.isEmpty {
+                        found[found.count - 1].text += run.text
+                    } else {
+                        found.append((run.text, url))
+                    }
+                    last = url
+                }
+            }
+            return found
+        }
+
+        /// A tap on a link opens it; a tap elsewhere is left to what is behind the text.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public override func takesPress(at point: LayoutPoint) -> Bool {
+            guard onLink != nil, rich != nil,
+                let layout = richLayout(width: frame.size.width)
+            else { return false }
+
+            return layout.link(at: CGPoint(x: point.x, y: point.y)) != nil
+        }
+
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public override var isTappable: Bool {
+            onTap != nil || (onLink != nil && links.count == 1)
+        }
+
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public override func tapped(at point: LayoutPoint?) {
+            if onTap == nil, let onLink {
+                if let point {
+                    if let url = richLayout(width: frame.size.width)?
+                        .link(at: CGPoint(x: point.x, y: point.y))
+                    {
+                        onLink(url)
+                    }
+                } else if links.count == 1 {
+                    onLink(links[0].url)
+                }
+                return
+            }
+            super.tapped(at: point)
+        }
+
+        /// The links become the actions of the text, one each. Actions the caller set on a text
+        /// with no links are left alone.
+        private func linksChanged() {
+            let found = onLink == nil ? [] : links
+            guard !found.isEmpty || ownsLinkActions else { return }
+
+            ownsLinkActions = !found.isEmpty
+            accessibilityActions = found.map { link in
+                let words =
+                    link.text.count > 40 ? String(link.text.prefix(40)) + "\u{2026}" : link.text
+                let url = link.url
+                return AccessibilityAction(name: "Open link \(words)") { [weak self] in
+                    guard let onLink = self?.onLink else { return false }
+
+                    onLink(url)
+                    return true
+                }
+            }
+        }
+
+        private var ownsLinkActions = false
+
         /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
-        public override var accessibilityContentLabel: String? { text }
+        public override var accessibilityContentLabel: String? { rich?.plainText ?? text }
 
         /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: none.
         public override var accessibilityContentTraits: AccessibilityTraits { .staticText }
@@ -228,6 +423,7 @@
         private func contentChanged() {
             revision &+= 1
             measurements = TextMeasurements()
+            linksChanged()
             setNeedsLayout()
         }
     }
