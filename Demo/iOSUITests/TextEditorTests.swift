@@ -54,7 +54,9 @@ final class TextEditorTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchEnvironment["EDITOR_PROBE"] = "1"
-        app.launchEnvironment["EDITOR_LOW"] = "1"
+        // Room before the notes to put them under the keyboard: a bigger screen needs more.
+        let isPad = UIDevice.current.userInterfaceIdiom == .pad
+        app.launchEnvironment["EDITOR_LOW"] = isPad ? "1000" : "560"
         app.launch()
 
         let notes = app.textViews["Notes"]

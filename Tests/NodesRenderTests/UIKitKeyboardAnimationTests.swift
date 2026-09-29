@@ -54,4 +54,15 @@
         #expect(view.keyboardAnimation(duration: 0) == nil)
         view.host.detach()
     }
+
+    @Test @MainActor
+    func aFloatingKeyboardDoesNotPushThePage() throws {
+        let view = keyboardView()
+        guard view.keyboardProbe != nil else { return }
+
+        if #available(iOS 17, *) {
+            #expect(!view.keyboardLayoutGuide.followsUndockedKeyboard)
+        }
+        view.host.detach()
+    }
 #endif
