@@ -544,4 +544,43 @@
             #expect(RichEditorView.format(of: item) != nil)
         }
     }
+
+    @Test @MainActor func theBoldAndMonospacedFacesFollowTheReadersTextSize() throws {
+        let value = RichText(
+            blocks: [
+                .paragraph([Run("a"), Run("b", marks: .bold), Run("c", marks: .mono)]),
+                .code("d", language: nil),
+            ]
+        )
+        let note = Note(value)
+        let (view, text) = made(note)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 300, height: 800))
+        window.addSubview(view)
+        window.isHidden = false
+        var changes = 0
+        note.editor.onChange = { _ in changes += 1 }
+        text.selectedRange = NSRange(location: 1, length: 2)
+
+        func size(at index: Int) throws -> CGFloat {
+            try #require(
+                text.textStorage.attribute(.font, at: index, effectiveRange: nil) as? UIFont
+            )
+            .pointSize
+        }
+        let before = (try size(at: 0), try size(at: 1), try size(at: 2), try size(at: 4))
+
+        window.traitOverrides.preferredContentSizeCategory = .accessibilityExtraExtraExtraLarge
+        for _ in 0..<3 {
+            view.layoutIfNeeded()
+            window.layoutIfNeeded()
+        }
+        #expect(try size(at: 0) > before.0)
+        #expect(try size(at: 1) > before.1, "bold")
+        #expect(try size(at: 2) > before.2, "monospaced")
+        #expect(try size(at: 4) > before.3, "code")
+        #expect(text.model == value)
+        #expect(changes == 0, "the reader's setting is not the user's edit")
+        #expect(text.selectedRange == NSRange(location: 1, length: 2))
+        view.host.detach()
+    }
 #endif

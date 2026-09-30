@@ -90,6 +90,29 @@
             placeholderLabel.isAccessibilityElement = false
             addSubview(placeholderLabel)
             updatePlaceholder()
+            if #available(iOS 17, tvOS 17, *) {
+                registerForTraitChanges(
+                    [UITraitPreferredContentSizeCategory.self],
+                    action: #selector(textSizeChanged)
+                )
+            }
+        }
+
+        /// The reader changed the text size. The base font follows it by itself, but the bold,
+        /// italic and monospaced faces derived from it were sized when the text was built, so
+        /// the text is built again from what the view holds. The node's value does not change,
+        /// and neither does the selection or what can be undone.
+        @objc func textSizeChanged() {
+            guard markedTextRange == nil else { return }
+
+            let value = model
+            let selection = selectedRange
+            font = .preferredFont(forTextStyle: .body, compatibleWith: traitCollection)
+            placeholderLabel.font = font
+            attributedText = RichAttributed.attributedString(value, style: style)
+            selectedRange = selection
+            refreshTypingAttributes()
+            editor?.setNeedsLayout()
         }
 
         required init?(coder: NSCoder) {
@@ -100,7 +123,7 @@
 
         private var style: RichAttributedStyle {
             var style = RichAttributedStyle.standard
-            style.font = .preferredFont(forTextStyle: .body)
+            style.font = .preferredFont(forTextStyle: .body, compatibleWith: traitCollection)
             return style
         }
 
