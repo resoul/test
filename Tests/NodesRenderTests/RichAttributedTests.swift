@@ -62,13 +62,13 @@
         ]
     )
 
-    @Test func theAttributedTextHasTheWordsOfThePlatformText() {
+    @Test @MainActor func theAttributedTextHasTheWordsOfThePlatformText() {
         let text = RichAttributed.attributedString(sample, style: style)
         #expect(text.string == sample.platformText)
         #expect(text.length == sample.plainText.utf16.count)
     }
 
-    @Test func eachMarkBecomesItsAttribute() {
+    @Test @MainActor func eachMarkBecomesItsAttribute() {
         let text = RichAttributed.attributedString(sample, style: style)
         func index(of word: String) -> Int { (text.string as NSString).range(of: word).location }
 
@@ -84,7 +84,7 @@
         #expect(attributes(text, at: index(of: "plain"))[.underlineStyle] == nil)
     }
 
-    @Test func boldAndItalicTogetherAreBothTraits() {
+    @Test @MainActor func boldAndItalicTogetherAreBothTraits() {
         let text = RichAttributed.attributedString(
             RichText(blocks: [.paragraph([Run("both", marks: [.bold, .italic])])]),
             style: style
@@ -92,7 +92,7 @@
         #expect(isBold(font(text, at: 0)) && isItalic(font(text, at: 0)))
     }
 
-    @Test func everyCharacterOfABlockCarriesItsKindIncludingTheNewlineThatEndsIt() {
+    @Test @MainActor func everyCharacterOfABlockCarriesItsKindIncludingTheNewlineThatEndsIt() {
         let text = RichAttributed.attributedString(sample, style: style)
         let tags = (0..<text.length).map {
             attributes(text, at: $0)[RichAttributed.blockKey] as? String
@@ -108,7 +108,7 @@
         #expect(tags.allSatisfy { $0 != nil })
     }
 
-    @Test func aQuoteIsIndentedAndCodeIsMonospacedOnABackground() {
+    @Test @MainActor func aQuoteIsIndentedAndCodeIsMonospacedAndSetInFromBothEdges() {
         let text = RichAttributed.attributedString(sample, style: style)
         let string = text.string as NSString
         let quote = attributes(text, at: string.range(of: "quoted").location)
@@ -117,11 +117,16 @@
         #expect((quote[.paragraphStyle] as! NSParagraphStyle).headIndent > 0)
         #expect((plain[.paragraphStyle] as! NSParagraphStyle).headIndent == 0)
         #expect(isMono(code[.font] as! Font))
-        #expect(code[.backgroundColor] != nil)
-        #expect(plain[.backgroundColor] == nil)
+        // The plate behind code is drawn by the view, not made of an attribute; the lines are set
+        // in from both edges to leave it room.
+        let codeStyle = code[.paragraphStyle] as! NSParagraphStyle
+        #expect(codeStyle.headIndent > 0)
+        #expect(codeStyle.tailIndent < 0)
+        #expect(codeStyle.paragraphSpacing > 0)
+        #expect(code[.backgroundColor] == nil)
     }
 
-    @Test func aTextSurvivesTheTripToAttributesAndBack() {
+    @Test @MainActor func aTextSurvivesTheTripToAttributesAndBack() {
         #expect(
             RichAttributed.richText(
                 from: RichAttributed.attributedString(sample, style: style),
@@ -130,7 +135,7 @@
         )
     }
 
-    @Test func aTextWithEmptyBlocksAndEmojiSurvivesToo() {
+    @Test @MainActor func aTextWithEmptyBlocksAndEmojiSurvivesToo() {
         let text = RichText(
             blocks: [
                 .paragraph([Run("👩‍👩‍👧 é", marks: [.bold, .italic, .strike])]), .quote([]),
@@ -145,7 +150,7 @@
         #expect(back == text)
     }
 
-    @Test func manyRandomTextsSurviveTheTrip() {
+    @Test @MainActor func manyRandomTextsSurviveTheTrip() {
         var state: UInt64 = 5
         func next(_ bound: Int) -> Int {
             state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
@@ -184,7 +189,7 @@
         }
     }
 
-    @Test func fontsAndMarksFromElsewhereAreRead() {
+    @Test @MainActor func fontsAndMarksFromElsewhereAreRead() {
         // What a paste from another app looks like: system fonts, underline, a link as a string,
         // and no kind at all.
         let foreign = NSMutableAttributedString()
@@ -211,7 +216,7 @@
         )
     }
 
-    @Test func aBaseFontThatIsBoldItselfIsNotReadAsBold() {
+    @Test @MainActor func aBaseFontThatIsBoldItselfIsNotReadAsBold() {
         var bold = RichAttributedStyle.standard
         bold.font = systemBold(17)
         let plain = RichText(plain: "all bold by the view's font")
@@ -219,7 +224,7 @@
         #expect(RichAttributed.richText(from: text, style: bold) == plain)
     }
 
-    @Test func aTagIsReadBackToItsKind() {
+    @Test @MainActor func aTagIsReadBackToItsKind() {
         for kind: RichText.Kind in [
             .paragraph, .quote, .code(language: nil), .code(language: "c++"),
         ] {

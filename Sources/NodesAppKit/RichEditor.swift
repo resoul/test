@@ -125,6 +125,9 @@
     /// shortcuts; what they change can be undone.
     final class RichEditorTextView: NSTextView, NSTextViewDelegate {
         weak var editor: RichTextEditor?
+        /// Makes the layout fragments that draw the bars and plates; the layout manager holds its
+        /// delegate weakly.
+        private let fragments = RichBlockFragments()
         /// Called after the text changed, whoever changed it: the placeholder's turn.
         var onContentChange: (@MainActor () -> Void)?
 
@@ -135,6 +138,7 @@
                 textContainer: Self.makeTextContainer()
             )
             delegate = self
+            textLayoutManager?.delegate = fragments
             isRichText = true
             allowsUndo = true
             usesFontPanel = false

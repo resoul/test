@@ -533,5 +533,109 @@
             #expect(scroll.hasVerticalScroller)
             view.host.detach()
         }
+
+        // MARK: Bars and plates
+
+        /// What the layout fragment of block `index` draws, in the text container's coordinates,
+        /// y down: the alpha of the pixel at a point.
+        private func drawn(_ index: Int, in text: RichEditorTextView) throws -> (
+            alpha: (CGFloat, CGFloat) -> CGFloat, fragment: RichBlockFragment
+        ) {
+            let manager = try #require(text.textLayoutManager)
+            var fragments: [RichBlockFragment] = []
+            manager.enumerateTextLayoutFragments(from: nil, options: [.ensuresLayout]) { fragment in
+                if let fragment = fragment as? RichBlockFragment { fragments.append(fragment) }
+                return true
+            }
+            let fragment = try #require(fragments.indices.contains(index) ? fragments[index] : nil)
+            let width = 300
+            let height = 200
+            var pixels = [UInt8](repeating: 0, count: width * height * 4)
+            pixels.withUnsafeMutableBytes { bytes in
+                let context = CGContext(
+                    data: bytes.baseAddress,
+                    width: width,
+                    height: height,
+                    bitsPerComponent: 8,
+                    bytesPerRow: width * 4,
+                    space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                )!
+                // Text is laid out from the top, y down.
+                context.translateBy(x: 0, y: CGFloat(height))
+                context.scaleBy(x: 1, y: -1)
+                fragment.draw(at: fragment.layoutFragmentFrame.origin, in: context)
+            }
+            return (
+                { x, y in
+                    let column = Int(x)
+                    let row = Int(y)
+                    guard (0..<width).contains(column), (0..<height).contains(row) else {
+                        return 0
+                    }
+
+                    return CGFloat(pixels[(row * width + column) * 4 + 3]) / 255
+                }, fragment
+            )
+        }
+
+        @Test func aQuoteHasABarBesideItAndNothingElseIsDrawnBehindAParagraph() throws {
+            let note = Note(
+                RichText(blocks: [.paragraph([Run("Plain")]), .quote([Run("quoted")])])
+            )
+            let (view, text, _) = made(note)
+            let padding = text.textContainer?.lineFragmentPadding ?? 5
+
+            let (paragraph, _) = try drawn(0, in: text)
+            let (quote, fragment) = try drawn(1, in: text)
+            let line = try #require(fragment.textLineFragments.first)
+            let middle = fragment.layoutFragmentFrame.minY + line.typographicBounds.midY
+            #expect(quote(padding + 1, middle) > 0.3, "the bar")
+            #expect(quote(padding + 6, middle) < 0.05, "past the bar")
+            #expect(quote(250, middle) < 0.05, "far from the bar")
+            #expect(paragraph(250, 10) < 0.01, "a paragraph has no plate")
+            view.host.detach()
+        }
+
+        @Test func codeHasAPlateThatReachesItsPaddingBeyondTheLines() throws {
+            let note = Note(
+                RichText(blocks: [.paragraph([Run("Plain")]), .code("let a\nlet b", language: nil)])
+            )
+            let (view, text, _) = made(note)
+            let padding = text.textContainer?.lineFragmentPadding ?? 5
+            let (code, fragment) = try drawn(1, in: text)
+            let lines = fragment.textLineFragments
+            let top = fragment.layoutFragmentFrame.minY + lines[0].typographicBounds.minY
+            let bottom = fragment.layoutFragmentFrame.minY + lines[1].typographicBounds.maxY
+            let inset = RichAttributedStyle.standard.codePadding
+            let middle = (top + bottom) / 2
+
+            #expect(code(250, middle) > 0.03, "the plate")
+            #expect(code(250, top - inset / 2) > 0.03, "above the lines")
+            #expect(code(250, bottom + inset / 2) > 0.03, "below the lines")
+            #expect(code(250, top - inset - 3) < 0.01, "beyond the plate")
+            #expect(code(padding + 2, middle) > 0.03, "at its left edge")
+            #expect(code(padding - 3, middle) < 0.01, "left of it")
+            #expect(
+                fragment.renderingSurfaceBounds.minY <= lines[0].typographicBounds.minY - inset,
+                "the surface reaches the plate"
+            )
+            view.host.detach()
+        }
+
+        @Test func codeIsNoLongerColoredByATextBackground() {
+            let note = Note(RichText(blocks: [.code("let a", language: nil)]))
+            let (view, text, _) = made(note)
+            var background = false
+            let storage = text.textStorage
+            storage?.enumerateAttribute(
+                .backgroundColor,
+                in: NSRange(location: 0, length: storage?.length ?? 0)
+            ) { value, _, _ in
+                if value != nil { background = true }
+            }
+            #expect(!background)
+            view.host.detach()
+        }
     }
 #endif

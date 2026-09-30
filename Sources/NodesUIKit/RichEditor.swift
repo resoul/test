@@ -70,11 +70,15 @@
         /// What to do when the editor takes the keyboard: the keyboard bar's turn.
         var onBeginEditing: (@MainActor () -> Void)?
         let placeholderLabel = UILabel()
+        /// Makes the layout fragments that draw the bars and plates; the layout manager holds its
+        /// delegate weakly.
+        private let fragments = RichBlockFragments()
 
         init(_ editor: RichTextEditor) {
             self.editor = editor
             super.init(frame: .zero, textContainer: nil)
             delegate = self
+            textLayoutManager?.delegate = fragments
             font = .preferredFont(forTextStyle: .body)
             adjustsFontForContentSizeCategory = true
             textContainerInset = UIEdgeInsets(top: 8, left: 6, bottom: 8, right: 6)

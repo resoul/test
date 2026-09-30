@@ -8,19 +8,25 @@
     struct RichAttributedStyle {
         var font: NSFont
         var color: NSColor
-        /// The color of a quotation.
+        /// The color of a quotation, and of the bar beside it.
         var quoteColor: NSColor
-        /// Behind code.
-        var codeBackground: NSColor
 
         static var standard: RichAttributedStyle {
             RichAttributedStyle(
                 font: .systemFont(ofSize: NSFont.systemFontSize),
                 color: .labelColor,
-                quoteColor: .secondaryLabelColor,
-                codeBackground: .quaternaryLabelColor
+                quoteColor: .secondaryLabelColor
             )
         }
+
+        /// The space between one block and the next.
+        var blockSpacing: CGFloat { (font.pointSize * 0.6).rounded() }
+        /// How wide the bar beside a quotation is.
+        var quoteBarWidth: CGFloat { 3 }
+        /// How far a quotation's text is from the left edge: the bar and a gap.
+        var quoteIndent: CGFloat { quoteBarWidth + blockSpacing }
+        /// The space between the edge of the plate behind code and its text.
+        var codePadding: CGFloat { (font.pointSize * 0.5).rounded() }
     }
 
     /// The conversion between `RichText` and the attributed text of a `NSTextView`: the marks
@@ -133,7 +139,6 @@
             case .code:
                 attributes[.font] = font(.mono, base: style.font)
                 attributes[.foregroundColor] = style.color
-                attributes[.backgroundColor] = style.codeBackground
             }
             if case .code = kind {
                 return attributes
@@ -154,10 +159,23 @@
             isFirst: Bool
         ) -> NSParagraphStyle {
             let paragraph = NSMutableParagraphStyle()
-            paragraph.paragraphSpacingBefore = isFirst ? 0 : (style.font.pointSize * 0.6).rounded()
-            if kind == .quote {
-                paragraph.firstLineHeadIndent = 14
-                paragraph.headIndent = 14
+            switch kind {
+            case .paragraph:
+                paragraph.paragraphSpacingBefore = isFirst ? 0 : style.blockSpacing
+            case .quote:
+                paragraph.paragraphSpacingBefore = isFirst ? 0 : style.blockSpacing
+                paragraph.firstLineHeadIndent = style.quoteIndent
+                paragraph.headIndent = style.quoteIndent
+            case .code:
+                // The plate behind code (`RichBlockFragment`) reaches `codePadding` beyond the
+                // lines on every side: the space above and below is kept for it, and the lines
+                // are set in from both edges.
+                let padding = style.codePadding
+                paragraph.paragraphSpacingBefore = (isFirst ? 0 : style.blockSpacing) + padding
+                paragraph.paragraphSpacing = padding
+                paragraph.firstLineHeadIndent = padding
+                paragraph.headIndent = padding
+                paragraph.tailIndent = -padding
             }
             return paragraph
         }

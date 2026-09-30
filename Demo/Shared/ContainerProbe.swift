@@ -28,7 +28,10 @@ enum ContainerProbe {
         if environment["TOAST_PROBE"] != nil { return ToastProbe.content() }
         if environment["RICH_PROBE"] != nil { return RichProbe.content() }
         if environment["RICH_EDITOR_PROBE"] != nil {
-            return RichEditorProbe.content(quote: environment["RICH_EDITOR_QUOTE"] != nil)
+            return RichEditorProbe.content(
+                quote: environment["RICH_EDITOR_QUOTE"] != nil,
+                sample: environment["RICH_EDITOR_SAMPLE"] != nil
+            )
         }
         if environment["EDITOR_PROBE"] != nil {
             let room = environment["EDITOR_LOW"].flatMap(Double.init).flatMap {

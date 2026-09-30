@@ -583,4 +583,126 @@
         #expect(text.selectedRange == NSRange(location: 1, length: 2))
         view.host.detach()
     }
+
+    // MARK: Bars and plates
+
+    /// The alpha of the pixel at `point` in `image`, measured from its top left.
+    private func alpha(of image: UIImage, at point: CGPoint) -> CGFloat {
+        guard let cgImage = image.cgImage else { return 0 }
+
+        var pixel: [UInt8] = [0, 0, 0, 0]
+        pixel.withUnsafeMutableBytes { bytes in
+            let context = CGContext(
+                data: bytes.baseAddress,
+                width: 1,
+                height: 1,
+                bitsPerComponent: 8,
+                bytesPerRow: 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+            // Core Graphics counts from the bottom: the wanted pixel is put on the one of the
+            // context.
+            let x = point.x * image.scale
+            let y = CGFloat(cgImage.height) - point.y * image.scale - 1
+            context?.draw(
+                cgImage,
+                in: CGRect(
+                    x: -x,
+                    y: -y,
+                    width: CGFloat(cgImage.width),
+                    height: CGFloat(cgImage.height)
+                )
+            )
+        }
+        return CGFloat(pixel[3]) / 255
+    }
+
+    /// What the layout fragment of block `index` draws, in the text container's coordinates.
+    @MainActor private func drawn(_ index: Int, in text: RichEditorView) throws -> (
+        UIImage, RichBlockFragment
+    ) {
+        let manager = try #require(text.textLayoutManager)
+        var fragments: [RichBlockFragment] = []
+        manager.enumerateTextLayoutFragments(from: nil, options: [.ensuresLayout]) { fragment in
+            if let fragment = fragment as? RichBlockFragment { fragments.append(fragment) }
+            return true
+        }
+        let fragment = try #require(fragments.indices.contains(index) ? fragments[index] : nil)
+        let frame = fragment.layoutFragmentFrame
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 300, height: 200), format: format)
+            .image { context in
+                fragment.draw(at: frame.origin, in: context.cgContext)
+            }
+        return (image, fragment)
+    }
+
+    @Test @MainActor func aQuoteHasABarBesideItAndNothingElseIsDrawnBehindAParagraph() throws {
+        let note = Note(
+            RichText(blocks: [.paragraph([Run("Plain")]), .quote([Run("quoted")])])
+        )
+        let (view, text) = made(note)
+        let padding = text.textContainer.lineFragmentPadding
+
+        let (paragraph, _) = try drawn(0, in: text)
+        let (quote, fragment) = try drawn(1, in: text)
+        let line = try #require(fragment.textLineFragments.first)
+        let middle = fragment.layoutFragmentFrame.minY + line.typographicBounds.midY
+        #expect(alpha(of: quote, at: CGPoint(x: padding + 1, y: middle)) > 0.3, "the bar")
+        #expect(alpha(of: quote, at: CGPoint(x: padding + 6, y: middle)) < 0.05, "past the bar")
+        #expect(alpha(of: quote, at: CGPoint(x: 250, y: middle)) < 0.05, "far from the bar")
+        #expect(alpha(of: paragraph, at: CGPoint(x: 250, y: 10)) < 0.01, "a paragraph has no plate")
+        #expect(alpha(of: paragraph, at: CGPoint(x: padding + 1, y: 20)) < 0.05, "and no bar")
+        view.host.detach()
+    }
+
+    @Test @MainActor func codeHasAPlateThatReachesItsPaddingBeyondTheLines() throws {
+        let note = Note(
+            RichText(blocks: [.paragraph([Run("Plain")]), .code("let a\nlet b", language: nil)])
+        )
+        let (view, text) = made(note)
+        let padding = text.textContainer.lineFragmentPadding
+        let (code, fragment) = try drawn(1, in: text)
+        let lines = fragment.textLineFragments
+        let top = fragment.layoutFragmentFrame.minY + lines[0].typographicBounds.minY
+        let bottom = fragment.layoutFragmentFrame.minY + lines[1].typographicBounds.maxY
+        let inset = RichAttributedStyle.standard.codePadding
+
+        #expect(alpha(of: code, at: CGPoint(x: 250, y: (top + bottom) / 2)) > 0.03, "the plate")
+        #expect(alpha(of: code, at: CGPoint(x: 250, y: top - inset / 2)) > 0.03, "above the lines")
+        #expect(
+            alpha(of: code, at: CGPoint(x: 250, y: bottom + inset / 2)) > 0.03,
+            "below the lines"
+        )
+        #expect(alpha(of: code, at: CGPoint(x: 250, y: top - inset - 3)) < 0.01, "beyond the plate")
+        #expect(
+            alpha(of: code, at: CGPoint(x: padding + 2, y: (top + bottom) / 2)) > 0.03,
+            "at its left edge"
+        )
+        #expect(
+            alpha(of: code, at: CGPoint(x: padding - 3, y: (top + bottom) / 2)) < 0.01,
+            "left of it"
+        )
+        #expect(
+            fragment.renderingSurfaceBounds.minY <= lines[0].typographicBounds.minY - inset,
+            "the surface reaches the plate"
+        )
+        view.host.detach()
+    }
+
+    @Test @MainActor func codeIsNoLongerColoredByATextBackground() throws {
+        let note = Note(RichText(blocks: [.code("let a", language: nil)]))
+        let (view, text) = made(note)
+        var background = false
+        text.textStorage.enumerateAttribute(
+            .backgroundColor,
+            in: NSRange(location: 0, length: text.textStorage.length)
+        ) { value, _, _ in
+            if value != nil { background = true }
+        }
+        #expect(!background)
+        view.host.detach()
+    }
 #endif
