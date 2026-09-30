@@ -59,4 +59,31 @@ final class RichEditorTests: XCTestCase {
             "the second Return leaves the quote for a paragraph"
         )
     }
+
+    @MainActor
+    func testCommandBAndTheQuoteShortcutFormatTheSelection() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["RICH_EDITOR_PROBE"] = "1"
+        app.launch()
+
+        let editor = app.textViews["Write here"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 20))
+        putCaretAtTheEnd(of: editor, in: app)
+
+        editor.typeKey("a", modifierFlags: .command)
+        editor.typeKey("b", modifierFlags: .command)
+        XCTAssertTrue(
+            app.staticTexts["MD:**Start**"].waitForExistence(timeout: 5),
+            "Command-B makes the selection bold; texts: "
+                + "\(app.staticTexts.allElementsBoundByIndex.map(\.label))"
+        )
+
+        editor.typeKey("9", modifierFlags: [.command, .shift])
+        XCTAssertTrue(
+            app.staticTexts["MD:> **Start**"].waitForExistence(timeout: 5),
+            "Command-Shift-9 makes the block a quote; texts: "
+                + "\(app.staticTexts.allElementsBoundByIndex.map(\.label))"
+        )
+    }
 }
