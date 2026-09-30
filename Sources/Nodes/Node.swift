@@ -484,6 +484,14 @@ open class Node: LayoutElement {
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
     open func hoverChanged(_ isHovered: Bool) {}
 
+    /// How the pointer looks while it rests over the node, where the platform has a pointer of
+    /// its own — the mouse on a Mac: `.pointingHand` over a link, the arrow elsewhere. Read
+    /// only while the node is the one under the pointer (`hoverChanged`), so a node with
+    /// `onTap` and none of its own does not need to answer.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+    open var pointerStyle: PointerStyle { .arrow }
+
     /// Whether presses, the focus and assistive technologies reach the node: `false` for a
     /// control turned off, which then shows itself so.
     var isInteractive: Bool { true }
@@ -933,4 +941,14 @@ public struct Drag: Sendable, Hashable {
         self.translation = translation
         self.velocity = velocity
     }
+}
+
+/// The look of the pointer over a node (`Node.pointerStyle`).
+///
+/// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+public enum PointerStyle: Sendable, Hashable {
+    /// The pointer as it is everywhere else.
+    case arrow
+    /// The hand that shows something under the pointer opens when pressed: a link.
+    case pointingHand
 }

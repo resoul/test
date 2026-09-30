@@ -370,6 +370,13 @@
             return layout.link(at: CGPoint(x: point.x, y: point.y)) != nil
         }
 
+        /// The hand, while the pointer is over a link of a text that opens links itself.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public override var pointerStyle: PointerStyle {
+            onTap == nil && onLink != nil ? .pointingHand : .arrow
+        }
+
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public override var isTappable: Bool {
             onTap != nil || (onLink != nil && links.count == 1)

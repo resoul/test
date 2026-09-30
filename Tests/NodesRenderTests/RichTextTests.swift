@@ -233,6 +233,41 @@
         return LayoutPoint(x: Double(rect.midX), y: Double(rect.midY))
     }
 
+    @Test @MainActor func thePointerIsAHandOverALinkAndAnArrowOnOtherTextAndOnceItLeaves() {
+        let text = linkText { _ in }
+        let (column, host) = laidOut(text, width: 300)
+        column.onTap = {}
+
+        let onLink = linkPoint(text, width: text.frame.size.width)
+        host.pointerMoved(
+            to: LayoutPoint(x: text.frame.origin.x + onLink.x, y: text.frame.origin.y + onLink.y)
+        )
+        #expect(host.pointerStyle == .pointingHand)
+
+        // The word "Read" is not a link: the pointer is over the node around the text.
+        host.pointerMoved(to: LayoutPoint(x: text.frame.origin.x + 2, y: text.frame.origin.y + 5))
+        #expect(host.pointerStyle == .arrow)
+
+        host.pointerMoved(
+            to: LayoutPoint(x: text.frame.origin.x + onLink.x, y: text.frame.origin.y + onLink.y)
+        )
+        host.pointerMoved(to: nil)
+        #expect(host.pointerStyle == .arrow)
+        host.detach()
+    }
+
+    @Test @MainActor func aTextThatHasATapOfItsOwnKeepsTheArrowOverItsLinks() {
+        let text = linkText { _ in }
+        text.onTap = {}
+        let (_, host) = laidOut(text, width: 300)
+        let onLink = linkPoint(text, width: text.frame.size.width)
+        host.pointerMoved(
+            to: LayoutPoint(x: text.frame.origin.x + onLink.x, y: text.frame.origin.y + onLink.y)
+        )
+        #expect(host.pointerStyle == .arrow, "a tap on the text is not the opening of a link")
+        host.detach()
+    }
+
     @Test @MainActor func aTapOnALinkOpensItAndOnOtherTextGoesToWhatIsBehind() {
         var opened: [URL] = []
         let text = linkText { opened.append($0) }

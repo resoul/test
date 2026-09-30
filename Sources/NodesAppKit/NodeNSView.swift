@@ -533,18 +533,35 @@
         public override func mouseMoved(with event: NSEvent) {
             pointerAt = point(of: event)
             host.pointerMoved(to: pointerAt)
+            updatePointerStyle()
         }
 
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func mouseEntered(with event: NSEvent) {
             pointerAt = point(of: event)
             host.pointerMoved(to: pointerAt)
+            updatePointerStyle()
         }
 
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func mouseExited(with event: NSEvent) {
             pointerAt = nil
             host.pointerMoved(to: nil)
+            updatePointerStyle()
+        }
+
+        /// Whether the hand is the pointer this view set.
+        private var showsHand = false
+
+        /// Sets the pointer the node under the mouse asks for (`Node.pointerStyle`). Only a
+        /// change is set — the hand when the mouse comes onto a link, the arrow when it goes —
+        /// so the pointers of the views inside this one, a text field's I-beam, are left alone.
+        private func updatePointerStyle() {
+            let hand = host.pointerStyle == .pointingHand
+            guard hand != showsHand else { return }
+
+            showsHand = hand
+            (hand ? NSCursor.pointingHand : NSCursor.arrow).set()
         }
 
         /// Sets up an area of the view for each node with a tip. AppKit shows a tip when the

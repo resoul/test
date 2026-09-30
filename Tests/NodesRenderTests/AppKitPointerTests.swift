@@ -4,6 +4,7 @@
     import Nodes
     import NodesAppKit
     import NodesRender
+    import RichTextCore
     import Testing
 
     /// A button and a plain box with a tip, side by side.
@@ -118,5 +119,59 @@
         #expect(
             view.view(view, stringForToolTip: 0, point: CGPoint(x: 390, y: 90), userData: nil) == ""
         )
+    }
+
+    /// A line of text with a link in it.
+    @MainActor
+    private final class Page: Node {
+        let text = Text(
+            rich: RichText(
+                blocks: [
+                    .paragraph([
+                        Run("Read "), Run("the page", link: URL(string: "https://example.com")),
+                        Run(" for more."),
+                    ])
+                ]
+            )
+        )
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { text }.alignItems(.start).padding(10)
+        }
+    }
+
+    @Test @MainActor
+    func theMouseOverALinkIsAHandAndGoesBackToTheArrowElsewhere() throws {
+        let page = Page()
+        page.text.onLink = { _ in }
+        let view = NodeNSView(root: page)
+        let window = NSWindow(
+            contentRect: CGRect(x: 0, y: 0, width: 400, height: 100),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: true
+        )
+        window.isReleasedWhenClosed = false
+        window.contentView = view
+        view.layoutSubtreeIfNeeded()
+        defer { window.close() }
+
+        let frame = page.text.frame
+        // "Read " is 5 characters of about 8 points: the link starts past 40 points.
+        let onLink = CGPoint(x: frame.origin.x + 70, y: frame.origin.y + frame.size.height / 2)
+        let onWord = CGPoint(x: frame.origin.x + 8, y: frame.origin.y + frame.size.height / 2)
+
+        NSCursor.arrow.set()
+        view.mouseMoved(with: mouse(.mouseMoved, at: onWord, in: view))
+        #expect(NSCursor.current == .arrow)
+        view.mouseMoved(with: mouse(.mouseMoved, at: onLink, in: view))
+        #expect(NSCursor.current == .pointingHand)
+        view.mouseMoved(with: mouse(.mouseMoved, at: onWord, in: view))
+        #expect(NSCursor.current == .arrow)
+
+        view.mouseMoved(with: mouse(.mouseMoved, at: onLink, in: view))
+        #expect(NSCursor.current == .pointingHand)
+        view.mouseExited(with: mouse(.mouseExited, at: CGPoint(x: -5, y: 10), in: view))
+        #expect(NSCursor.current == .arrow)
     }
 #endif

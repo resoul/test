@@ -820,6 +820,16 @@ public final class NodeHost: CommandTarget {
         target?.setHovered(true)
     }
 
+    /// How the pointer should look where it rests now: the look of the node it is over
+    /// (`Node.pointerStyle`), the arrow while it is over none or outside the tree. Read after
+    /// `pointerMoved(to:)`.
+    ///
+    /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    public var pointerStyle: PointerStyle {
+        hovered?.pointerStyle ?? .arrow
+    }
+
     /// The tip of the node at `point`, in the root's coordinates — the innermost with a
     /// `toolTip` — and where it shows, or `nil` when none has one.
     ///
