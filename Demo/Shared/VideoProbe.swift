@@ -152,8 +152,8 @@ enum VideoProbe {
                 }
                 .gap(8)
                 status
-                broken
                 brokenPlay
+                broken
             }
             .gap(12)
             .padding(24)
