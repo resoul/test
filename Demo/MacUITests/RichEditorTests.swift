@@ -78,4 +78,26 @@ final class RichEditorTests: XCTestCase {
             "Undo takes the quote back; \(texts(app))"
         )
     }
+
+    @MainActor
+    func testTheFormatMenuMakesTheSelectionBold() {
+        continueAfterFailure = false
+        let (app, editor) = launch()
+
+        editor.typeKey(.leftArrow, modifierFlags: [.shift, .option])
+        app.menuBars.menuBarItems["Text Format"].click()
+        let bold = app.menuBars.menuItems["Bold"]
+        XCTAssertTrue(bold.waitForExistence(timeout: 5), "the Text Format menu has Bold")
+        XCTAssertTrue(bold.isEnabled, "Bold applies to the selection in the editor")
+        bold.click()
+        XCTAssertTrue(
+            app.staticTexts["MD:**Start**"].waitForExistence(timeout: 5),
+            "the menu item makes the selection bold; \(texts(app))"
+        )
+
+        // Italic still applies to the bold selection; the menu is reached again to close it.
+        app.menuBars.menuBarItems["Text Format"].click()
+        XCTAssertTrue(app.menuBars.menuItems["Italic"].isEnabled, "Italic applies as well")
+        app.typeKey(.escape, modifierFlags: [])
+    }
 }
