@@ -387,6 +387,39 @@
             host.detach()
         }
 
+        @Test func theVideoAndItsPictureFollowTheSizeOfTheHost() {
+            let poster = Poster()
+            let page = Page(source: .url(clip), placeholder: poster)
+            let host = shown(page)
+            let renderer = LayerRenderer()
+            let container = CALayer()
+            renderer.render(page, in: container)
+
+            func check(_ width: Double, _ label: String) {
+                host.size = LayoutSize(width: width, height: 600)
+                settle(host)
+                renderer.render(page, in: container)
+                let frame = page.video.frame
+                #expect(abs(frame.size.width - width) < 0.5, "\(label): as wide as the host")
+                // Frames are rounded to whole points: the height is within one of the ratio's.
+                #expect(abs(frame.size.height - width * 9 / 16) <= 1, Comment(rawValue: label))
+                #expect(
+                    page.video.surface.frame
+                        == CGRect(x: 0, y: 0, width: frame.size.width, height: frame.size.height),
+                    "\(label): the picture fills the node"
+                )
+                #expect(
+                    abs(poster.frame.size.width - frame.size.width) < 0.5
+                        && abs(poster.frame.size.height - frame.size.height) < 0.5,
+                    "\(label): the placeholder fills it too"
+                )
+            }
+            check(300, "300")
+            check(800, "wide")
+            check(120, "narrow")
+            host.detach()
+        }
+
         @Test func thePlaceholderIsDrawnOverThePicture() {
             let poster = Poster()
             let page = Page(source: .url(clip), placeholder: poster)

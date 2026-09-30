@@ -30,4 +30,37 @@ final class VideoTests: XCTestCase {
         expectation(for: told, evaluatedWith: broken)
         waitForExpectations(timeout: 20)
     }
+
+    /// Turning the device changes the size of the tree: the video is as wide as the screen in
+    /// both positions, keeps its proportions, and stays inside the screen.
+    @MainActor
+    func testTheVideoFollowsTheScreenWhenTheDeviceTurns() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["VIDEO_PROBE"] = "1"
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        defer { XCUIDevice.shared.orientation = .portrait }
+
+        let video = app.otherElements["Sample video"]
+        XCTAssertTrue(video.waitForExistence(timeout: 30))
+        let portrait = video.frame
+        let screenWidth = app.windows.firstMatch.frame.width
+        XCTAssertEqual(portrait.width / portrait.height, 16.0 / 9.0, accuracy: 0.03)
+        XCTAssertLessThanOrEqual(portrait.maxX, screenWidth + 0.5)
+
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let landscape = NSPredicate { _, _ in
+            let frame = video.frame
+            let width = app.windows.firstMatch.frame.width
+            return width > screenWidth && frame.width > portrait.width
+        }
+        expectation(for: landscape, evaluatedWith: nil)
+        waitForExpectations(timeout: 15)
+        let turned = video.frame
+        let width = app.windows.firstMatch.frame.width
+        XCTAssertEqual(turned.width / turned.height, 16.0 / 9.0, accuracy: 0.03, "proportions kept")
+        XCTAssertLessThanOrEqual(turned.maxX, width + 0.5, "inside the screen")
+        XCTAssertGreaterThan(turned.width, width * 0.5, "it uses the room")
+    }
 }
