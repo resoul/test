@@ -85,6 +85,69 @@
     }
 #endif
 
+#if canImport(QuartzCore)
+    /// A node that shows a layer of its own inside its frame, with a badge over it.
+    @MainActor
+    private final class Screen: Node, LayerHosting {
+        let surface = CALayer()
+        let badge = Box(20, 20)
+        var hostedLayer: CALayer? { surface }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.row) { badge }.size(100).padding(10)
+        }
+    }
+
+    @Test @MainActor
+    func aHostedLayerIsUnderTheSubnodesLayersAndFillsTheFrame() {
+        let screen = Screen()
+        let host = NodeHost(root: screen, size: LayoutSize(width: 200, height: 120))
+        host.layoutIfNeeded()
+        let renderer = LayerRenderer()
+        let container = CALayer()
+
+        renderer.render(screen, in: container)
+        let layer = renderer.layer(for: screen)
+        let badge = renderer.layer(for: screen.badge)
+        #expect(layer?.sublayers?.count == 2)
+        #expect(layer?.sublayers?.first === screen.surface, "under the subnodes")
+        #expect(layer?.sublayers?.last === badge, "the badge is over it")
+        #expect(screen.frame.size.width > 0)
+        #expect(
+            screen.surface.frame
+                == CGRect(
+                    x: 0,
+                    y: 0,
+                    width: screen.frame.size.width,
+                    height: screen.frame.size.height
+                )
+        )
+
+        // Rendered again, and after the frame changes, it is the same layer, in place.
+        screen.badge.appearance.opacity = 0.5
+        renderer.render(screen, in: container)
+        #expect(layer?.sublayers?.first === screen.surface)
+        #expect(screen.surface.superlayer === layer)
+        host.detach()
+    }
+
+    @Test @MainActor
+    func aHostedLayerFollowsTheNodesClippingAndCornerRadius() {
+        let screen = Screen()
+        screen.appearance.cornerRadius = 12
+        screen.appearance.clipsContent = true
+        let host = NodeHost(root: screen, size: LayoutSize(width: 200, height: 120))
+        host.layoutIfNeeded()
+        let renderer = LayerRenderer()
+        renderer.render(screen, in: CALayer())
+
+        let layer = renderer.layer(for: screen)
+        #expect(layer?.cornerRadius == 12)
+        #expect(layer?.masksToBounds == true, "the surface is cut with the node")
+        host.detach()
+    }
+#endif
+
 #if canImport(AppKit) && !canImport(UIKit)
     import AppKit
     import NodesAppKit

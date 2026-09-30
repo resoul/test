@@ -39,6 +39,23 @@
         var layerImage: LayerImage? { get }
     }
 
+    /// A node that shows a layer of its own — a video's surface — inside its frame. The
+    /// renderer puts the layer into the node's layer beneath the layers of the node's
+    /// subnodes, sized to the frame, so that a placeholder or a caption is an ordinary subnode
+    /// drawn over it, and the clipping, corner radius, opacity and scrolling of the tree apply
+    /// to it as to any node's content.
+    ///
+    /// Ownership: the node owns the layer for as long as it lives, and returns the same one
+    /// each time. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    @MainActor
+    public protocol LayerHosting: AnyObject {
+        /// The layer to show in the node's frame, or `nil` for none.
+        ///
+        /// Ownership: the node owns it. Isolation: MainActor. Errors: none. Cancellation:
+        /// none.
+        var hostedLayer: CALayer? { get }
+    }
+
     extension LayerDrawing {
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public func prepareDrawing(size: CGSize, scale: Double) {}
@@ -215,6 +232,8 @@
         /// A node whose layer is in line, while the layers of its subnodes are brought in line.
         private struct Level {
             let layer: CALayer
+            /// Drawn under the subnodes' layers, first (`LayerHosting`).
+            let hosted: CALayer?
             /// Drawn over the subnodes' layers, last.
             let indicator: CALayer?
             let subnodes: [Node]
@@ -249,7 +268,8 @@
 
                 let done = levels.removeLast()
                 attach(
-                    done.sublayers + (done.indicator.map { [$0] } ?? []),
+                    (done.hosted.map { [$0] } ?? []) + done.sublayers
+                        + (done.indicator.map { [$0] } ?? []),
                     to: done.layer,
                     pass: &pass
                 )
@@ -307,6 +327,19 @@
                 height: frame.size.height
             )
             layer.position = LayerRenderer.position(of: node)
+            if let hosted = (node as? any LayerHosting)?.hostedLayer {
+                // Sized to the frame at once: the tree animates the node's own layer, and the
+                // hosted layer inside it follows.
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                hosted.frame = CGRect(
+                    x: 0,
+                    y: 0,
+                    width: frame.size.width,
+                    height: frame.size.height
+                )
+                CATransaction.commit()
+            }
             apply(node.appearance, to: layer)
             if let scroll = node.supernode as? Scroll, scroll.zoomScale != 1 {
                 // Zoomed content is drawn bigger from the content's origin: its center moves
@@ -377,6 +410,7 @@
             }
             return Level(
                 layer: layer,
+                hosted: (node as? any LayerHosting)?.hostedLayer,
                 indicator: indicator,
                 subnodes: node.subnodesInDrawingOrder,
                 subnodesAreNew: isNew || cameBack
