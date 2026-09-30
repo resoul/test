@@ -177,6 +177,29 @@ extension RichText {
         }
     }
 
+    /// The link every markable character of `range` has, or `nil` when the range is empty, has
+    /// none, or has different links or characters without one. Code has no links and is left
+    /// out.
+    public func link(in range: RichRange) -> URL? {
+        let range = clamped(range)
+        guard !range.isEmpty else { return nil }
+
+        var shared: URL?
+        var consistent = true
+        var seen = false
+        forEachCell(in: range) { _, _, cell in
+            guard consistent else { return }
+
+            guard let link = cell.attributes.link, !seen || link == shared else {
+                consistent = false
+                return
+            }
+            shared = link
+            seen = true
+        }
+        return consistent ? shared : nil
+    }
+
     /// Toggles `marks` over `range`, each mark on its own: when every markable character of
     /// the range has the mark it is taken off them all; when none has it, or only some do, it
     /// is put on them all. The text and every position stay as they are. Code is not marked,

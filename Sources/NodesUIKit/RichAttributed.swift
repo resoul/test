@@ -8,19 +8,25 @@
     struct RichAttributedStyle {
         var font: UIFont
         var color: UIColor
-        /// The color of a quotation.
+        /// The color of a quotation, and of the bar beside it.
         var quoteColor: UIColor
-        /// Behind code.
-        var codeBackground: UIColor
 
         static var standard: RichAttributedStyle {
             RichAttributedStyle(
                 font: .preferredFont(forTextStyle: .body),
                 color: .label,
-                quoteColor: .secondaryLabel,
-                codeBackground: .secondarySystemFill
+                quoteColor: .secondaryLabel
             )
         }
+
+        /// The space between one block and the next.
+        var blockSpacing: CGFloat { (font.pointSize * 0.6).rounded() }
+        /// How wide the bar beside a quotation is.
+        var quoteBarWidth: CGFloat { 3 }
+        /// How far a quotation's text is from the left edge: the bar and a gap.
+        var quoteIndent: CGFloat { quoteBarWidth + blockSpacing }
+        /// The space between the edge of the plate behind code and its text.
+        var codePadding: CGFloat { (font.pointSize * 0.5).rounded() }
     }
 
     /// The conversion between `RichText` and the attributed text of a `UITextView`: the marks
@@ -98,38 +104,56 @@
             let result = NSMutableAttributedString()
             var blockIndex = 0
             for run in text.platformRuns {
-                let kind = run.kind ?? .paragraph
-                var attributes: [NSAttributedString.Key: Any] = [
-                    blockKey: tag(kind),
-                    .paragraphStyle: paragraphStyle(kind, style: style, isFirst: blockIndex == 0),
-                ]
-                switch kind {
-                case .paragraph:
-                    attributes[.font] = font(run.attributes.marks, base: style.font)
-                    attributes[.foregroundColor] = style.color
-                case .quote:
-                    attributes[.font] = font(run.attributes.marks, base: style.font)
-                    attributes[.foregroundColor] = style.quoteColor
-                case .code:
-                    attributes[.font] = font(.mono, base: style.font)
-                    attributes[.foregroundColor] = style.color
-                    attributes[.backgroundColor] = style.codeBackground
-                }
-                if case .code = kind {
-                    // Code has no marks and no links.
-                } else {
-                    if run.attributes.marks.contains(.strike) {
-                        attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
-                    }
-                    if run.attributes.marks.contains(.underline) {
-                        attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
-                    }
-                    if let link = run.attributes.link { attributes[.link] = link }
-                }
+                let attributes = Self.attributes(
+                    kind: run.kind ?? .paragraph,
+                    style: style,
+                    isFirst: blockIndex == 0,
+                    marks: run.attributes.marks,
+                    link: run.attributes.link
+                )
                 result.append(NSAttributedString(string: run.text, attributes: attributes))
                 if run.text == "\n" { blockIndex += 1 }
             }
             return result
+        }
+
+        /// The attributes text of `kind` with `marks` and `link` has in a view: the kind tag, the
+        /// paragraph style, font, colors, and the marks the platform draws itself. Code has no
+        /// marks and no link. `isFirst` is whether the block is the first: it has no space above
+        /// it.
+        static func attributes(
+            kind: RichText.Kind,
+            style: RichAttributedStyle,
+            isFirst: Bool,
+            marks: Marks = [],
+            link: URL? = nil
+        ) -> [NSAttributedString.Key: Any] {
+            var attributes: [NSAttributedString.Key: Any] = [
+                blockKey: tag(kind),
+                .paragraphStyle: paragraphStyle(kind, style: style, isFirst: isFirst),
+            ]
+            switch kind {
+            case .paragraph:
+                attributes[.font] = font(marks, base: style.font)
+                attributes[.foregroundColor] = style.color
+            case .quote:
+                attributes[.font] = font(marks, base: style.font)
+                attributes[.foregroundColor] = style.quoteColor
+            case .code:
+                attributes[.font] = font(.mono, base: style.font)
+                attributes[.foregroundColor] = style.color
+            }
+            if case .code = kind {
+                return attributes
+            }
+            if marks.contains(.strike) {
+                attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
+            }
+            if marks.contains(.underline) {
+                attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+            }
+            if let link { attributes[.link] = link }
+            return attributes
         }
 
         private static func paragraphStyle(
@@ -138,15 +162,47 @@
             isFirst: Bool
         ) -> NSParagraphStyle {
             let paragraph = NSMutableParagraphStyle()
-            paragraph.paragraphSpacingBefore = isFirst ? 0 : (style.font.pointSize * 0.6).rounded()
-            if kind == .quote {
-                paragraph.firstLineHeadIndent = 14
-                paragraph.headIndent = 14
+            switch kind {
+            case .paragraph:
+                paragraph.paragraphSpacingBefore = isFirst ? 0 : style.blockSpacing
+            case .quote:
+                paragraph.paragraphSpacingBefore = isFirst ? 0 : style.blockSpacing
+                paragraph.firstLineHeadIndent = style.quoteIndent
+                paragraph.headIndent = style.quoteIndent
+            case .code:
+                // The plate behind code (`RichBlockFragment`) reaches `codePadding` beyond the
+                // lines on every side: the space above and below is kept for it, and the lines
+                // are set in from both edges.
+                let padding = style.codePadding
+                paragraph.paragraphSpacingBefore = (isFirst ? 0 : style.blockSpacing) + padding
+                paragraph.paragraphSpacing = padding
+                paragraph.firstLineHeadIndent = padding
+                paragraph.headIndent = padding
+                paragraph.tailIndent = -padding
             }
             return paragraph
         }
 
         // MARK: Attributes to text
+
+        /// The marks the attributes of a piece of text carry: the font's traits beyond those of
+        /// the base font, strikethrough and underline.
+        static func marks(
+            of attributes: [NSAttributedString.Key: Any],
+            style: RichAttributedStyle
+        ) -> Marks {
+            var marks: Marks = []
+            if let font = attributes[.font] as? UIFont {
+                marks = Self.marks(of: font, base: style.font)
+            }
+            if let value = attributes[.strikethroughStyle] as? Int, value != 0 {
+                marks.insert(.strike)
+            }
+            if let value = attributes[.underlineStyle] as? Int, value != 0 {
+                marks.insert(.underline)
+            }
+            return marks
+        }
 
         /// The text a view holds, read back: runs from the attributes, blocks from the kind
         /// attribute and the newlines. Text without a kind — pasted from elsewhere — is in the
@@ -159,16 +215,7 @@
             let whole = NSRange(location: 0, length: text.length)
             text.enumerateAttributes(in: whole, options: []) { attributes, range, _ in
                 let piece = text.attributedSubstring(from: range).string
-                var marks: Marks = []
-                if let font = attributes[.font] as? UIFont {
-                    marks = Self.marks(of: font, base: style.font)
-                }
-                if let value = attributes[.strikethroughStyle] as? Int, value != 0 {
-                    marks.insert(.strike)
-                }
-                if let value = attributes[.underlineStyle] as? Int, value != 0 {
-                    marks.insert(.underline)
-                }
+                let marks = Self.marks(of: attributes, style: style)
                 var link: URL?
                 if let url = attributes[.link] as? URL {
                     link = url

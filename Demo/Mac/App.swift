@@ -2,9 +2,11 @@
 // slides in over it — with the standard menus around the screen's commands: the
 // `LayoutDemoMac` scheme of `Demo.xcodeproj`.
 import AppShell
+import AppKit
 import AppShellAppKit
 import Foundation
 import Nodes
+import NodesAppKit
 
 @main
 struct LayoutDemo: Application {
@@ -35,6 +37,13 @@ struct LayoutDemo: Application {
     }
 
     func started(_ shell: Shell) {
+        // The rich text editor's formats, before the Window menu: they go to the editor while it
+        // has the keyboard and are disabled elsewhere.
+        if let main = NSApplication.shared.mainMenu {
+            let format = NSMenuItem(title: "Text Format", action: nil, keyEquivalent: "")
+            format.submenu = .richTextFormat
+            main.insertItem(format, at: max(main.numberOfItems - 1, 0))
+        }
         if ProcessInfo.processInfo.environment["TOAST_PROBE"] != nil {
             ToastProbe.install(on: shell)
         }
