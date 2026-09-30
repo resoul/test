@@ -14,7 +14,8 @@ import ThemeCore
 /// bar above the keyboard),
 /// `EDITOR_PROBE=1` the multi-line editor (`EditorProbe`), `SELECT_PROBE=1` the option
 /// menu (`SelectProbe`), `TOAST_PROBE=1` toasts (`ToastProbe`), `RICH_PROBE=1` styled text and links
-/// (`RichProbe`), `RICH_EDITOR_PROBE=1` the rich text editor (`RichEditorProbe`).
+/// (`RichProbe`), `RICH_EDITOR_PROBE=1` the rich text editor (`RichEditorProbe`), `VIDEO_PROBE=1` a video
+/// (`VideoProbe`).
 @MainActor
 enum ContainerProbe {
     static func content(_ environment: [String: String]) -> (any SceneContent)? {
@@ -31,6 +32,12 @@ enum ContainerProbe {
             return RichEditorProbe.content(
                 quote: environment["RICH_EDITOR_QUOTE"] != nil,
                 sample: environment["RICH_EDITOR_SAMPLE"] != nil
+            )
+        }
+        if environment["VIDEO_PROBE"] != nil {
+            return VideoProbe.content(
+                fill: environment["VIDEO_FILL"] != nil,
+                autoplay: environment["VIDEO_AUTOPLAY"] != nil
             )
         }
         if environment["EDITOR_PROBE"] != nil {
