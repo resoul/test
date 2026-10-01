@@ -343,3 +343,12 @@
 | `Application.main`, `ShellApplicationDelegate`, `ShellSceneDelegate` (UIKit); `Application.main`, `ShellApplicationDelegate`, `NSMenu(standardAround:)` (AppKit) | точка входа: сцены UIKit с отключением отдельно от уничтожения; окна и стандартные меню Mac | [12](12-app-layer.md) (A2) |
 | `EmbeddedNode`, `EmbeddedItem`, `NodeHost.embeddedItems`/`keyboardInset`/`reveal`, `Node.keyboardInset`, `Scroll.keyboardDismissal`, `KeyboardDismissal`; `TextField`, `ReturnKey`, `TextContent` (NodesRender); `EmbeddedHolder`, `NodeView.placeEmbeddedViews`/`embeddedView(of:)`/`revealEditingField`, `FieldView`, `KeyboardFollowing`, `NodeView.keyboardProbe` (UIKit); `Demo` `FormNode`, `DemoRoute.form` | вложенный системный вид, поле ввода, клавиатура (прототип) | [13](13-controls.md) (прототип C2–C4); дефекты 208, 210 |
 | `Control`, `ControlState`, `ToolTipItem`, `Node.toolTip`/`hoverChanged`/`isInteractive`/`shownToolTip`, `NodeHost.pointerMoved`/`toolTip(at:)`/`toolTipItems`/`canPerform(_:from:)`/`perform(_:from:)`; `Button` на `Control`, `Button(command:)` (NodesRender); `NodeNSView.mouseMoved`/`updateToolTips`, `NSViewToolTipOwner` (AppKit); `NodeView.followPointer`, `PointerTracker` (UIKit); `Demo` `FollowBadge` | общий контрол, наведение, подсказки | [13](13-controls.md) (C0) |
+
+## `Sources/StorageCore`, `Sources/StorageFoundation`
+
+| Код | Что | Основание |
+|---|---|---|
+| `PreferenceKey`, `PreferenceValue`, `PreferenceError` | типизированный ключ настройки: имя, умолчание, преобразование в значение, пригодное для property list; ошибка вместо подстановки умолчания | [14](14-storage-and-network.md#4-preferences-типизированные-userdefaults) |
+| `PreferenceStore` (`value(for:)`, `set`, `remove`, `values(for:)`) | общий типизированный слой над тремя сырыми операциями; наблюдение без повторов, умолчание поверх пустого — не изменение | [14](14-storage-and-network.md#s1-результаты-на-2026-10-01-preferences) |
+| `MemoryPreferences` | хранилище в памяти для тестов и превью | [14](14-storage-and-network.md#11-этапы-реализации) |
+| `UserDefaultsPreferences` | хранилище в `UserDefaults`: suite, namespace, подписка на уведомление любого экземпляра домена | [14](14-storage-and-network.md#s1-результаты-на-2026-10-01-preferences) |

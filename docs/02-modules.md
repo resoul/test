@@ -30,6 +30,9 @@ ThemeCore       тема: цвета (Color), типографика, радиу
 StateCore       синхронное состояние на MainActor с отслеживанием чтений: State, Computed,
                 Observer, Effect, StateTransaction (см. 08). Только стандартная библиотека.
 StateAsyncRay   адаптер AsyncRay ↔ StateCore (AsyncRay 1.0.0)
+StorageCore     настройки: типизированные ключи, протокол хранилища, хранилище в памяти (см. 14).
+                Только Foundation.
+StorageFoundation  настройки в UserDefaults (см. 14)
 AppShell        слой приложения: Screen, NodeScreen, Stack (см. 12). Без UIKit/AppKit.
 AppShellUIKit   стек в UINavigationController, ControllerScreen(UIViewController)
 AppShellAppKit  свой стек на NSViewController, ControllerScreen(NSViewController)

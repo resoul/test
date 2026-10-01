@@ -8,6 +8,8 @@ import PackageDescription
 // dependency tracking; StateAsyncRay connects it to AsyncRay streams, the package's dependency.
 // RichTextCore is styled text as a value — blocks, runs, marks — with the operations an editor
 // needs; it depends on Foundation only, so it builds on Linux too.
+// StorageCore is preferences as typed keys over a store protocol, with an in-memory store;
+// StorageFoundation keeps them in UserDefaults. Both depend on Foundation only.
 // Nodes is the tree of nodes laid out by LayoutCore and driven by StateCore; NodesRender draws
 // it into CALayers (Apple platforms), NodesUIKit and NodesAppKit put it into views. ThemeCore
 // holds the theme — colors, text, radii, motion, spacing and breakpoints — for nodes and for
@@ -25,6 +27,8 @@ let package = Package(
         .library(name: "StateCore", targets: ["StateCore"]),
         .library(name: "StateAsyncRay", targets: ["StateAsyncRay"]),
         .library(name: "RichTextCore", targets: ["RichTextCore"]),
+        .library(name: "StorageCore", targets: ["StorageCore"]),
+        .library(name: "StorageFoundation", targets: ["StorageFoundation"]),
         .library(name: "Nodes", targets: ["Nodes"]),
         .library(name: "NodesRender", targets: ["NodesRender"]),
         .library(name: "NodesUIKit", targets: ["NodesUIKit"]),
@@ -43,6 +47,8 @@ let package = Package(
         .target(name: "LayoutAppKit", dependencies: ["LayoutCore", "ThemeCore"]),
         .target(name: "StateCore"),
         .target(name: "RichTextCore"),
+        .target(name: "StorageCore"),
+        .target(name: "StorageFoundation", dependencies: ["StorageCore"]),
         .target(name: "Nodes", dependencies: ["LayoutCore", "StateCore", "ThemeCore"]),
         .target(
             name: "NodesRender",
@@ -75,6 +81,11 @@ let package = Package(
         .testTarget(name: "ThemeCoreTests", dependencies: ["ThemeCore", "LayoutCore"]),
         .testTarget(name: "StateCoreTests", dependencies: ["StateCore"]),
         .testTarget(name: "RichTextCoreTests", dependencies: ["RichTextCore"]),
+        .testTarget(name: "StorageCoreTests", dependencies: ["StorageCore"]),
+        .testTarget(
+            name: "StorageFoundationTests",
+            dependencies: ["StorageFoundation", "StorageCore"]
+        ),
         .testTarget(
             name: "NodesTests",
             dependencies: ["Nodes", "LayoutCore", "StateCore", "ThemeCore"]
