@@ -109,6 +109,10 @@
         case firstFrame
         case playback(VideoPlaybackState)
         case failed(VideoFailure)
+        /// The sound's route went away — headphones taken out, a speaker lost — and the session
+        /// paused itself. A route that is gone does not come back by itself, so the video
+        /// stays paused until the app asks again.
+        case stoppedByRoute
     }
 
     /// One run of playback of one source: what plays it, made when playback is first asked

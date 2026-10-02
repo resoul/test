@@ -42,7 +42,8 @@ enum ContainerProbe {
         if environment["VIDEO_PROBE"] != nil {
             return VideoProbe.content(
                 fill: environment["VIDEO_FILL"] != nil,
-                autoplay: environment["VIDEO_AUTOPLAY"] != nil
+                autoplay: environment["VIDEO_AUTOPLAY"] != nil,
+                preload: environment["VIDEO_PRELOAD"]
             )
         }
         if environment["EDITOR_PROBE"] != nil {
