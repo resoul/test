@@ -352,3 +352,9 @@
 | `PreferenceStore` (`value(for:)`, `set`, `remove`, `values(for:)`) | общий типизированный слой над тремя сырыми операциями; наблюдение без повторов, умолчание поверх пустого — не изменение | [14](14-storage-and-network.md#s1-результаты-на-2026-10-01-preferences) |
 | `MemoryPreferences` | хранилище в памяти для тестов и превью | [14](14-storage-and-network.md#11-этапы-реализации) |
 | `UserDefaultsPreferences` | хранилище в `UserDefaults`: suite, namespace, подписка на уведомление любого экземпляра домена | [14](14-storage-and-network.md#s1-результаты-на-2026-10-01-preferences) |
+| `FilePath` | относительный путь только вниз: без `..`, абсолютных, пустых и точечных имён | [14](14-storage-and-network.md#5-files-управляемая-работа-с-filemanager), S2 |
+| `FileError`, `FileError.init(_:path:)` (StorageFoundation) | ошибки файлов; POSIX внутри Cocoa-ошибки разбирается первым | [14](14-storage-and-network.md#5-files-управляемая-работа-с-filemanager) |
+| `FileStore`, `MemoryFileStore` | протокол файлового хранилища и реализация в памяти с теми же правилами | [14](14-storage-and-network.md#5-files-управляемая-работа-с-filemanager) |
+| `DiskFileStore` (`write`, `copy`, `importFile`, `url(for:)`, `removeLeftoverTemporaryFiles`) | корень, временный файл + замена, копирование кусками, отказ идти по ссылкам | [14](14-storage-and-network.md#5-files-управляемая-работа-с-filemanager) |
+| `FileWorker`, `Cancellation` (в `DiskFileStore.swift`) | блокирующая работа на последовательной очереди; флаг отмены между кусками | [14](14-storage-and-network.md#5-files-управляемая-работа-с-filemanager) (iOS 16 — без исполнителя actor) |
+
