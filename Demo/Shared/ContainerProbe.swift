@@ -15,7 +15,7 @@ import ThemeCore
 /// `EDITOR_PROBE=1` the multi-line editor (`EditorProbe`), `SELECT_PROBE=1` the option
 /// menu (`SelectProbe`), `TOAST_PROBE=1` toasts (`ToastProbe`), `RICH_PROBE=1` styled text and links
 /// (`RichProbe`), `RICH_EDITOR_PROBE=1` the rich text editor (`RichEditorProbe`), `VIDEO_PROBE=1` a video
-/// (`VideoProbe`).
+/// (`VideoProbe`), `SYNC_PROBE=1` a list kept in step with a server (`SyncProbe`).
 @MainActor
 enum ContainerProbe {
     static func content(_ environment: [String: String]) -> (any SceneContent)? {
@@ -34,6 +34,7 @@ enum ContainerProbe {
                 sample: environment["RICH_EDITOR_SAMPLE"] != nil
             )
         }
+        if environment["SYNC_PROBE"] != nil { return SyncProbe.content() }
         if environment["VIDEO_PROBE"] != nil {
             return VideoProbe.content(
                 fill: environment["VIDEO_FILL"] != nil,

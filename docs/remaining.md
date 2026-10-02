@@ -12,7 +12,7 @@
 | Линия | Документ | Сделано | Дальше |
 |---|---|---|---|
 | Контролы и rich text | [13](13-controls.md) | C0–C7.4 | выбор из нескольких ссылок на пульте TV |
-| Хранение и сеть | [14](14-storage-and-network.md) | S0 (прототип GRDB, HTTP, WebSocket), S1 (Preferences), S2 (`FileStore`), S3 (кэши), S4 (`StorageGRDB`), S5 (`HTTPClient`), S6 (`WebSocketClient`) |   S7 демо, S8 `ImageCache` |
+| Хранение и сеть | [14](14-storage-and-network.md) | S0 (прототип GRDB, HTTP, WebSocket), S1 (Preferences), S2 (`FileStore`), S3 (кэши), S4 (`StorageGRDB`), S5 (`HTTPClient`), S6 (`WebSocketClient`), S7 (`DataAsyncRay`, `SyncDemo`) |   S7 демо, S8 `ImageCache` |
 | AsyncRay 1.1.0 (потоки с ошибками) | [14](14-storage-and-network.md#15-план-asyncray-110-потоки-с-ошибками), раздел 15 | — | R0–R4; нужен к S7 |
 | Разрешения системы | [18](18-permissions.md) | — (только план) | P0 матрица и проба, P1 `PermissionCore`, P2 поставщики, P3 остальные виды, P4 наблюдение и демо, P5 каталог CLI |
 | Проект и CLI | [17](17-project-cli.md) | — | см. документ |
@@ -29,7 +29,7 @@
 ## Не сделано (хранение и сеть, [14](14-storage-and-network.md))
 
 - **От S5 и S6 осталось:** скачивание больших файлов в `FileStore`, отправка файла и потока, `baseURL` (раздел 14, S5); привязка WebSocket к жизненному циклу приложения (S6).
-- **S7 демо-repository, S8 перенос общих частей в `ImageCache`.**
+- **S8 перенос общих частей в `ImageCache`.** От S7 остались UI-тесты Mac и tvOS для `SyncProbe` (iOS проверен), проверка на `DiskFileStore` и файловой базе и проверка через настоящие сокеты.
 - **AsyncRay 1.1.0** (`AsyncThrowingRay`, раздел 15) — до S7; реализация storage и HTTP на `async throws` может идти без него.
 
 ## Не сделано (разрешения системы, [18](18-permissions.md))
