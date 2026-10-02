@@ -112,6 +112,29 @@
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public var prepareTimeout: Duration = .seconds(30)
 
+        /// How much is read before playback is asked for; ``VideoPreload/none`` by default, which
+        /// reads nothing. See ``VideoPreload`` for what the other modes promise.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: setting it back to
+        /// `.none` lets go of what was prepared.
+        public var preload = VideoPreload.none {
+            didSet { if preload != oldValue { reconcile() } }
+        }
+
+        /// The budget that limits how many videos are prepared or playing; the shared one unless the
+        /// app gives its own.
+        ///
+        /// Ownership: the video keeps the budget. Isolation: MainActor. Errors: none.
+        /// Cancellation: not applicable.
+        public var preparationBudget = VideoPreparationBudget.shared {
+            didSet {
+                guard preparationBudget !== oldValue else { return }
+
+                oldValue.release(self)
+                reconcile()
+            }
+        }
+
         // MARK: State
 
         /// How far the video is toward its first picture. Reading it under tracking depends on
@@ -183,10 +206,46 @@
             guard source != nil, loadPhase.failure != nil else { return }
 
             releaseSession()
+            preparationFailed = false
             loadPhaseState.value = .idle
             wantsToPlay = true
             reconcile()
             refreshAccessibility()
+        }
+
+        /// Moves the playhead to `seconds`, cut to the video's length and not below the start. Playing
+        /// goes on from there, and a paused video stays paused at the new place; after the end,
+        /// `play()` plays from where the playhead was put, not from the beginning.
+        ///
+        /// Before the video has been read — or while its session is gone — the place is kept and
+        /// the playhead goes there when the video is next read. A live video has no places:
+        /// nothing happens. Nothing happens without a source or after a failure.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public func seek(toSeconds seconds: Double) {
+            guard source != nil, loadPhase.failure == nil else { return }
+
+            var target = max(seconds, 0)
+            switch duration {
+            case .live: return
+            case .seconds(let length): target = min(target, length)
+            case .unknown: break
+            }
+            if let session, case .seconds = duration {
+                resumeSeconds = nil
+                session.seek(toSeconds: target)
+            } else {
+                resumeSeconds = target
+            }
+        }
+
+        /// Where the playhead is, in seconds, or `nil` when there is none — before the video is
+        /// read, for a live video. While the session is gone it is where the video will go on.
+        /// It is a reading of the moment, not observable: sample it when it is needed.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var currentSeconds: Double? {
+            session?.currentSeconds ?? resumeSeconds
         }
 
         // MARK: Node
@@ -210,8 +269,21 @@
             AVVideoSession(url: url, surface: surface, report: report)
         }
 
+        /// Reads a video's description; the platform's unless a test says otherwise.
+        var readMetadata: VideoMetadataReader = { url in
+            try await AVVideoSession.readMetadata(of: url)
+        }
+
         /// The session under way, if any.
         private(set) var session: (any VideoSession)?
+        /// The session was made to prepare the picture and nobody has asked to play it: no
+        /// spinner, no timeout, and a failure is not shown.
+        private var holdsPreparation = false
+        /// Preparation failed once; it is not tried again until the source changes or play asks.
+        private var preparationFailed = false
+        private var metadataTask: Task<Void, Never>?
+        private var metadataToken = 0
+        private var hasMetadata = false
         /// Tells the reports of the session in force from those of the ones before.
         private var sessionToken = 0
         private var timeoutTask: Task<Void, Never>?
@@ -294,33 +366,156 @@
         }
 
         /// Brings the session in line with what is asked and what is in sight: starts one when
-        /// playback is asked for and the video shows, pauses one while it does not, and lets
-        /// one go when the video is out of the tree or its tree does not show.
+        /// playback is asked for and the video shows, pauses one while it does not, lets one go
+        /// when the video is out of the tree or its tree does not show, and — if the video wants
+        /// preparing and the budget has room — prepares it before it is asked.
         private func reconcile() {
             guard let source else { return }
 
             if loadPhase.failure == nil, wantsToPlay, isRunnable {
-                if session == nil { startSession(for: source) }
+                preparationBudget.claimForPlay(self)
+                cancelMetadata()
+                if session == nil {
+                    startSession(for: source, preparing: false)
+                } else if holdsPreparation {
+                    becomeAsked()
+                }
                 session?.play()
             } else if let session {
                 session.pause()
-                if !isMounted || !isShown {
+                let keepsPreparing = holdsPreparation && wantsPreparedPicture
+                if !isMounted || !isShown || (holdsPreparation && !keepsPreparing) {
                     releaseSession()
                     if loadPhase.failure == nil { loadPhaseState.value = .idle }
+                } else {
+                    // A video that is not playing may be let go for one that is.
+                    preparationBudget.setActive(self, wantsToPlay)
+                }
+            } else {
+                prepareIfWanted(source)
+            }
+        }
+
+        /// Whether the picture should be made ready before play: asked for, and the video is in the
+        /// tree and showing.
+        private var wantsPreparedPicture: Bool {
+            preload == .automatic && loadPhase.failure == nil && isMounted && isShown
+        }
+
+        private func prepareIfWanted(_ source: VideoSource) {
+            guard loadPhase.failure == nil, isMounted, isShown, !preparationFailed else {
+                cancelMetadata()
+                preparationBudget.release(self)
+                return
+            }
+
+            switch preload {
+            case .none:
+                cancelMetadata()
+            case .metadata:
+                guard !hasMetadata, metadataTask == nil else { return }
+
+                if preparationBudget.claimForPreparation(self) {
+                    startMetadata(for: source)
+                } else {
+                    preparationBudget.wait(self)
+                }
+            case .automatic:
+                if preparationBudget.claimForPreparation(self) {
+                    startSession(for: source, preparing: true)
+                } else {
+                    preparationBudget.wait(self)
                 }
             }
         }
 
-        private func startSession(for source: VideoSource) {
+        private func startMetadata(for source: VideoSource) {
             guard case .url(let url) = source, source.isSupported else {
-                fail(.unsupportedSource)
+                preparationBudget.release(self)
+                return
+            }
+
+            metadataToken += 1
+            let token = metadataToken
+            let read = readMetadata
+            metadataTask = Task { [weak self] in
+                let result = try? await read(url)
+                guard !Task.isCancelled else { return }
+
+                self?.metadataFinished(result, token: token)
+            }
+        }
+
+        private func metadataFinished(_ result: VideoMetadata?, token: Int) {
+            guard token == metadataToken else { return }
+
+            metadataTask = nil
+            preparationBudget.release(self)
+            guard let result else {
+                // Without a description the video is still fine to play; it is just not known yet.
+                preparationFailed = true
+                return
+            }
+
+            hasMetadata = true
+            if result.size != nil, naturalSizeState.value == nil {
+                naturalSizeState.value = result.size
+                if aspectRatio == nil { setNeedsLayout() }
+            }
+            if case .unknown = durationState.value { durationState.value = result.duration }
+        }
+
+        private func cancelMetadata() {
+            metadataToken += 1
+            guard metadataTask != nil else { return }
+
+            metadataTask?.cancel()
+            metadataTask = nil
+            preparationBudget.release(self)
+        }
+
+        /// Play was asked for a video that was only being prepared.
+        private func becomeAsked() {
+            holdsPreparation = false
+            guard !shownFrameState.value else { return }
+
+            loadPhaseState.value = .loading
+            setNeedsLayout()
+            startTimeout(token: sessionToken)
+        }
+
+        /// The budget took the place of this video's preparation for one that is to play.
+        func preparationWasTaken() {
+            guard session != nil, !wantsToPlay else { return }
+
+            releaseSession()
+            if loadPhase.failure == nil { loadPhaseState.value = .idle }
+            preparationBudget.wait(self)
+        }
+
+        /// The budget has a free place for a video that waited for one.
+        func preparationRoomAppeared() {
+            reconcile()
+        }
+
+        private func startSession(for source: VideoSource, preparing: Bool) {
+            guard case .url(let url) = source, source.isSupported else {
+                if preparing {
+                    preparationFailed = true
+                    preparationBudget.release(self)
+                } else {
+                    fail(.unsupportedSource)
+                }
                 return
             }
 
             sessionToken += 1
             let token = sessionToken
-            loadPhaseState.value = .loading
-            setNeedsLayout()
+            holdsPreparation = preparing
+            if !preparing {
+                loadPhaseState.value = .loading
+                setNeedsLayout()
+            }
             let session = makeSession(url, surface) { [weak self] event in
                 self?.handle(event, token: token)
             }
@@ -329,7 +524,7 @@
             session.setVolume(min(max(volume, 0), 1))
             session.setLooping(isLooping)
             applyContentMode()
-            startTimeout(token: token)
+            if !preparing { startTimeout(token: token) }
         }
 
         private func startTimeout(token: Int) {
@@ -359,26 +554,53 @@
                 if size != nil { naturalSizeState.value = size }
                 durationState.value = duration
                 if ratioChanged { setNeedsLayout() }
-                if let resume = resumeSeconds, case .seconds = duration {
+                if let resume = resumeSeconds, case .seconds(let length) = duration {
                     resumeSeconds = nil
-                    session?.seek(toSeconds: resume)
+                    session?.seek(toSeconds: min(resume, length))
                 }
             case .firstFrame:
                 guard !shownFrameState.value else { return }
 
                 timeoutTask?.cancel()
                 timeoutTask = nil
-                shownFrameState.value = true
-                loadPhaseState.value = .ready
-                setNeedsLayout()
+                // The placeholder goes out with the theme's move for a change of what shows, so
+                // that there is no flash between the poster and the picture; where motion is
+                // reduced the move is `nil` and the change shows at once.
+                let animation = revealAnimation
+                lastRevealAnimation = .some(animation)
+                withAnimation(animation) {
+                    shownFrameState.value = true
+                    loadPhaseState.value = .ready
+                    setNeedsLayout()
+                }
             case .playback(let state):
                 playbackState.value = state
                 if state == .ended { wantsToPlay = false }
+                preparationBudget.setActive(self, wantsToPlay)
                 refreshAccessibility()
             case .failed(let reason):
-                fail(reason)
+                if holdsPreparation, !wantsToPlay {
+                    // Nobody asked for this video: a failure of the preparation is not shown. It
+                    // shows, if it is real, when play is asked for.
+                    preparationFailed = true
+                    releaseSession()
+                    if loadPhase.failure == nil { loadPhaseState.value = .idle }
+                } else {
+                    fail(reason)
+                }
+            case .stoppedByRoute:
+                wantsToPlay = false
+                refreshAccessibility()
             }
         }
+
+        /// How the placeholder leaves: the theme's move for a change of what shows, or none where
+        /// motion is reduced. Read at the moment the picture comes.
+        var revealAnimation: Animation? { theme.animation(.standard) }
+
+        /// The move the placeholder last left with: `nil` before any picture came, `.some(nil)`
+        /// for a picture that came with no move. For tests, which cannot watch a move.
+        private(set) var lastRevealAnimation: Animation??
 
         private func fail(_ reason: VideoFailure) {
             releaseSession()
@@ -404,6 +626,8 @@
             }
             session.stop()
             self.session = nil
+            holdsPreparation = false
+            preparationBudget.release(self)
             sessionToken += 1
             playbackState.value = .paused
             if shownFrameState.value {
@@ -415,6 +639,9 @@
 
         private func sourceChanged() {
             releaseSession()
+            cancelMetadata()
+            hasMetadata = false
+            preparationFailed = false
             resumeSeconds = nil
             naturalSizeState.value = nil
             durationState.value = .unknown

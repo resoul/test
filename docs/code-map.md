@@ -412,3 +412,14 @@
 | `Scripts/permission-sdk-probe.py` | матрица видов по SDK четырёх платформ из ответов компилятора; ключи в заголовках | [18 §11](18-permissions.md#11-p0-результаты-на-2026-10-02), P0 |
 | `PermissionProbe` (`PERMISSION_PROBE=1`), `iOSUITests/PermissionProbeTests` | сырые статусы системы, запрос по кнопке, журнал `PERMISSIONPROBE` | [18 §11](18-permissions.md#11-p0-результаты-на-2026-10-02), P0 |
 
+## `Sources/NodesRender` (Video, V5)
+
+| Код | Что | Основание |
+|---|---|---|
+| `Video.seek(toSeconds:)`, `Video.currentSeconds`, `resumeSeconds` | место запоминается без сессии и применяется при чтении; обрезка длиной; прямая трансляция без мест | [16](16-video.md#14-v5-результаты-на-2026-10-02) |
+| `Video.revealAnimation`, `lastRevealAnimation`, `.firstFrame` в `handle` | заглушка уходит движением темы; при Reduce Motion — сразу | [16](16-video.md#14-v5-результаты-на-2026-10-02) |
+| `AVVideoSession.interruption`, `routeChanged`, `isInterrupted`, `VideoSessionEvent.stoppedByRoute` | пауза на звонок с возобновлением по `shouldResume`; уход маршрута сбрасывает желание играть | [16](16-video.md#14-v5-результаты-на-2026-10-02) |
+| `VideoPreload`, `Video.preload`, `prepareIfWanted`, `startMetadata`, `holdsPreparation`, `preparationFailed` | подготовка без спиннера и таймаута, тихая неудача, Play на подготовленном видео | [16 §4.1](16-video.md#41-placeholder-предзагрузка-и-первый-кадр--согласованное-уточнение), V5 |
+| `VideoPreparationBudget` (`claimForPlay`, `claimForPreparation`, `setActive`, `release`, `offer`) | места на сессии: Play вытесняет самую давнюю подготовку, играющие не вытесняются, подготовка места не отбирает | [16](16-video.md#14-v5-результаты-на-2026-10-02) |
+| `AVVideoSession.readMetadata(of:)` | размер и длина файла без плеера | [16](16-video.md#14-v5-результаты-на-2026-10-02) |
+

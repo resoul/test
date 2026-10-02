@@ -63,4 +63,26 @@ final class VideoTests: XCTestCase {
         XCTAssertLessThanOrEqual(turned.maxX, width + 0.5, "inside the screen")
         XCTAssertGreaterThan(turned.width, width * 0.5, "it uses the room")
     }
+
+    /// With `preload` the first picture is ready before play is asked for: the status line says the
+    /// picture shows while the video is still paused, and play then goes to the end.
+    @MainActor
+    func testAPreparedVideoShowsItsPictureBeforePlayIsAskedFor() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["VIDEO_PROBE"] = "1"
+        app.launchEnvironment["VIDEO_PRELOAD"] = "automatic"
+        app.launch()
+
+        XCTAssertTrue(
+            app.staticTexts["Video: ready paused frame:true"].waitForExistence(timeout: 60),
+            "the picture is ready with no Play; texts: "
+                + "\(app.staticTexts.allElementsBoundByIndex.map { $0.label })"
+        )
+        app.buttons["Play"].tap()
+        XCTAssertTrue(
+            app.staticTexts["Video: ready ended frame:true"].waitForExistence(timeout: 30),
+            "texts: \(app.staticTexts.allElementsBoundByIndex.map { $0.label })"
+        )
+    }
 }

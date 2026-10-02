@@ -58,6 +58,10 @@
         private var isLooping = false
         private var lastPlayback: VideoPlaybackState = .paused
         private var wantsToPlay = false
+        /// The system has the sound, because of a call or another app: the player is paused and
+        /// is not to be played until the system gives it back.
+        private var isInterrupted = false
+        private var audioObservers: [any NSObjectProtocol] = []
 
         init(
             url: URL,
@@ -94,7 +98,74 @@
             ) { [weak self] _ in
                 Task { @MainActor in self?.reachedEnd() }
             }
+            observeAudioSession()
         }
+
+        /// The audio session's own announcements, where the platform has one: a call or another
+        /// app takes the sound away, or the route it was going to is gone. The session pauses and
+        /// does not touch the app's audio session — its category and activation stay the app's.
+        private func observeAudioSession() {
+            #if canImport(UIKit)
+                let center = NotificationCenter.default
+                audioObservers.append(
+                    center.addObserver(
+                        forName: AVAudioSession.interruptionNotification,
+                        object: nil,
+                        queue: .main
+                    ) { [weak self] note in
+                        let type = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+                        let options = note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt
+                        Task { @MainActor in self?.interruption(type: type, options: options) }
+                    }
+                )
+                audioObservers.append(
+                    center.addObserver(
+                        forName: AVAudioSession.routeChangeNotification,
+                        object: nil,
+                        queue: .main
+                    ) { [weak self] note in
+                        let reason = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+                        Task { @MainActor in self?.routeChanged(reason: reason) }
+                    }
+                )
+            #endif
+        }
+
+        #if canImport(UIKit)
+            func interruption(type: UInt?, options: UInt?) {
+                guard !isStopped, let type,
+                    let kind = AVAudioSession.InterruptionType(rawValue: type)
+                else { return }
+
+                switch kind {
+                case .began:
+                    isInterrupted = true
+                    // Paused for the system: the wish to play is kept, so that the end of the
+                    // interruption can pick it up.
+                    player.pause()
+                case .ended:
+                    isInterrupted = false
+                    let canResume =
+                        AVAudioSession.InterruptionOptions(rawValue: options ?? 0)
+                        .contains(.shouldResume)
+                    if canResume, wantsToPlay { player.play() }
+                @unknown default:
+                    break
+                }
+            }
+
+            func routeChanged(reason: UInt?) {
+                guard !isStopped, let reason,
+                    AVAudioSession.RouteChangeReason(rawValue: reason) == .oldDeviceUnavailable
+                else { return }
+
+                // What was playing into the route that left would now play out loud: pause and let
+                // the person decide.
+                wantsToPlay = false
+                player.pause()
+                report(.stoppedByRoute)
+            }
+        #endif
 
         var currentSeconds: Double? {
             let time = player.currentTime()
@@ -108,6 +179,9 @@
             if lastPlayback == .ended {
                 player.seek(to: .zero)
             }
+            // The system has the sound: the wish is kept and the end of the interruption plays.
+            if isInterrupted { return }
+
             player.play()
         }
 
@@ -117,6 +191,12 @@
         }
 
         func seek(toSeconds seconds: Double) {
+            // A playhead put somewhere after the end is no longer at the end: play goes on from
+            // there, not from the start.
+            if lastPlayback == .ended {
+                lastPlayback = .paused
+                report(.playback(.paused))
+            }
             player.seek(
                 to: CMTime(seconds: max(seconds, 0), preferredTimescale: 600),
                 toleranceBefore: .zero,
@@ -138,6 +218,8 @@
             observations = []
             if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
             endObserver = nil
+            for observer in audioObservers { NotificationCenter.default.removeObserver(observer) }
+            audioObservers = []
             player.pause()
             player.replaceCurrentItem(with: nil)
             if surface.player === player { surface.player = nil }

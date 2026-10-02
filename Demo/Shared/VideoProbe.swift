@@ -11,11 +11,11 @@ import ThemeCore
 /// writes itself, with a poster over it until the first picture and buttons that drive it, a
 /// line that says what the video is doing, and a second video that cannot be opened, with the
 /// message of its failure and its Retry button. `VIDEO_FILL=1` starts the first in `fill`,
-/// `VIDEO_AUTOPLAY=1` with `autoplay`.
+/// `VIDEO_AUTOPLAY=1` with `autoplay`, `VIDEO_PRELOAD=automatic` (or `metadata`) with that preload.
 @MainActor
 enum VideoProbe {
-    static func content(fill: Bool, autoplay: Bool) -> any SceneContent {
-        NodeScreen(Page(fill: fill, autoplay: autoplay), title: "Video")
+    static func content(fill: Bool, autoplay: Bool, preload: String? = nil) -> any SceneContent {
+        NodeScreen(Page(fill: fill, autoplay: autoplay, preload: preload), title: "Video")
     }
 
     /// Two seconds of solid frames that change color, 160 by 90 pixels, written to the
@@ -80,16 +80,23 @@ enum VideoProbe {
         let muteButton: Button
         let fillButton: Button
         let brokenPlay: Button
+        let seekButton: Button
 
-        init(fill: Bool, autoplay: Bool) {
+        init(fill: Bool, autoplay: Bool, preload: String?) {
             playButton = Button("Play") {}
             pauseButton = Button("Pause") {}
             muteButton = Button("Unmute") {}
             fillButton = Button(fill ? "Fit" : "Fill") {}
             brokenPlay = Button("Play broken") {}
+            seekButton = Button("Seek 1s") {}
             super.init()
             video.contentMode = fill ? .fill : .fit
             video.autoplay = autoplay
+            switch preload {
+            case "automatic": video.preload = .automatic
+            case "metadata": video.preload = .metadata
+            default: break
+            }
             video.placeholder = poster
             poster.appearance.background = Color(red: 0.3, green: 0.3, blue: 0.5)
             video.accessibility.label = "Sample video"
@@ -109,6 +116,7 @@ enum VideoProbe {
                 fillButton.label.text = video.contentMode == .fit ? "Fill" : "Fit"
             }
             brokenPlay.onTap = { [weak self] in self?.broken.play() }
+            seekButton.onTap = { [weak self] in self?.video.seek(toSeconds: 1) }
             Task { [weak self] in
                 guard let url = try? await VideoProbe.writeVideo() else { return }
 
@@ -149,6 +157,7 @@ enum VideoProbe {
                     pauseButton
                     muteButton
                     fillButton
+                    seekButton
                 }
                 .gap(8)
                 status
