@@ -382,4 +382,10 @@
 | `HTTPAuthorizer`, `TokenAuthorizer` | токен только своему origin; одно общее обновление на одновременные 401; отметка подписи | [14](14-storage-and-network.md#8-http-тонкая-обвязка-urlsession) |
 | `HTTPTransport`, `URLSessionTransport`, `RedirectDelegate` | лимит размера по заголовку и по ходу чтения; редиректы с учётными данными только в своём origin; сопоставление ошибок URLSession | [14](14-storage-and-network.md#8-http-тонкая-обвязка-urlsession) |
 | `HTTPEvent`, `HTTPClient.diagnostics` | события без запроса, заголовков и тел | [14](14-storage-and-network.md#8-http-тонкая-обвязка-urlsession) |
+| `WebSocketClient` (`connect`, `close`, `send`, `nextEvent`, `states`) | клиент WebSocket: сам держит соединение, события по одному, исходящие по одному, без очереди на время разрыва | [14](14-storage-and-network.md#9-websocket), S6 |
+| `WebSocketClient.run`, `runSession`, `noteEnd`, `generation` | цикл подключения; причина окончания фиксируется до закрытия; поколения защищают от запоздавшего соединения | [14](14-storage-and-network.md#9-websocket) |
+| `WebSocketClient.deliver`, `OverflowPolicy` | очередь с пределом: остановить чтение или сообщить `resyncRequired` и пересоздать соединение | [14](14-storage-and-network.md#9-websocket) |
+| `ReconnectPolicy`, `Heartbeat`, `WebSocketConfiguration` | пауза с потолком и джиттером, сброс после устойчивого соединения, окончательные коды закрытия, ping | [14](14-storage-and-network.md#9-websocket) |
+| `WebSocketTransport`, `WebSocketConnection`, `URLSessionWebSocketTransport` | соединение открыто после ответа на ping; отказ апгрейда — со статусом HTTP | [14](14-storage-and-network.md#9-websocket) |
+| `NetworkEnvironment` | часы, ожидание и случайность, общие для HTTP и WebSocket | [14](14-storage-and-network.md#9-websocket) |
 
