@@ -401,3 +401,14 @@
 | `DemoSession` | сборка репозитория, клиентов, базы и сервера для приложения | [14](14-storage-and-network.md#12-проверки-и-приёмка) |
 | `SyncProbe` (`SYNC_PROBE=1`), `iOSUITests/SyncTests` | экран демо и его UI-тест на iOS | [14](14-storage-and-network.md#12-проверки-и-приёмка) |
 
+## `Sources/PermissionCore`, `Scripts/permission-sdk-probe.py`, `Demo/Shared/PermissionProbe.swift`
+
+| Код | Что | Основание |
+|---|---|---|
+| `PermissionKind` (`usageDescriptionKeys`), `PermissionStatus`, `PermissionError`, `PermissionProvider` | виды с уровнями, статус с формами доступа, ошибки, протокол поставщика | [18](18-permissions.md#5-контракт-направление-api), P1; ключи — [18 §11](18-permissions.md#11-p0-результаты-на-2026-10-02) |
+| `Permissions.request`, `takeTurn`/`endTurn`, `jobs` | окно только при `notDetermined`; запросы одного вида объединены; разные виды по одному; отмена вызывающего не отменяет окно | [18](18-permissions.md#5-контракт-направление-api) |
+| `Permissions.statusChanges`, `refresh`, `publish` | текущий статус, затем различающиеся; чтение заново, не журнал | [18](18-permissions.md#наблюдение) |
+| `InMemoryPermissionProvider` | подмена для тестов: статусы, ответ человека, удержание окна, счётчики | [18](18-permissions.md#9-проверки) |
+| `Scripts/permission-sdk-probe.py` | матрица видов по SDK четырёх платформ из ответов компилятора; ключи в заголовках | [18 §11](18-permissions.md#11-p0-результаты-на-2026-10-02), P0 |
+| `PermissionProbe` (`PERMISSION_PROBE=1`), `iOSUITests/PermissionProbeTests` | сырые статусы системы, запрос по кнопке, журнал `PERMISSIONPROBE` | [18 §11](18-permissions.md#11-p0-результаты-на-2026-10-02), P0 |
+
