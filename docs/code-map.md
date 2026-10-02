@@ -372,3 +372,14 @@
 | `DatabaseStore.observe(_:)` | снимки после каждого commit, ошибка — элемент потока | [14](14-storage-and-network.md#7-sql-grdb), [14 §14](14-storage-and-network.md#контракты-которые-необходимо-сохранить) |
 | `DatabaseStore.backup(to:)`, `restore(from:to:)`, `Blocking` | штатный backup SQLite; проверка копии и удаление остатков журнала при восстановлении | [14](14-storage-and-network.md#7-sql-grdb) |
 
+## `Sources/NetworkCore`, `Sources/NetworkFoundation`
+
+| Код | Что | Основание |
+|---|---|---|
+| `HTTPRequest`, `HTTPResponse`, `HTTPHeaders`, `HTTPMethod`, `HTTPOrigin`, `HTTPError`, `TransportFailure` | значения запроса и ответа; ошибки, которые различают транспорт, статус, декодирование и отмену | [14](14-storage-and-network.md#8-http-тонкая-обвязка-urlsession), S5 |
+| `HTTPClient.send` | ожидаемые статусы; повторы; обновление токена на 401; отмена в ожидании | [14](14-storage-and-network.md#8-http-тонкая-обвязка-urlsession) |
+| `RetryPolicy` (`allowsRepeating`, `delay`), `HTTPResponse.retryAfter` | повтор только идемпотентного или с `Idempotency-Key`; задержка с потолком и джиттером; `Retry-After` | [14](14-storage-and-network.md#8-http-тонкая-обвязка-urlsession) |
+| `HTTPAuthorizer`, `TokenAuthorizer` | токен только своему origin; одно общее обновление на одновременные 401; отметка подписи | [14](14-storage-and-network.md#8-http-тонкая-обвязка-urlsession) |
+| `HTTPTransport`, `URLSessionTransport`, `RedirectDelegate` | лимит размера по заголовку и по ходу чтения; редиректы с учётными данными только в своём origin; сопоставление ошибок URLSession | [14](14-storage-and-network.md#8-http-тонкая-обвязка-urlsession) |
+| `HTTPEvent`, `HTTPClient.diagnostics` | события без запроса, заголовков и тел | [14](14-storage-and-network.md#8-http-тонкая-обвязка-urlsession) |
+
