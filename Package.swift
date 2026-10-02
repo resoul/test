@@ -16,6 +16,8 @@ import PackageDescription
 // transport. DataAsyncRay turns the observations of the storage and network layers into AsyncRay
 // streams, whose subscriptions end the observation; SyncDemo is a worked example that joins
 // them — a repository over the database, HTTP and a socket, and a model for the screens.
+// PermissionCore is what the app knows about the system's permissions — kinds, status, errors, and
+// one order of asking — with a stand-in for tests; it depends on Foundation only.
 // Nodes is the tree of nodes laid out by LayoutCore and driven by StateCore; NodesRender draws
 // it into CALayers (Apple platforms), NodesUIKit and NodesAppKit put it into views. ThemeCore
 // holds the theme — colors, text, radii, motion, spacing and breakpoints — for nodes and for
@@ -38,6 +40,7 @@ let package = Package(
         .library(name: "StorageGRDB", targets: ["StorageGRDB"]),
         .library(name: "DataAsyncRay", targets: ["DataAsyncRay"]),
         .library(name: "SyncDemo", targets: ["SyncDemo"]),
+        .library(name: "PermissionCore", targets: ["PermissionCore"]),
         .library(name: "NetworkCore", targets: ["NetworkCore"]),
         .library(name: "NetworkFoundation", targets: ["NetworkFoundation"]),
         .library(name: "Nodes", targets: ["Nodes"]),
@@ -79,6 +82,7 @@ let package = Package(
                 .product(name: "GRDB", package: "GRDB.swift"),
             ]
         ),
+        .target(name: "PermissionCore"),
         .target(name: "NetworkCore"),
         .target(name: "NetworkFoundation", dependencies: ["NetworkCore"]),
         .target(name: "Nodes", dependencies: ["LayoutCore", "StateCore", "ThemeCore"]),
@@ -154,6 +158,7 @@ let package = Package(
                 .product(name: "GRDB", package: "GRDB.swift"),
             ]
         ),
+        .testTarget(name: "PermissionCoreTests", dependencies: ["PermissionCore"]),
         .testTarget(name: "NetworkCoreTests", dependencies: ["NetworkCore"]),
         .testTarget(
             name: "NetworkFoundationTests",
