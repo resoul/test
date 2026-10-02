@@ -357,4 +357,9 @@
 | `FileStore`, `MemoryFileStore` | протокол файлового хранилища и реализация в памяти с теми же правилами | [14](14-storage-and-network.md#5-files-управляемая-работа-с-filemanager) |
 | `DiskFileStore` (`write`, `copy`, `importFile`, `url(for:)`, `removeLeftoverTemporaryFiles`) | корень, временный файл + замена, копирование кусками, отказ идти по ссылкам | [14](14-storage-and-network.md#5-files-управляемая-работа-с-filemanager) |
 | `FileWorker`, `Cancellation` (в `DiskFileStore.swift`) | блокирующая работа на последовательной очереди; флаг отмены между кусками | [14](14-storage-and-network.md#5-files-управляемая-работа-с-filemanager) (iOS 16 — без исполнителя actor) |
+| `Cache`, `CacheLookup`, `CacheError`, `CachePolicy`, `CorruptionHandling`, `CacheEvent` | кэш байтов: попадание, устаревшее и промах — разные исходы; повреждение по политике | [14](14-storage-and-network.md#6-cache-общий-кэш-и-существующие-изображения), S3 |
+| `Cache.get(_:for:)`/`set(_:for:)` для `Codable` | JSON поверх байтов; не расшифровавшееся значение — промах | [14](14-storage-and-network.md#6-cache-общий-кэш-и-существующие-изображения) |
+| `MemoryCache` | кэш в памяти: срок, предел байтов, вытеснение просроченных, затем LRU | [14](14-storage-and-network.md#6-cache-общий-кэш-и-существующие-изображения) |
+| `DiskCache` (`loadIndex`, `acquire`/`release`, `encode`/`decode`, `fileName`) | кэш на `FileStore`: индекс из имён файлов, заголовок с ключом и суммой, версия, операции по одной | [14](14-storage-and-network.md#6-cache-общий-кэш-и-существующие-изображения) |
+| `CachedLoader` (`value(for:)`, `invalidate()`, `dropWaiter`, `finish`) | общая загрузка с независимыми ожидающими; очистка отменяет загрузки и берёт назад позднюю запись | [14](14-storage-and-network.md#6-cache-общий-кэш-и-существующие-изображения) (поколение и отмена) |
 
