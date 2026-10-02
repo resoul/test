@@ -423,3 +423,12 @@
 | `VideoPreparationBudget` (`claimForPlay`, `claimForPreparation`, `setActive`, `release`, `offer`) | места на сессии: Play вытесняет самую давнюю подготовку, играющие не вытесняются, подготовка места не отбирает | [16](16-video.md#14-v5-результаты-на-2026-10-02) |
 | `AVVideoSession.readMetadata(of:)` | размер и длина файла без плеера | [16](16-video.md#14-v5-результаты-на-2026-10-02) |
 
+## `Sources/PermissionSystem`, `Sources/PermissionUIKit`, `Sources/PermissionAppKit`
+
+| Код | Что | Основание |
+|---|---|---|
+| `SystemPermissionProvider.request` | порядок до системы: вид есть, строки `Info.plist` есть и не пусты, приложение впереди; система не спрашивается при ошибке | [18 §13](18-permissions.md#13-p2-результаты-на-2026-10-02) |
+| `PermissionBackend`, `CaptureBackend`, `PhotosBackend`, `NotificationsBackend`, `LocationBackend` | по фреймворку: чтение статуса без окна, запрос, таблица соответствия статусов; геолокация ждёт делегата | [18 §13](18-permissions.md#13-p2-результаты-на-2026-10-02), [18 §11](18-permissions.md#11-p0-результаты-на-2026-10-02) |
+| `UIKitPermissions`, `AppKitPermissions` | впереди ли приложение, поставщик, переход в Настройки; UIKit и AppKit только здесь | [18 §13](18-permissions.md#13-p2-результаты-на-2026-10-02), AGENTS (платформа) |
+| `PermissionLayerProbe` (`PERMISSION_LAYER=1`), `iOSUITests/PermissionLayerTests` | слой разрешений над настоящей системой на Simulator | [18 §13](18-permissions.md#13-p2-результаты-на-2026-10-02) |
+

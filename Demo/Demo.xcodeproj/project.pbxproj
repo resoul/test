@@ -12,18 +12,27 @@
 		AA00000000000000000015 /* Nodes in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000014 /* Nodes */; };
 		AA00000000000000000017 /* NodesRender in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000016 /* NodesRender */; };
 		AA000000000000000000A1 /* SyncDemo in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000A1 /* SyncDemo */; };
+		AA000000000000000000B2 /* PermissionAppKit in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000B2 /* PermissionAppKit */; };
+		AA000000000000000000B1 /* PermissionSystem in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000B1 /* PermissionSystem */; };
+		AA000000000000000000B0 /* PermissionCore in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000B0 /* PermissionCore */; };
 		AA00000000000000000019 /* NodesAppKit in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000018 /* NodesAppKit */; };
 		AA00000000000000000022 /* LayoutCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000021 /* LayoutCore */; };
 		AA00000000000000000024 /* StateCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000023 /* StateCore */; };
 		AA00000000000000000026 /* Nodes in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000025 /* Nodes */; };
 		AA00000000000000000028 /* NodesRender in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000027 /* NodesRender */; };
 		AA000000000000000000A2 /* SyncDemo in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000A2 /* SyncDemo */; };
+		AA000000000000000000B5 /* PermissionUIKit in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000B5 /* PermissionUIKit */; };
+		AA000000000000000000B4 /* PermissionSystem in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000B4 /* PermissionSystem */; };
+		AA000000000000000000B3 /* PermissionCore in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000B3 /* PermissionCore */; };
 		AA0000000000000000002A /* NodesUIKit in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000029 /* NodesUIKit */; };
 		AA00000000000000000033 /* LayoutCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000032 /* LayoutCore */; };
 		AA00000000000000000035 /* StateCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000034 /* StateCore */; };
 		AA00000000000000000037 /* Nodes in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000036 /* Nodes */; };
 		AA00000000000000000039 /* NodesRender in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000038 /* NodesRender */; };
 		AA000000000000000000A3 /* SyncDemo in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000A3 /* SyncDemo */; };
+		AA000000000000000000B8 /* PermissionUIKit in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000B8 /* PermissionUIKit */; };
+		AA000000000000000000B7 /* PermissionSystem in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000B7 /* PermissionSystem */; };
+		AA000000000000000000B6 /* PermissionCore in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000B6 /* PermissionCore */; };
 		AA0000000000000000003B /* NodesUIKit in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000003A /* NodesUIKit */; };
 		AA00000000000000000051 /* ThemeCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000050 /* ThemeCore */; };
 		AA00000000000000000053 /* ThemeCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000052 /* ThemeCore */; };
@@ -91,6 +100,9 @@
 				AA00000000000000000015 /* Nodes in Frameworks */,
 				AA00000000000000000017 /* NodesRender in Frameworks */,
 				AA000000000000000000A1 /* SyncDemo in Frameworks */,
+				AA000000000000000000B2 /* PermissionAppKit in Frameworks */,
+				AA000000000000000000B1 /* PermissionSystem in Frameworks */,
+				AA000000000000000000B0 /* PermissionCore in Frameworks */,
 				AA00000000000000000019 /* NodesAppKit in Frameworks */,
 				AA00000000000000000051 /* ThemeCore in Frameworks */,
 				AA00000000000000000071 /* AppShellAppKit in Frameworks */,
@@ -107,6 +119,9 @@
 				AA00000000000000000026 /* Nodes in Frameworks */,
 				AA00000000000000000028 /* NodesRender in Frameworks */,
 				AA000000000000000000A2 /* SyncDemo in Frameworks */,
+				AA000000000000000000B5 /* PermissionUIKit in Frameworks */,
+				AA000000000000000000B4 /* PermissionSystem in Frameworks */,
+				AA000000000000000000B3 /* PermissionCore in Frameworks */,
 				AA0000000000000000002A /* NodesUIKit in Frameworks */,
 				AA00000000000000000059 /* LayoutUIKit in Frameworks */,
 				AA00000000000000000053 /* ThemeCore in Frameworks */,
@@ -124,6 +139,9 @@
 				AA00000000000000000037 /* Nodes in Frameworks */,
 				AA00000000000000000039 /* NodesRender in Frameworks */,
 				AA000000000000000000A3 /* SyncDemo in Frameworks */,
+				AA000000000000000000B8 /* PermissionUIKit in Frameworks */,
+				AA000000000000000000B7 /* PermissionSystem in Frameworks */,
+				AA000000000000000000B6 /* PermissionCore in Frameworks */,
 				AA0000000000000000003B /* NodesUIKit in Frameworks */,
 				AA00000000000000000057 /* LayoutUIKit in Frameworks */,
 				AA00000000000000000055 /* ThemeCore in Frameworks */,
@@ -208,6 +226,9 @@
 				A900000000000000000014 /* Nodes */,
 				A900000000000000000016 /* NodesRender */,
 				A9000000000000000000A1 /* SyncDemo */,
+				A9000000000000000000B2 /* PermissionAppKit */,
+				A9000000000000000000B1 /* PermissionSystem */,
+				A9000000000000000000B0 /* PermissionCore */,
 				A900000000000000000018 /* NodesAppKit */,
 				A900000000000000000050 /* ThemeCore */,
 				A900000000000000000061 /* AppShellAppKit */,
@@ -239,6 +260,9 @@
 				A900000000000000000025 /* Nodes */,
 				A900000000000000000027 /* NodesRender */,
 				A9000000000000000000A2 /* SyncDemo */,
+				A9000000000000000000B5 /* PermissionUIKit */,
+				A9000000000000000000B4 /* PermissionSystem */,
+				A9000000000000000000B3 /* PermissionCore */,
 				A900000000000000000029 /* NodesUIKit */,
 				A900000000000000000058 /* LayoutUIKit */,
 				A900000000000000000052 /* ThemeCore */,
@@ -271,6 +295,9 @@
 				A900000000000000000036 /* Nodes */,
 				A900000000000000000038 /* NodesRender */,
 				A9000000000000000000A3 /* SyncDemo */,
+				A9000000000000000000B8 /* PermissionUIKit */,
+				A9000000000000000000B7 /* PermissionSystem */,
+				A9000000000000000000B6 /* PermissionCore */,
 				A90000000000000000003A /* NodesUIKit */,
 				A900000000000000000056 /* LayoutUIKit */,
 				A900000000000000000054 /* ThemeCore */,
@@ -525,6 +552,10 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Layout Demo";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsMultipleScenes = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "The demo shows what the system says before it asks for the camera.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "The demo shows what the system says before it asks for your location.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "The demo shows what the system says before it asks for the microphone.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "The demo shows what the system says before it asks for your photos.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -553,6 +584,10 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Layout Demo";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsMultipleScenes = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "The demo shows what the system says before it asks for the camera.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "The demo shows what the system says before it asks for your location.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "The demo shows what the system says before it asks for the microphone.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "The demo shows what the system says before it asks for your photos.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -844,6 +879,21 @@
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = SyncDemo;
 		};
+		A9000000000000000000B2 /* PermissionAppKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = PermissionAppKit;
+		};
+		A9000000000000000000B1 /* PermissionSystem */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = PermissionSystem;
+		};
+		A9000000000000000000B0 /* PermissionCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = PermissionCore;
+		};
 		A900000000000000000018 /* NodesAppKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
@@ -874,6 +924,21 @@
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = SyncDemo;
 		};
+		A9000000000000000000B5 /* PermissionUIKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = PermissionUIKit;
+		};
+		A9000000000000000000B4 /* PermissionSystem */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = PermissionSystem;
+		};
+		A9000000000000000000B3 /* PermissionCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = PermissionCore;
+		};
 		A900000000000000000029 /* NodesUIKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
@@ -903,6 +968,21 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = SyncDemo;
+		};
+		A9000000000000000000B8 /* PermissionUIKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = PermissionUIKit;
+		};
+		A9000000000000000000B7 /* PermissionSystem */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = PermissionSystem;
+		};
+		A9000000000000000000B6 /* PermissionCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = PermissionCore;
 		};
 		A90000000000000000003A /* NodesUIKit */ = {
 			isa = XCSwiftPackageProductDependency;

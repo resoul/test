@@ -17,7 +17,9 @@ import PackageDescription
 // streams, whose subscriptions end the observation; SyncDemo is a worked example that joins
 // them — a repository over the database, HTTP and a socket, and a model for the screens.
 // PermissionCore is what the app knows about the system's permissions — kinds, status, errors, and
-// one order of asking — with a stand-in for tests; it depends on Foundation only.
+// one order of asking — with a stand-in for tests; it depends on Foundation only. PermissionSystem
+// asks the system's frameworks and checks the Info.plist keys before it does; PermissionUIKit and
+// PermissionAppKit say whether the app is in front and open its Settings.
 // Nodes is the tree of nodes laid out by LayoutCore and driven by StateCore; NodesRender draws
 // it into CALayers (Apple platforms), NodesUIKit and NodesAppKit put it into views. ThemeCore
 // holds the theme — colors, text, radii, motion, spacing and breakpoints — for nodes and for
@@ -41,6 +43,9 @@ let package = Package(
         .library(name: "DataAsyncRay", targets: ["DataAsyncRay"]),
         .library(name: "SyncDemo", targets: ["SyncDemo"]),
         .library(name: "PermissionCore", targets: ["PermissionCore"]),
+        .library(name: "PermissionSystem", targets: ["PermissionSystem"]),
+        .library(name: "PermissionUIKit", targets: ["PermissionUIKit"]),
+        .library(name: "PermissionAppKit", targets: ["PermissionAppKit"]),
         .library(name: "NetworkCore", targets: ["NetworkCore"]),
         .library(name: "NetworkFoundation", targets: ["NetworkFoundation"]),
         .library(name: "Nodes", targets: ["Nodes"]),
@@ -83,6 +88,9 @@ let package = Package(
             ]
         ),
         .target(name: "PermissionCore"),
+        .target(name: "PermissionSystem", dependencies: ["PermissionCore"]),
+        .target(name: "PermissionUIKit", dependencies: ["PermissionSystem", "PermissionCore"]),
+        .target(name: "PermissionAppKit", dependencies: ["PermissionSystem", "PermissionCore"]),
         .target(name: "NetworkCore"),
         .target(name: "NetworkFoundation", dependencies: ["NetworkCore"]),
         .target(name: "Nodes", dependencies: ["LayoutCore", "StateCore", "ThemeCore"]),
@@ -159,6 +167,10 @@ let package = Package(
             ]
         ),
         .testTarget(name: "PermissionCoreTests", dependencies: ["PermissionCore"]),
+        .testTarget(
+            name: "PermissionSystemTests",
+            dependencies: ["PermissionSystem", "PermissionCore"]
+        ),
         .testTarget(name: "NetworkCoreTests", dependencies: ["NetworkCore"]),
         .testTarget(
             name: "NetworkFoundationTests",
