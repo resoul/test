@@ -389,3 +389,15 @@
 | `WebSocketTransport`, `WebSocketConnection`, `URLSessionWebSocketTransport` | соединение открыто после ответа на ping; отказ апгрейда — со статусом HTTP | [14](14-storage-and-network.md#9-websocket) |
 | `NetworkEnvironment` | часы, ожидание и случайность, общие для HTTP и WebSocket | [14](14-storage-and-network.md#9-websocket) |
 
+## `Sources/DataAsyncRay`, `Sources/SyncDemo`, `Demo/Shared/SyncProbe.swift`
+
+| Код | Что | Основание |
+|---|---|---|
+| `DatabaseStore.observeRay`, `PreferenceStore.valuesRay`, `WebSocketClient.statesRay`, `forward(from:)` | холодные потоки AsyncRay над наблюдениями; отмена подписки снимает наблюдение; ошибка — элемент `Result` | [14](14-storage-and-network.md#14-уточнение-роль-asyncray--2026-09-29) (контракты 1, 3, 5), S7 |
+| `ItemsRepository` (`apply`, `performRefresh`, `handle`) | база — единственный источник; событие только со следующим номером, курсор в той же транзакции; старый снимок отбрасывается | [14](14-storage-and-network.md#10-как-использовать-вместе) |
+| `ItemsRepository.signOut`, `syncState.epoch`, `syncState.synced` | эпоха в базе; поздний ответ после выхода ничего не пишет; подписка по сокету после первого снимка | [14](14-storage-and-network.md#10-как-использовать-вместе) |
+| `ItemsModel`, `LoadPhase`, `ConnectionStatus` | модель окна на `State`: строки из базы, сортировка из Preferences, отмена не ошибка, явный `stop()` | [14](14-storage-and-network.md#10-как-использовать-вместе) |
+| `DemoServer`, `DemoSocket`, `Snapshot`, `ServerMessage`, `Subscribe` | сервер демо в памяти: снимок с курсором, пронумерованные события, повтор по `subscribe(since:)`, `resync`, идемпотентный `POST` | [14](14-storage-and-network.md#10-как-использовать-вместе) |
+| `DemoSession` | сборка репозитория, клиентов, базы и сервера для приложения | [14](14-storage-and-network.md#12-проверки-и-приёмка) |
+| `SyncProbe` (`SYNC_PROBE=1`), `iOSUITests/SyncTests` | экран демо и его UI-тест на iOS | [14](14-storage-and-network.md#12-проверки-и-приёмка) |
+
