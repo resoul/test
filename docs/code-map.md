@@ -343,3 +343,13 @@
 | `Application.main`, `ShellApplicationDelegate`, `ShellSceneDelegate` (UIKit); `Application.main`, `ShellApplicationDelegate`, `NSMenu(standardAround:)` (AppKit) | точка входа: сцены UIKit с отключением отдельно от уничтожения; окна и стандартные меню Mac | [12](12-app-layer.md) (A2) |
 | `EmbeddedNode`, `EmbeddedItem`, `NodeHost.embeddedItems`/`keyboardInset`/`reveal`, `Node.keyboardInset`, `Scroll.keyboardDismissal`, `KeyboardDismissal`; `TextField`, `ReturnKey`, `TextContent` (NodesRender); `EmbeddedHolder`, `NodeView.placeEmbeddedViews`/`embeddedView(of:)`/`revealEditingField`, `FieldView`, `KeyboardFollowing`, `NodeView.keyboardProbe` (UIKit); `Demo` `FormNode`, `DemoRoute.form` | вложенный системный вид, поле ввода, клавиатура (прототип) | [13](13-controls.md) (прототип C2–C4); дефекты 208, 210 |
 | `Control`, `ControlState`, `ToolTipItem`, `Node.toolTip`/`hoverChanged`/`isInteractive`/`shownToolTip`, `NodeHost.pointerMoved`/`toolTip(at:)`/`toolTipItems`/`canPerform(_:from:)`/`perform(_:from:)`; `Button` на `Control`, `Button(command:)` (NodesRender); `NodeNSView.mouseMoved`/`updateToolTips`, `NSViewToolTipOwner` (AppKit); `NodeView.followPointer`, `PointerTracker` (UIKit); `Demo` `FollowBadge` | общий контрол, наведение, подсказки | [13](13-controls.md) (C0) |
+
+## `Sources/StorageCore`, `Sources/StorageFoundation`
+
+| Код | Что | Основание |
+|---|---|---|
+| `Preferences` (actor), `PreferenceBackend` | типизированные настройки; хранилище принадлежит одному actor | [14-storage-and-network.md](14-storage-and-network.md#4-preferences-типизированные-userdefaults), S1 |
+| `Preferences.values(for:)` | снимок, затем изменения; одинаковые значения не повторяются; ошибка декодирования — элемент потока | [14](14-storage-and-network.md#4-preferences-типизированные-userdefaults) |
+| `PreferenceError.decodingFailed`, `Preferences.value(for:)` | повреждённое значение отличимо от отсутствующего и не скрыто default | [14](14-storage-and-network.md#4-preferences-типизированные-userdefaults) |
+| `PreferenceCodec.json(version:)` | небольшие Codable-структуры с версией формата | [14](14-storage-and-network.md#4-preferences-типизированные-userdefaults) |
+| `UserDefaultsPreferenceBackend`, `Preferences.userDefaults(suiteName:namespace:)` | UserDefaults с изолированным suite и пространством имён; actor владеет `UserDefaults` | [14](14-storage-and-network.md#4-preferences-типизированные-userdefaults) |

@@ -29,6 +29,8 @@ let package = Package(
         .library(name: "NodesRender", targets: ["NodesRender"]),
         .library(name: "NodesUIKit", targets: ["NodesUIKit"]),
         .library(name: "NodesAppKit", targets: ["NodesAppKit"]),
+        .library(name: "StorageCore", targets: ["StorageCore"]),
+        .library(name: "StorageFoundation", targets: ["StorageFoundation"]),
         .library(name: "AppShell", targets: ["AppShell"]),
         .library(name: "AppShellUIKit", targets: ["AppShellUIKit"]),
         .library(name: "AppShellAppKit", targets: ["AppShellAppKit"]),
@@ -71,6 +73,8 @@ let package = Package(
             name: "StateAsyncRay",
             dependencies: ["StateCore", .product(name: "AsyncRay", package: "asyncray")]
         ),
+        .target(name: "StorageCore"),
+        .target(name: "StorageFoundation", dependencies: ["StorageCore"]),
         .testTarget(name: "LayoutCoreTests", dependencies: ["LayoutCore"]),
         .testTarget(name: "ThemeCoreTests", dependencies: ["ThemeCore", "LayoutCore"]),
         .testTarget(name: "StateCoreTests", dependencies: ["StateCore"]),
@@ -89,6 +93,11 @@ let package = Package(
         .testTarget(
             name: "StateAsyncRayTests",
             dependencies: ["AsyncRay", "StateAsyncRay", "StateCore"]
+        ),
+        .testTarget(name: "StorageCoreTests", dependencies: ["StorageCore"]),
+        .testTarget(
+            name: "StorageFoundationTests",
+            dependencies: ["StorageFoundation", "StorageCore"]
         ),
         .testTarget(name: "AppShellTests", dependencies: ["AppShell", "Nodes", "StateCore"]),
         .testTarget(

@@ -1,10 +1,10 @@
 # Хранение данных и сеть: Preferences, Cache, Files, GRDB, HTTP и WebSocket
 
-**Статус: план внедрения, 2026-09-29.** Пользователь запросил UserDefaults, кэш,
+**Статус: S1 выполнен, S0 выполнен частично (2026-10-02, раздел 16); S2–S8 не начаты. План от 2026-09-29.** Пользователь запросил UserDefaults, кэш,
 файлы, SQL через GRDB на устройствах проекта и удобный слой HTTP/WebSocket с их совместным
 использованием. Выбор GRDB — требование пользователя. Границы модулей и контракты ниже —
-предложение по результатам повторного просмотра библиотеки. Реализация не начата;
-псевдокод показывает направление API, а не существующие методы.
+предложение по результатам повторного просмотра библиотеки. Реализация идёт по этапам, см. раздел 16;
+псевдокод в разделах 15 и ниже показывает направление API, а не существующие методы.
 
 ## 1. На что опираемся
 
@@ -475,3 +475,44 @@ throw из tryMap, recovery, idle timeout, cancellation во время реги
 S0 включает R0 и минимальный R1-прототип; S7 использует R3. Релиз R4 и обновление
 Package.swift/Package.resolved — отдельный шаг после проверок, не замена номера версии
 на несуществующий тег. Реализация storage/HTTP на async throws может идти до R4.
+
+## 16. Статус реализации — 2026-10-02
+
+### S0: прототип GRDB — выполнен частично
+
+Прототип лежал в отдельном временном пакете вне репозитория (tools 6.0, платформы как у
+Espalier, Swift 6.4). Зависимость в `Package.swift` пакета **не добавлена**.
+
+- Тег **7.11.1** существует и разрешается; пакет собирается в языковом режиме Swift 6 без
+  предупреждений при `swift-tools-version: 6.0` — минимальный toolchain проекта менять не нужно.
+- На Mac проверены миграции (`v1`, `v2` с новой колонкой), вставка записи и
+  `ValueObservation.values(in:bufferingPolicy: .bufferingNewest(1))`: снимки `[]`, `[a]`,
+  `[a, b]` пришли по порядку после каждого commit.
+- Сборка (не запуск) прошла для iOS Simulator, tvOS Simulator и Mac Catalyst.
+
+Не проверено: запуск CRUD/наблюдения на iOS и tvOS Simulator (только сборка); отмена
+записи у commit (раздел 7); прототип HTTP и WebSocket; Linux не считается целью пакета.
+Эти пункты остаются в S0 и закрываются до S4–S6, которым они нужны.
+
+### S1: `StorageCore`, `StorageFoundation`, Preferences — выполнен
+
+- `StorageCore` (только Foundation): `PreferenceKey`, `PreferenceCodec` (bool, int, double,
+  string, data, date, `rawValue(over:)`, `json(version:)`), `PreferenceError`,
+  `PreferenceBackend`, actor `Preferences`, `InMemoryPreferenceBackend`.
+- `StorageFoundation`: `UserDefaultsPreferenceBackend` и `Preferences.userDefaults(suiteName:namespace:)`.
+- Отступление от раздела 4: отдельного протокола `PreferenceStore` нет. Точка подмены —
+  `PreferenceBackend`: синхронное хранилище, которым владеет ровно один actor, поэтому ему не
+  нужны блокировки и `Sendable`. Если понадобится подменять сам actor, протокол вводится
+  позже, по реальной потребности.
+- Наблюдение: `values(for:)` — `AsyncStream<Result<Value, PreferenceError>>` с буфером «только
+  последнее». Одинаковое сохранённое значение не повторяется; повреждённое значение приходит
+  элементом-ошибкой, поток продолжается. Изменения из другого объекта того же домена
+  ловятся по `UserDefaults.didChangeNotification` и повторным чтением. Удаление ключа
+  сообщает значение по умолчанию.
+- Не сделано из раздела 4: проверка privacy manifest и required-reason API для UserDefaults —
+  относится к приложению, а не к библиотеке; пакет не содержит манифеста.
+
+Проверено: `swift test --filter StorageCoreTests` (14) и `--filter StorageFoundationTests` (7) на
+Mac; те же 21 теста на iOS Simulator (iPhone 17); сборка `StorageFoundation` для tvOS Simulator
+и Mac Catalyst; `swift format lint`. Тесты на tvOS Simulator, полный `swift test` и
+проверка на устройстве не запускались.
