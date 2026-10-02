@@ -12,7 +12,7 @@
 | Линия | Документ | Сделано | Дальше |
 |---|---|---|---|
 | Контролы и rich text | [13](13-controls.md) | C0–C7.4 | выбор из нескольких ссылок на пульте TV |
-| Хранение и сеть | [14](14-storage-and-network.md) | S0 (прототип GRDB, HTTP, WebSocket), S1 (Preferences), S2 (`FileStore`), S3 (кэши) | S4 GRDB, S5 HTTP, S6 WebSocket, S7 демо, S8 `ImageCache` |
+| Хранение и сеть | [14](14-storage-and-network.md) | S0 (прототип GRDB, HTTP, WebSocket), S1 (Preferences), S2 (`FileStore`), S3 (кэши), S4 (`StorageGRDB`) |  S5 HTTP, S6 WebSocket, S7 демо, S8 `ImageCache` |
 | AsyncRay 1.1.0 (потоки с ошибками) | [14](14-storage-and-network.md#15-план-asyncray-110-потоки-с-ошибками), раздел 15 | — | R0–R4; нужен к S7 |
 | Разрешения системы | [18](18-permissions.md) | — (только план) | P0 матрица и проба, P1 `PermissionCore`, P2 поставщики, P3 остальные виды, P4 наблюдение и демо, P5 каталог CLI |
 | Проект и CLI | [17](17-project-cli.md) | — | см. документ |
@@ -28,8 +28,6 @@
 
 ## Не сделано (хранение и сеть, [14](14-storage-and-network.md))
 
-- **S4 `StorageGRDB`** — миграции, транзакции, наблюдение (`ValueObservation.values(in:)`), backup. GRDB 7.11.1
-  в основной `Package.swift` ещё не добавлен; совместная сборка с остальными таргетами проверяется здесь.
 - **S5 `HTTPClient`, S6 `WebSocketClient`** — поверх URLSession; контракты отмены, повторов и reconnect в разделах 8–9.
 - **S7 демо-repository, S8 перенос общих частей в `ImageCache`.**
 - **AsyncRay 1.1.0** (`AsyncThrowingRay`, раздел 15) — до S7; реализация storage и HTTP на `async throws` может идти без него.

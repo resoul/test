@@ -363,3 +363,12 @@
 | `DiskCache` (`loadIndex`, `acquire`/`release`, `encode`/`decode`, `fileName`) | кэш на `FileStore`: индекс из имён файлов, заголовок с ключом и суммой, версия, операции по одной | [14](14-storage-and-network.md#6-cache-общий-кэш-и-существующие-изображения) |
 | `CachedLoader` (`value(for:)`, `invalidate()`, `dropWaiter`, `finish`) | общая загрузка с независимыми ожидающими; очистка отменяет загрузки и берёт назад позднюю запись | [14](14-storage-and-network.md#6-cache-общий-кэш-и-существующие-изображения) (поколение и отмена) |
 
+## `Sources/StorageGRDB`
+
+| Код | Что | Основание |
+|---|---|---|
+| `DatabaseStore.open(_:migrations:)`, `DatabaseMigration`, `DatabaseStoreError` | открытие, именованные миграции, отказ от базы новее приложения, откат упавшей миграции | [14](14-storage-and-network.md#7-sql-grdb), S4 |
+| `DatabaseStore.read`/`write` | транзакция GRDB; отмена до commit откатывает, после commit — запись остаётся | [14](14-storage-and-network.md#7-sql-grdb) (отмена у commit), S4 |
+| `DatabaseStore.observe(_:)` | снимки после каждого commit, ошибка — элемент потока | [14](14-storage-and-network.md#7-sql-grdb), [14 §14](14-storage-and-network.md#контракты-которые-необходимо-сохранить) |
+| `DatabaseStore.backup(to:)`, `restore(from:to:)`, `Blocking` | штатный backup SQLite; проверка копии и удаление остатков журнала при восстановлении | [14](14-storage-and-network.md#7-sql-grdb) |
+
