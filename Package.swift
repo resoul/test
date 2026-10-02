@@ -11,7 +11,9 @@ import PackageDescription
 // StorageCore is preferences as typed keys over a store protocol, with an in-memory store;
 // StorageFoundation keeps them in UserDefaults. Both depend on Foundation only. StorageGRDB is
 // the SQLite database — migrations, transactions, observation, backup — over GRDB, the one
-// target that imports it.
+// target that imports it. NetworkCore is an HTTP client over a transport protocol — statuses,
+// retries, credentials — and depends on Foundation only; NetworkFoundation is the URLSession
+// transport.
 // Nodes is the tree of nodes laid out by LayoutCore and driven by StateCore; NodesRender draws
 // it into CALayers (Apple platforms), NodesUIKit and NodesAppKit put it into views. ThemeCore
 // holds the theme — colors, text, radii, motion, spacing and breakpoints — for nodes and for
@@ -32,6 +34,8 @@ let package = Package(
         .library(name: "StorageCore", targets: ["StorageCore"]),
         .library(name: "StorageFoundation", targets: ["StorageFoundation"]),
         .library(name: "StorageGRDB", targets: ["StorageGRDB"]),
+        .library(name: "NetworkCore", targets: ["NetworkCore"]),
+        .library(name: "NetworkFoundation", targets: ["NetworkFoundation"]),
         .library(name: "Nodes", targets: ["Nodes"]),
         .library(name: "NodesRender", targets: ["NodesRender"]),
         .library(name: "NodesUIKit", targets: ["NodesUIKit"]),
@@ -54,6 +58,8 @@ let package = Package(
         .target(name: "StorageCore"),
         .target(name: "StorageFoundation", dependencies: ["StorageCore"]),
         .target(name: "StorageGRDB", dependencies: [.product(name: "GRDB", package: "GRDB.swift")]),
+        .target(name: "NetworkCore"),
+        .target(name: "NetworkFoundation", dependencies: ["NetworkCore"]),
         .target(name: "Nodes", dependencies: ["LayoutCore", "StateCore", "ThemeCore"]),
         .target(
             name: "NodesRender",
@@ -109,6 +115,11 @@ let package = Package(
         .testTarget(
             name: "StorageGRDBTests",
             dependencies: ["StorageGRDB", .product(name: "GRDB", package: "GRDB.swift")]
+        ),
+        .testTarget(name: "NetworkCoreTests", dependencies: ["NetworkCore"]),
+        .testTarget(
+            name: "NetworkFoundationTests",
+            dependencies: ["NetworkFoundation", "NetworkCore"]
         ),
         .testTarget(name: "AppShellTests", dependencies: ["AppShell", "Nodes", "StateCore"]),
         .testTarget(
