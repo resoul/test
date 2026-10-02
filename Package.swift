@@ -9,7 +9,9 @@ import PackageDescription
 // RichTextCore is styled text as a value — blocks, runs, marks — with the operations an editor
 // needs; it depends on Foundation only, so it builds on Linux too.
 // StorageCore is preferences as typed keys over a store protocol, with an in-memory store;
-// StorageFoundation keeps them in UserDefaults. Both depend on Foundation only.
+// StorageFoundation keeps them in UserDefaults. Both depend on Foundation only. StorageGRDB is
+// the SQLite database — migrations, transactions, observation, backup — over GRDB, the one
+// target that imports it.
 // Nodes is the tree of nodes laid out by LayoutCore and driven by StateCore; NodesRender draws
 // it into CALayers (Apple platforms), NodesUIKit and NodesAppKit put it into views. ThemeCore
 // holds the theme — colors, text, radii, motion, spacing and breakpoints — for nodes and for
@@ -29,6 +31,7 @@ let package = Package(
         .library(name: "RichTextCore", targets: ["RichTextCore"]),
         .library(name: "StorageCore", targets: ["StorageCore"]),
         .library(name: "StorageFoundation", targets: ["StorageFoundation"]),
+        .library(name: "StorageGRDB", targets: ["StorageGRDB"]),
         .library(name: "Nodes", targets: ["Nodes"]),
         .library(name: "NodesRender", targets: ["NodesRender"]),
         .library(name: "NodesUIKit", targets: ["NodesUIKit"]),
@@ -38,7 +41,8 @@ let package = Package(
         .library(name: "AppShellAppKit", targets: ["AppShellAppKit"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/resoul/AsyncRay.git", exact: "1.0.0")
+        .package(url: "https://github.com/resoul/AsyncRay.git", exact: "1.0.0"),
+        .package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.11.1"),
     ],
     targets: [
         .target(name: "LayoutCore"),
@@ -49,6 +53,7 @@ let package = Package(
         .target(name: "RichTextCore"),
         .target(name: "StorageCore"),
         .target(name: "StorageFoundation", dependencies: ["StorageCore"]),
+        .target(name: "StorageGRDB", dependencies: [.product(name: "GRDB", package: "GRDB.swift")]),
         .target(name: "Nodes", dependencies: ["LayoutCore", "StateCore", "ThemeCore"]),
         .target(
             name: "NodesRender",
@@ -100,6 +105,10 @@ let package = Package(
         .testTarget(
             name: "StateAsyncRayTests",
             dependencies: ["AsyncRay", "StateAsyncRay", "StateCore"]
+        ),
+        .testTarget(
+            name: "StorageGRDBTests",
+            dependencies: ["StorageGRDB", .product(name: "GRDB", package: "GRDB.swift")]
         ),
         .testTarget(name: "AppShellTests", dependencies: ["AppShell", "Nodes", "StateCore"]),
         .testTarget(
