@@ -863,6 +863,7 @@ public final class NodeHost: CommandTarget {
 
         pressed = target
         target.pressChanged(true)
+        target.pressBegan(at: localPoint(point, in: target))
         return true
     }
 

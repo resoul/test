@@ -74,6 +74,24 @@
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         public var scalesWithText = true
 
+        /// What ends the last line when the text is cut to `maxLines`: "…" by default. It takes
+        /// the style of the text, and the line is cut short enough for it to fit.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public var truncationToken = "\u{2026}"
+
+        /// Factors of `size` to try, in order, before the text is cut: the first one at which the
+        /// text fits in `maxLines` is used, and the smallest one when none does, after which the
+        /// text is cut as usual. `[1, 0.9, 0.8]` lets a title shrink by a fifth to keep its
+        /// words. The line spacing shrinks with the size. Without `maxLines` the text never
+        /// overflows, and this has no effect. Empty by default: the text keeps its size.
+        ///
+        /// The widest word and the widest line the layout engine asks about are measured at the
+        /// full size, so a text that shrinks does not make its box narrower.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public var fitScaleFactors: [Double] = []
+
         /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
         public init(
             fontName: String? = nil,
@@ -191,6 +209,36 @@
         /// MainActor. Errors: none. Cancellation: not applicable.
         public var onLink: (@MainActor (URL) -> Void)? {
             didSet { linksChanged() }
+        }
+
+        /// A word after the "…" of a text that is cut to `maxLines` — "More" — in the theme's
+        /// accent color, which the reader can tap. `nil` for none. Only plain text (`text`) shows
+        /// it; styled text (`rich`) is cut with the token alone.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var truncationMessage: String? {
+            didSet { if truncationMessage != oldValue { restyleDrawing() } }
+        }
+
+        /// Called when the reader taps `truncationMessage`. A tap on the rest of the text is left
+        /// to what is behind it. Without it the message is shown and does nothing.
+        ///
+        /// Ownership: the node keeps the closure; it must not keep the node. Isolation:
+        /// MainActor. Errors: none. Cancellation: not applicable.
+        public var onTruncationMessageTap: (@MainActor () -> Void)?
+
+        /// Whether the text is cut short at the width it has now, so that something of it does
+        /// not show. It follows the last layout, and does not track changes by itself: read it
+        /// where the text is laid out.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var isTruncated: Bool {
+            let width = frame.size.width
+            if let rich {
+                return richLayout(width: width)?.isCut ?? false
+            }
+            let fitted = TextLayout.fitted(style: shown, text: text, width: width)
+            return TextLayout(text: text, style: fitted).isTruncated(forWidth: width)
         }
 
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
@@ -318,11 +366,38 @@
         public func draw(in context: CGContext, size: CGSize) {
             if rich != nil {
                 richLayout(width: Double(size.width))?
-                    .draw(in: context, size: size, colors: richColors)
+                    .draw(
+                        in: context,
+                        size: size,
+                        colors: richColors,
+                        highlighting: pressedLink
+                    )
                 return
             }
-            TextLayout(text: text, style: shown, rightToLeft: isRightToLeft)
-                .draw(in: context, size: size)
+            plainLayout(width: Double(size.width))
+                .draw(in: context, size: size, highlightsMessage: messageIsPressed)
+        }
+
+        /// The plain text set for `width`: shrunk to fit `maxLines` when the style allows it,
+        /// with the message after the token.
+        private func plainLayout(width: Double) -> TextLayout {
+            TextLayout(
+                text: text,
+                style: TextLayout.fitted(style: shown, text: text, width: width),
+                rightToLeft: isRightToLeft,
+                message: truncationMessage,
+                messageColor: shownAccent
+            )
+        }
+
+        /// The link being pressed, which shows highlighted.
+        private var pressedLink: URL?
+        private var messageIsPressed = false
+
+        /// Draws again with the pressed part highlighted, or without.
+        private func restyleDrawing() {
+            revision &+= 1
+            host?.setNeedsRender()
         }
 
         private var richColors: RichColors {
@@ -390,11 +465,47 @@
         ///
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public override func takesPress(at point: LayoutPoint) -> Bool {
-            guard onLink != nil, rich != nil,
-                let layout = richLayout(width: frame.size.width)
-            else { return false }
+            if rich == nil {
+                return isOnMessage(point)
+            }
+            guard onLink != nil, let layout = richLayout(width: frame.size.width) else {
+                return false
+            }
 
             return layout.link(at: CGPoint(x: point.x, y: point.y)) != nil
+        }
+
+        /// Whether `point`, in the node's coordinates, is on the message after the "…" of a plain
+        /// text that is cut, and a tap on it is answered.
+        private func isOnMessage(_ point: LayoutPoint) -> Bool {
+            guard onTruncationMessageTap != nil, truncationMessage != nil, rich == nil,
+                let rect = plainLayout(width: frame.size.width)
+                    .truncationMessageRect(forWidth: frame.size.width)
+            else { return false }
+
+            return rect.contains(CGPoint(x: point.x, y: point.y))
+        }
+
+        /// The link or the message under the finger shows highlighted until it lets go.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public override func pressBegan(at point: LayoutPoint) {
+            if rich != nil {
+                pressedLink = richLayout(width: frame.size.width)?
+                    .link(at: CGPoint(x: point.x, y: point.y))
+            } else {
+                messageIsPressed = isOnMessage(point)
+            }
+            if pressedLink != nil || messageIsPressed { restyleDrawing() }
+        }
+
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public override func pressChanged(_ isPressed: Bool) {
+            guard !isPressed, pressedLink != nil || messageIsPressed else { return }
+
+            pressedLink = nil
+            messageIsPressed = false
+            restyleDrawing()
         }
 
         /// The hand, while the pointer is over a link of a text that opens links itself.
@@ -411,6 +522,10 @@
 
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public override func tapped(at point: LayoutPoint?) {
+            if onTap == nil, rich == nil, let onTruncationMessageTap {
+                if let point, isOnMessage(point) { onTruncationMessageTap() }
+                return
+            }
             if onTap == nil, let onLink {
                 if let point {
                     if let url = richLayout(width: frame.size.width)?
@@ -488,16 +603,21 @@
 
         func height(forWidth width: Double) -> Double {
             measurements.height(forWidth: width) {
-                TextLayout(text: text, style: style).height(forWidth: width)
+                let fitted = TextLayout.fitted(style: style, text: text, width: width)
+                return TextLayout(text: text, style: fitted).height(forWidth: width)
             }
         }
 
         func firstBaseline(forWidth width: Double) -> Double? {
             guard !text.isEmpty else { return nil }
 
-            return measurements.value(\.ascent) {
-                Double(CTFontGetAscent(TextLayout.font(for: style)))
+            guard !style.fitScaleFactors.isEmpty else {
+                return measurements.value(\.ascent) {
+                    Double(CTFontGetAscent(TextLayout.font(for: style)))
+                }
             }
+            let fitted = TextLayout.fitted(style: style, text: text, width: width)
+            return Double(CTFontGetAscent(TextLayout.font(for: fitted)))
         }
     }
 
@@ -550,12 +670,32 @@
         let font: CTFont
         let maxLines: Int?
         private let attributes: CFDictionary
+        private let token: String
+        private let message: String?
+        private let messageColor: CGColor?
 
         /// `rightToLeft` is the layout's direction; it moves `leading` text to the right edge.
-        /// Alignment does not change where lines break, so measuring leaves it out.
-        init(text: String, style: TextStyle, rightToLeft: Bool = false) {
+        /// Alignment does not change where lines break, so measuring leaves it out. `message`
+        /// follows the token of a text that is cut, in `messageColor`.
+        init(
+            text: String,
+            style: TextStyle,
+            rightToLeft: Bool = false,
+            message: String? = nil,
+            messageColor: Color? = nil
+        ) {
             font = TextLayout.font(for: style)
             maxLines = style.maxLines.map { max(1, $0) }
+            token = style.truncationToken
+            self.message = message
+            self.messageColor = messageColor.map {
+                CGColor(
+                    red: CGFloat($0.red),
+                    green: CGFloat($0.green),
+                    blue: CGFloat($0.blue),
+                    alpha: CGFloat($0.alpha)
+                )
+            }
 
             let alignment: CTTextAlignment =
                 switch style.alignment {
@@ -667,15 +807,34 @@
             return ceil(Double(set.height))
         }
 
-        func draw(in context: CGContext, size: CGSize) {
+        /// Whether the text is cut to `maxLines` at `width`.
+        func isTruncated(forWidth width: Double) -> Bool {
+            lines(forWidth: width).isTruncated
+        }
+
+        /// Draws the text; `highlightsMessage` fills the message after the token.
+        func draw(in context: CGContext, size: CGSize, highlightsMessage: Bool = false) {
             let set = lines(forWidth: Double(size.width))
             context.textMatrix = .identity
             // Origins are in a box `set.boxHeight` tall; this one is `size.height` tall.
             let shift = set.boxHeight - size.height
+            if highlightsMessage, let rect = truncationMessageRect(forWidth: Double(size.width)),
+                let color = messageColor?.copy(alpha: 0.25)
+            {
+                context.setFillColor(color)
+                context.fill(
+                    CGRect(
+                        x: rect.minX,
+                        y: size.height - rect.maxY,
+                        width: rect.width,
+                        height: rect.height
+                    )
+                )
+            }
             for index in set.lines.indices {
                 var line = set.lines[index]
                 if index == set.lines.count - 1, set.isTruncated {
-                    line = truncated(from: line, width: size.width)
+                    line = truncated(from: line, width: size.width).line
                 }
                 context.textPosition = CGPoint(
                     x: set.origins[index].x,
@@ -724,8 +883,12 @@
             return (all, origins, boxHeight, height, isTruncated)
         }
 
-        /// The rest of the text from the start of `line`, cut to `width` with "…" at the end.
-        private func truncated(from line: CTLine, width: CGFloat) -> CTLine {
+        /// The attribute that marks the glyphs of the message in a truncated line.
+        private static var messageMark: CFString { "espalier.truncationMessage" as CFString }
+
+        /// The rest of the text from the start of `line`, cut to `width` with the token — and the
+        /// message, when there is one — at the end.
+        private func truncated(from line: CTLine, width: CGFloat) -> (line: CTLine, token: CTLine) {
             let start = CTLineGetStringRange(line).location
             let rest = CFAttributedStringCreateWithSubstring(
                 nil,
@@ -733,9 +896,115 @@
                 CFRange(location: start, length: CFAttributedStringGetLength(string) - start)
             )
             let restLine = CTLineCreateWithAttributedString(rest!)
-            let ellipsis = CFAttributedStringCreate(nil, "\u{2026}" as CFString, attributes)
-            let token = CTLineCreateWithAttributedString(ellipsis!)
-            return CTLineCreateTruncatedLine(restLine, Double(width), .end, token) ?? line
+            let ending = CFAttributedStringCreateMutable(nil, 0)!
+            CFAttributedStringReplaceString(
+                ending,
+                CFRange(location: 0, length: 0),
+                token as CFString
+            )
+            CFAttributedStringSetAttributes(
+                ending,
+                CFRange(location: 0, length: CFAttributedStringGetLength(ending)),
+                attributes,
+                true
+            )
+            if let message, !message.isEmpty {
+                let from = CFAttributedStringGetLength(ending)
+                CFAttributedStringReplaceString(
+                    ending,
+                    CFRange(location: from, length: 0),
+                    " \(message)" as CFString
+                )
+                let all = CFRange(
+                    location: from,
+                    length: CFAttributedStringGetLength(ending) - from
+                )
+                CFAttributedStringSetAttributes(ending, all, attributes, true)
+                CFAttributedStringSetAttribute(
+                    ending,
+                    all,
+                    TextLayout.messageMark,
+                    true as CFBoolean
+                )
+                if let messageColor {
+                    CFAttributedStringSetAttribute(
+                        ending,
+                        all,
+                        kCTForegroundColorAttributeName,
+                        messageColor
+                    )
+                }
+            }
+            let tokenLine = CTLineCreateWithAttributedString(ending)
+            let cut = CTLineCreateTruncatedLine(restLine, Double(width), .end, tokenLine) ?? line
+            return (cut, tokenLine)
+        }
+
+        /// Where the message after the token is, from the top left of the text, y down; `nil`
+        /// when the text is not cut or has no message.
+        func truncationMessageRect(forWidth width: Double) -> CGRect? {
+            guard let message, !message.isEmpty else { return nil }
+
+            let set = lines(forWidth: width)
+            guard set.isTruncated, let last = set.lines.last, let origin = set.origins.last else {
+                return nil
+            }
+
+            let cut = truncated(from: last, width: CGFloat(width)).line
+            var low = Double.infinity
+            var high = -Double.infinity
+            for run in CTLineGetGlyphRuns(cut) as? [CTRun] ?? [] {
+                let attributes = CTRunGetAttributes(run) as NSDictionary
+                guard attributes[TextLayout.messageMark] != nil else { continue }
+
+                var position = CGPoint.zero
+                CTRunGetPositions(run, CFRange(location: 0, length: 1), &position)
+                let runWidth = CTRunGetTypographicBounds(
+                    run,
+                    CFRange(location: 0, length: 0),
+                    nil,
+                    nil,
+                    nil
+                )
+                low = min(low, Double(position.x))
+                high = max(high, Double(position.x) + runWidth)
+            }
+            guard low < high else { return nil }
+
+            var ascent: CGFloat = 0
+            var descent: CGFloat = 0
+            CTLineGetTypographicBounds(cut, &ascent, &descent, nil)
+            let baseline = Double(set.boxHeight - origin.y)
+            return CGRect(
+                x: Double(origin.x) + low,
+                y: baseline - Double(ascent),
+                width: high - low,
+                height: Double(ascent + descent)
+            )
+        }
+
+        /// `style` with the size and line spacing scaled by the first of its `fitScaleFactors`
+        /// at which `text` fits in `maxLines` at `width`, or by the smallest when none does.
+        static func fitted(style: TextStyle, text: String, width: Double) -> TextStyle {
+            guard style.maxLines != nil, !style.fitScaleFactors.isEmpty, !text.isEmpty else {
+                return style
+            }
+
+            func scaled(by factor: Double) -> TextStyle {
+                var copy = style
+                copy.size = style.size * factor
+                copy.lineSpacing = style.lineSpacing * factor
+                copy.fitScaleFactors = []
+                return copy
+            }
+            let factors = style.fitScaleFactors.filter { $0 > 0 }
+            for factor in factors {
+                let candidate = scaled(by: factor)
+                if !TextLayout(text: text, style: candidate).isTruncated(forWidth: width) {
+                    return candidate
+                }
+            }
+            return scaled(by: factors.min() ?? 1)
         }
     }
 #endif

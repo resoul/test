@@ -543,6 +543,14 @@ open class Node: LayoutElement {
     /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
     open func pressChanged(_ isPressed: Bool) {}
 
+    /// A press on the node began at `point`, in the node's coordinates, right after
+    /// `pressChanged(true)` — for a node that shows which part of itself is pressed, such as the
+    /// link of a text. Not called for a press that has no place, like the select button. The
+    /// default does nothing.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    open func pressBegan(at point: LayoutPoint) {}
+
     /// The pointer came to rest over the node, or left it — to show that a press would go
     /// to it. Told only to a node with `onTap` that is not turned off, as the mouse on a Mac
     /// or a pointer on iPad moves; never on iPhone or a TV. The default does nothing.

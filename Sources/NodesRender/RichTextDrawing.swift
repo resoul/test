@@ -85,9 +85,24 @@
             return nil
         }
 
+        /// Whether `maxLines` cuts any of the text.
+        var isCut: Bool {
+            blocks.indices.contains { index in
+                guard let shown = stack.shown[index] else { return false }
+
+                return blocks[index].lines.count > shown
+            }
+        }
+
         /// Draws the text into a box `size` points, origin at the bottom left as Core Graphics
-        /// has it; the layout itself is measured from the top, y down.
-        func draw(in context: CGContext, size: CGSize, colors: RichColors) {
+        /// has it; the layout itself is measured from the top, y down. A link given in
+        /// `highlighting` is filled behind its words.
+        func draw(
+            in context: CGContext,
+            size: CGSize,
+            colors: RichColors,
+            highlighting highlighted: URL? = nil
+        ) {
             func flipped(_ rect: CGRect) -> CGRect {
                 CGRect(
                     x: rect.minX,
@@ -154,7 +169,8 @@
                     case .background: fill(colors.text, alpha: 0.1, rect)
                     case .strike: fill(colors.text, rect)
                     case .underline: fill(colors.text, rect)
-                    case .link: break
+                    case .link(let url):
+                        if url == highlighted { fill(colors.link, alpha: 0.25, rect) }
                     }
                 }
 
