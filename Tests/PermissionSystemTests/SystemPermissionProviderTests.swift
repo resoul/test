@@ -16,9 +16,15 @@ private final class SpyBackend: PermissionBackend, Sendable {
     }
 
     private let state: OSAllocatedUnfairLock<State>
+    let usageDescriptionKeys: [String]?
 
-    init(current: PermissionStatus = .notDetermined, answer: PermissionStatus = .granted(.full)) {
+    init(
+        current: PermissionStatus = .notDetermined,
+        answer: PermissionStatus = .granted(.full),
+        keys: [String]? = nil
+    ) {
         state = OSAllocatedUnfairLock(initialState: State(current: current, answer: answer))
+        usageDescriptionKeys = keys
     }
 
     var statusReads: Int { state.withLock { $0.statuses } }
@@ -257,5 +263,153 @@ func theMissingStringIsAnErrorThroughThePermissionsLayerAndNotRemembered() async
             #expect(LocationBackend.map(.authorizedWhenInUse) == .granted(.whenInUse))
         #endif
         #expect(LocationBackend.map(.authorizedAlways) == .granted(.always))
+    }
+#endif
+
+// MARK: The kinds added after the first five
+
+@Test
+func aBackendThatNamesOtherKeysHasThoseCheckedInPlaceOfTheKindsOwn() async throws {
+    // Calendars before iOS 17 are explained by one older string, not the newer ones.
+    let backend = SpyBackend(keys: ["NSCalendarsUsageDescription"])
+    let onlyTheOldOne: @Sendable (String) -> String? = {
+        $0 == "NSCalendarsUsageDescription" ? "Why." : nil
+    }
+    let system = provider(backend: backend, keys: onlyTheOldOne)
+
+    #expect(try await system.request(.calendar(.full)) == .granted(.full))
+    #expect(backend.requests == 1)
+
+    let missing = SpyBackend(keys: ["NSCalendarsUsageDescription"])
+    await #expect(
+        throws: PermissionError.missingUsageDescription(key: "NSCalendarsUsageDescription")
+    ) {
+        try await provider(backend: missing, keys: { _ in nil }).request(.calendar(.full))
+    }
+    #expect(missing.requests == 0)
+}
+
+@Test
+func everyKindNamesTheKeysItNeeds() {
+    #expect(PermissionKind.contacts.usageDescriptionKeys == ["NSContactsUsageDescription"])
+    #expect(
+        PermissionKind.calendar(.full).usageDescriptionKeys
+            == ["NSCalendarsFullAccessUsageDescription"]
+    )
+    #expect(
+        PermissionKind.calendar(.writeOnly).usageDescriptionKeys
+            == ["NSCalendarsWriteOnlyAccessUsageDescription"]
+    )
+    #expect(
+        PermissionKind.reminders.usageDescriptionKeys
+            == ["NSRemindersFullAccessUsageDescription"]
+    )
+    #expect(
+        PermissionKind.bluetooth.usageDescriptionKeys == ["NSBluetoothAlwaysUsageDescription"]
+    )
+    #expect(
+        PermissionKind.speechRecognition.usageDescriptionKeys
+            == ["NSSpeechRecognitionUsageDescription"]
+    )
+    #expect(PermissionKind.tracking.usageDescriptionKeys == ["NSUserTrackingUsageDescription"])
+    #expect(PermissionKind.motion.usageDescriptionKeys == ["NSMotionUsageDescription"])
+    #expect(PermissionKind.mediaLibrary.usageDescriptionKeys == ["NSAppleMusicUsageDescription"])
+}
+
+@Test
+func theSystemProviderHasABackendForEveryKindThePlatformCanAsk() {
+    // The Mac has no motion and no media library; every other kind has a framework there.
+    let everywhere: [PermissionKind] = [
+        .camera, .microphone, .photos(.readWrite), .notifications, .location(.whenInUse),
+        .contacts, .calendar(.full), .calendar(.writeOnly), .reminders, .bluetooth,
+        .speechRecognition, .tracking,
+    ]
+    for kind in everywhere {
+        #expect(SystemPermissionProvider.systemBackend(for: kind) != nil, "\(kind)")
+    }
+    #if !canImport(UIKit)
+        #expect(SystemPermissionProvider.systemBackend(for: .motion) == nil)
+        #expect(SystemPermissionProvider.systemBackend(for: .mediaLibrary) == nil)
+    #endif
+}
+
+#if canImport(Contacts)
+    import Contacts
+
+    @Test
+    func theContactStatusesIncludeAccessToSomeContacts() {
+        #expect(ContactsBackend.map(.notDetermined) == .notDetermined)
+        #expect(ContactsBackend.map(.restricted) == .restricted)
+        #expect(ContactsBackend.map(.denied) == .denied)
+        #expect(ContactsBackend.map(.authorized) == .granted(.full))
+        // `limited` is an iOS 18 case that the Mac does not have; it is the number 4.
+        #expect(
+            ContactsBackend.map(CNAuthorizationStatus(rawValue: 4) ?? .notDetermined)
+                == .granted(.limited)
+        )
+    }
+#endif
+
+#if canImport(EventKit)
+    import EventKit
+
+    @Test
+    func theEventStatusesSeparateFullAccessFromWritingOnly() {
+        func status(_ number: Int) -> PermissionStatus {
+            EventsBackend.map(EKAuthorizationStatus(rawValue: number) ?? .notDetermined)
+        }
+        #expect(status(0) == .notDetermined)
+        #expect(status(1) == .restricted)
+        #expect(status(2) == .denied)
+        #expect(status(3) == .granted(.full))
+        #expect(status(4) == .granted(.writeOnly))
+    }
+
+    @Test
+    func calendarsAndRemindersAreCheckedAgainstTheirOwnStore() async {
+        // Reading a status needs no window and no string, whatever it turns out to be.
+        let calendar = EventsBackend(subject: .events(.full))
+        let reminders = EventsBackend(subject: .reminders)
+        let first = await calendar.status()
+        let second = await reminders.status()
+
+        #expect(first != .unavailable(.platform))
+        #expect(second != .unavailable(.platform))
+    }
+#endif
+
+#if canImport(CoreBluetooth)
+    import CoreBluetooth
+
+    @Test
+    func theBluetoothStatusesHaveOneKindOfGrant() {
+        #expect(BluetoothBackend.map(.notDetermined) == .notDetermined)
+        #expect(BluetoothBackend.map(.restricted) == .restricted)
+        #expect(BluetoothBackend.map(.denied) == .denied)
+        #expect(BluetoothBackend.map(.allowedAlways) == .granted(.full))
+    }
+#endif
+
+#if PERMISSION_SPEECH && canImport(Speech)
+    import Speech
+
+    @Test
+    func theSpeechStatusesAreTheirOwnKindsOfAnswer() {
+        #expect(SpeechBackend.map(.notDetermined) == .notDetermined)
+        #expect(SpeechBackend.map(.denied) == .denied)
+        #expect(SpeechBackend.map(.restricted) == .restricted)
+        #expect(SpeechBackend.map(.authorized) == .granted(.full))
+    }
+#endif
+
+#if canImport(AppTrackingTransparency)
+    import AppTrackingTransparency
+
+    @Test
+    func theTrackingStatusesAreTheirOwnKindsOfAnswer() {
+        #expect(TrackingBackend.map(.notDetermined) == .notDetermined)
+        #expect(TrackingBackend.map(.restricted) == .restricted)
+        #expect(TrackingBackend.map(.denied) == .denied)
+        #expect(TrackingBackend.map(.authorized) == .granted(.full))
     }
 #endif

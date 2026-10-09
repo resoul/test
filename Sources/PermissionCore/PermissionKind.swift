@@ -8,6 +8,19 @@ public enum PermissionKind: Sendable, Hashable {
     case photos(PhotoAccess)
     case notifications
     case location(LocationAccess)
+    case contacts
+    case calendar(CalendarAccess)
+    case reminders
+    /// Using Bluetooth devices. The system asks when the app first uses Bluetooth, and the
+    /// status says what the person answered.
+    case bluetooth
+    case speechRecognition
+    /// Following the person across other companies' apps and sites (App Tracking Transparency).
+    case tracking
+    /// Motion and fitness activity: step counts, activity types, altitude changes.
+    case motion
+    /// The person's music library.
+    case mediaLibrary
 
     /// How much of the photo library the app wants.
     public enum PhotoAccess: Sendable, Hashable {
@@ -25,12 +38,22 @@ public enum PermissionKind: Sendable, Hashable {
         case always
     }
 
+    /// How much of the calendar the app wants.
+    public enum CalendarAccess: Sendable, Hashable {
+        /// Reading events as well as adding them.
+        case full
+        /// Adding events and nothing else.
+        case writeOnly
+    }
+
     /// The `Info.plist` keys whose strings explain to the person why the app asks. Each must be
     /// present and not empty before the system is asked: for some kinds the system ends the app that
     /// asks without one, for others it quietly refuses, and an app is not to find out which in
     /// front of a person.
     ///
-    /// Notifications need none.
+    /// Notifications need none. Calendar and reminders name the keys of the newest systems — iOS 17
+    /// and macOS 14 — which the system provider swaps for the older `NSCalendarsUsageDescription`
+    /// and `NSRemindersUsageDescription` on an older system.
     public var usageDescriptionKeys: [String] {
         switch self {
         case .camera: ["NSCameraUsageDescription"]
@@ -41,6 +64,15 @@ public enum PermissionKind: Sendable, Hashable {
         case .location(.whenInUse): ["NSLocationWhenInUseUsageDescription"]
         case .location(.always):
             ["NSLocationAlwaysAndWhenInUseUsageDescription", "NSLocationWhenInUseUsageDescription"]
+        case .contacts: ["NSContactsUsageDescription"]
+        case .calendar(.full): ["NSCalendarsFullAccessUsageDescription"]
+        case .calendar(.writeOnly): ["NSCalendarsWriteOnlyAccessUsageDescription"]
+        case .reminders: ["NSRemindersFullAccessUsageDescription"]
+        case .bluetooth: ["NSBluetoothAlwaysUsageDescription"]
+        case .speechRecognition: ["NSSpeechRecognitionUsageDescription"]
+        case .tracking: ["NSUserTrackingUsageDescription"]
+        case .motion: ["NSMotionUsageDescription"]
+        case .mediaLibrary: ["NSAppleMusicUsageDescription"]
         }
     }
 }

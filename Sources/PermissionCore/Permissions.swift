@@ -170,6 +170,31 @@ public actor Permissions {
         }
     }
 
+    /// Reads the observed kinds again each time `isForeground` says the app came to the front, for as
+    /// long as the sequence goes on. This is how a change made in Settings reaches the screens:
+    /// the person leaves the app, changes the permission, and comes back.
+    ///
+    /// Returns when the sequence ends, when it throws, or when the calling task is cancelled; run it
+    /// in a task of its own and cancel that task when the app no longer follows. A `false` value, the
+    /// app leaving the front, does nothing: nothing can change meanwhile that the app would see.
+    ///
+    /// - Parameter isForeground: Whether the app is in front, each time that changes. The platform
+    ///   modules give one (`UIKitPermissions.foregroundChanges()`, `AppKitPermissions.foregroundChanges()`);
+    ///   an app on the app shell can use `shell.activations().map { $0 == .active }`.
+    public nonisolated func follow<Foreground: AsyncSequence & Sendable>(
+        _ isForeground: Foreground
+    ) async where Foreground.Element == Bool {
+        do {
+            for try await inFront in isForeground {
+                if Task.isCancelled { return }
+
+                if inFront { await refresh() }
+            }
+        } catch {
+            return
+        }
+    }
+
     private func forget(_ id: UUID) {
         observers[id] = nil
     }

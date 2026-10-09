@@ -167,7 +167,7 @@ public final class ItemsModel {
 
     private static func status(of state: WebSocketState) -> ConnectionStatus {
         switch state {
-        case .idle, .closed: .offline
+        case .idle, .closed, .suspended: .offline
         case .connecting: .connecting
         case .connected: .live
         case .reconnecting: .reconnecting
@@ -208,6 +208,7 @@ public final class ItemsModel {
             "The server's answer could not be understood."
         case .authorizationFailed: "You need to sign in again."
         case .invalidRequest, .encoding: "The request could not be made."
+        case .fileSystem: "The file could not be read or saved."
         case .cancelled: "Cancelled."
         }
     }

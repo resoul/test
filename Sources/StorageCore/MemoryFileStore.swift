@@ -25,6 +25,16 @@ public actor MemoryFileStore: FileStore {
         files[path] = (data, now())
     }
 
+    public func importFile(at url: URL, to path: FilePath) throws(FileError) {
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            throw .failed(path: nil, reason: error.localizedDescription)
+        }
+        try write(data, to: path)
+    }
+
     public func metadata(of path: FilePath) -> FileMetadata? {
         if let file = files[path] {
             return FileMetadata(

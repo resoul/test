@@ -17,6 +17,35 @@
             SystemPermissionProvider(isInForeground: { await MainActor.run { isInForeground() } })
         }
 
+        /// Whether the app is in front now, and then each time that changes, until the sequence is
+        /// dropped. Pass it to ``Permissions/follow(_:)``.
+        public static func foregroundChanges() -> AsyncStream<Bool> {
+            let (stream, continuation) = AsyncStream.makeStream(
+                of: Bool.self,
+                bufferingPolicy: .bufferingNewest(1)
+            )
+            let becameActive = Task {
+                for await _ in NotificationCenter.default.notifications(
+                    named: UIApplication.didBecomeActiveNotification
+                ) {
+                    continuation.yield(true)
+                }
+            }
+            let resigned = Task {
+                for await _ in NotificationCenter.default.notifications(
+                    named: UIApplication.willResignActiveNotification
+                ) {
+                    continuation.yield(false)
+                }
+            }
+            continuation.onTermination = { _ in
+                becameActive.cancel()
+                resigned.cancel()
+            }
+            Task { @MainActor in continuation.yield(isInForeground()) }
+            return stream
+        }
+
         /// Opens the app's own page in Settings, where each permission can be changed.
         ///
         /// - Returns: Whether the system opened it. It does not say whether the person changed

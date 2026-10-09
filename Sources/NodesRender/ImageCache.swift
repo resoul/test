@@ -2,6 +2,7 @@
     import CryptoKit
     import Foundation
     import ImageIO
+    import NetworkCore
     import os
 
     /// Metadata kept when an image is written to the disk cache.
@@ -142,7 +143,7 @@
         /// server.
         private func freshData(for url: URL) throws -> Data? {
             let file = fileURL(for: url)
-            if let freshUntil = HTTPValidators.read(at: file)?.freshUntil, Date() >= freshUntil {
+            if let validators = HTTPValidators.read(at: file), !validators.isFresh(at: Date()) {
                 return nil
             }
             return try cachedData(for: url)
@@ -218,7 +219,7 @@
                 Date().timeIntervalSince(created) <= max(configuration.maximumAge, 0)
             else { return nil }
             // A stale entry is to be checked with the server before its bytes are used again.
-            if let freshUntil = HTTPValidators.read(at: file)?.freshUntil, Date() >= freshUntil {
+            if let validators = HTTPValidators.read(at: file), !validators.isFresh(at: Date()) {
                 return nil
             }
 
@@ -411,7 +412,7 @@
             // After a removal of all entries, such as at sign-out, nothing fetched before it
             // is written back; nor is what the server asks not to store, whose older copy goes.
             guard removals == removalsAtStart else { return data }
-            if HTTPValidators.forbidsStoring(response) {
+            if HTTPValidators.forbidsStoring(response.httpHeaders) {
                 try? remove(for: url)
                 return data
             }
@@ -438,11 +439,8 @@
             // The disk entries are the cache: the session's own is neither asked nor needed.
             var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
             if let validators {
-                if let etag = validators.etag {
-                    request.setValue(etag, forHTTPHeaderField: "If-None-Match")
-                }
-                if let lastModified = validators.lastModified {
-                    request.setValue(lastModified, forHTTPHeaderField: "If-Modified-Since")
+                for (name, value) in validators.conditionalHeaders.all {
+                    request.setValue(value, forHTTPHeaderField: name)
                 }
             }
             let result: (Data, URLResponse)
@@ -665,79 +663,16 @@
         }
     }
 
-    /// What the server said about a stored response: its validators, and until when it may be
-    /// used without asking again. Kept in an extended attribute of the entry's file, so the
-    /// directory holds nothing but entries; a rewritten file starts without one.
-    struct HTTPValidators: Codable, Sendable, Equatable {
-        var etag: String?
-        var lastModified: String?
-        /// `nil`: fresh for as long as the cache keeps the entry.
-        var freshUntil: Date?
-
+    /// A stored response's validators and freshness, kept in an extended attribute of the entry's
+    /// file, so the directory holds nothing but entries; a rewritten file starts without one.
+    extension HTTPValidators {
         /// The attribute's name; like the entries' names, it says what it holds.
         private static let attribute = "image-cache.http"
-
-        var canRevalidate: Bool { etag != nil || lastModified != nil }
 
         /// From a response received at `now`; a 304 answer keeps the validators it does not
         /// repeat.
         init(response: HTTPURLResponse, now: Date, keeping stored: HTTPValidators?) {
-            etag = response.value(forHTTPHeaderField: "ETag") ?? stored?.etag
-            lastModified =
-                response.value(forHTTPHeaderField: "Last-Modified") ?? stored?.lastModified
-            freshUntil = HTTPValidators.freshUntil(response, now: now)
-        }
-
-        /// `Cache-Control: no-store`: the response must not be written anywhere.
-        static func forbidsStoring(_ response: HTTPURLResponse) -> Bool {
-            directives(response).keys.contains("no-store")
-        }
-
-        /// RFC 9111 §4.2.1: `no-cache` is stale at once; `max-age` counts from the response
-        /// minus its `Age`; else `Expires`. Without any of them, `nil`.
-        private static func freshUntil(_ response: HTTPURLResponse, now: Date) -> Date? {
-            let directives = directives(response)
-            if directives.keys.contains("no-cache") { return now }
-            if let value = directives["max-age"], let seconds = value.flatMap(Double.init) {
-                let age = response.value(forHTTPHeaderField: "Age").flatMap(Double.init) ?? 0
-                return now.addingTimeInterval(max(0, seconds - max(0, age)))
-            }
-            if let expires = response.value(forHTTPHeaderField: "Expires") {
-                // An invalid date means already expired (RFC 9111 §5.3).
-                return httpDate(expires) ?? now
-            }
-            return nil
-        }
-
-        /// `Cache-Control` directives by lowercased name, with their values.
-        private static func directives(_ response: HTTPURLResponse) -> [String: String?] {
-            guard let header = response.value(forHTTPHeaderField: "Cache-Control") else {
-                return [:]
-            }
-
-            var directives: [String: String?] = [:]
-            for part in header.split(separator: ",") {
-                let pair = part.split(separator: "=", maxSplits: 1)
-                guard let name = pair.first?.trimmingCharacters(in: .whitespaces).lowercased(),
-                    !name.isEmpty
-                else { continue }
-
-                directives[name] =
-                    pair.count > 1
-                    ? pair[1].trimmingCharacters(in: .whitespaces)
-                        .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
-                    : String?.none
-            }
-            return directives
-        }
-
-        /// An HTTP date in its preferred form, `Sun, 06 Nov 1994 08:49:37 GMT`.
-        private static func httpDate(_ text: String) -> Date? {
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.timeZone = TimeZone(identifier: "GMT")
-            formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
-            return formatter.date(from: text)
+            self.init(headers: response.httpHeaders, now: now, keeping: stored)
         }
 
         static func read(at file: URL) -> HTTPValidators? {
@@ -765,6 +700,19 @@
             _ = data.withUnsafeBytes {
                 setxattr(file.path, HTTPValidators.attribute, $0.baseAddress, data.count, 0, 0)
             }
+        }
+    }
+
+    extension HTTPURLResponse {
+        /// The response's header fields as ``HTTPHeaders``.
+        fileprivate var httpHeaders: HTTPHeaders {
+            var headers = HTTPHeaders()
+            for (name, value) in allHeaderFields {
+                if let name = name as? String, let value = value as? String {
+                    headers.add(value, for: name)
+                }
+            }
+            return headers
         }
     }
 

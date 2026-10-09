@@ -22,6 +22,9 @@ public enum HTTPError: Error, Sendable {
     case decoding(underlying: any Error)
     /// Credentials could not be obtained or refreshed.
     case authorizationFailed(underlying: any Error)
+    /// A file could not be read for an upload, or a downloaded file could not be written or moved
+    /// to its destination. Nothing the server sent is lost to this: the answer was fine.
+    case fileSystem(underlying: any Error)
     /// The task was cancelled. Not a failure of the network, and not worth showing as one.
     case cancelled
 }

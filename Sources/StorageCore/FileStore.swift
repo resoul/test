@@ -52,6 +52,17 @@ public protocol FileStore: Sendable {
     /// that does not exist has no items.
     func list(_ directory: FilePath?) async throws(FileError) -> [FileEntry]
 
+    /// Copies the file at `url`, which lies outside the store, to `path`, creating missing
+    /// directories above it. The source is only read, and a file too big for memory is fine: a
+    /// store that keeps its files on disk copies in pieces.
+    ///
+    /// An existing file at `path` is replaced when the copy is complete; if the copy fails or is
+    /// cancelled, the previous content is still there.
+    ///
+    /// - Throws: ``FileError/failed(path:reason:)`` when `url` cannot be read, and the errors of
+    ///   ``write(_:to:)``.
+    func importFile(at url: URL, to path: FilePath) async throws(FileError)
+
     /// Removes a file, or a directory with everything in it.
     ///
     /// - Returns: Whether something was there to remove; removing nothing is not an error.

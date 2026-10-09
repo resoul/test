@@ -17,6 +17,8 @@ public enum PermissionStatus: Sendable, Equatable {
         case full
         /// A part: some of the photos, some of the contacts.
         case limited
+        /// Adding and nothing else: events can be created but not read.
+        case writeOnly
         /// Notifications delivered quietly, without a prompt, until the person chooses.
         case provisional
         /// Notifications for a short time only, as in an App Clip.

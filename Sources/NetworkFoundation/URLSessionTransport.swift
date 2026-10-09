@@ -24,36 +24,30 @@ public struct URLSessionTransport: HTTPTransport {
         case refuse
     }
 
-    private let session: URLSession
-    private let redirects: RedirectPolicy
+    let session: URLSession
+    let redirects: RedirectPolicy
+    let downloadDirectory: URL
 
     /// - Parameters:
     ///   - session: The session to use; it is held, not owned, so the app decides when to
     ///     invalidate it. A session of its own is made when none is given.
     ///   - redirects: What to do with a redirect.
+    ///   - downloadDirectory: Where ``download(_:maxBytes:)`` makes its files, which are then the
+    ///     caller's to move or delete. The system's temporary directory by default; it must exist.
     public init(
         session: URLSession = URLSession(configuration: .default),
-        redirects: RedirectPolicy = .follow
+        redirects: RedirectPolicy = .follow,
+        downloadDirectory: URL = FileManager.default.temporaryDirectory
     ) {
         self.session = session
         self.redirects = redirects
+        self.downloadDirectory = downloadDirectory
     }
 
     public func send(_ request: HTTPRequest, maxResponseBytes: Int?) async throws(HTTPError)
         -> HTTPResponse
     {
-        guard HTTPOrigin(request.url) != nil else {
-            throw .invalidRequest("\(request.url) is not an http or https URL")
-        }
-
-        var urlRequest = URLRequest(url: request.url)
-        urlRequest.httpMethod = request.method.name
-        for (name, value) in request.headers.all {
-            urlRequest.addValue(value, forHTTPHeaderField: name)
-        }
-        urlRequest.httpBody = request.body
-        urlRequest.httpShouldHandleCookies = false
-        if let timeout = request.timeout { urlRequest.timeoutInterval = timeout }
+        let urlRequest = try Self.makeURLRequest(request)
 
         do {
             let (bytes, urlResponse) = try await session.bytes(
@@ -99,6 +93,26 @@ public struct URLSessionTransport: HTTPTransport {
         }
     }
 
+    /// The `URLRequest` for `request`; the body is left to the caller, because an upload takes it
+    /// from a file.
+    static func makeURLRequest(_ request: HTTPRequest, includingBody: Bool = true) throws(HTTPError)
+        -> URLRequest
+    {
+        guard HTTPOrigin(request.url) != nil else {
+            throw .invalidRequest("\(request.url) is not an http or https URL")
+        }
+
+        var urlRequest = URLRequest(url: request.url)
+        urlRequest.httpMethod = request.method.name
+        for (name, value) in request.headers.all {
+            urlRequest.addValue(value, forHTTPHeaderField: name)
+        }
+        if includingBody { urlRequest.httpBody = request.body }
+        urlRequest.httpShouldHandleCookies = false
+        if let timeout = request.timeout { urlRequest.timeoutInterval = timeout }
+        return urlRequest
+    }
+
     static func map(_ error: any Error) -> HTTPError {
         if error is CancellationError { return .cancelled }
         guard let urlError = error as? URLError else {
@@ -124,20 +138,15 @@ public struct URLSessionTransport: HTTPTransport {
     }
 }
 
-/// Decides each redirect of one request.
-private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable {
-    private let policy: URLSessionTransport.RedirectPolicy
-
-    init(policy: URLSessionTransport.RedirectPolicy) {
-        self.policy = policy
-    }
-
-    func urlSession(
-        _ session: URLSession,
+/// What to do with a redirect: whether to follow it and which credentials go along. Shared by
+/// every kind of transfer, so a download and an upload treat credentials as a plain request does.
+enum RedirectRules {
+    static func decide(
+        policy: URLSessionTransport.RedirectPolicy,
         task: URLSessionTask,
-        willPerformHTTPRedirection response: HTTPURLResponse,
+        response: HTTPURLResponse,
         newRequest request: URLRequest
-    ) async -> URLRequest? {
+    ) -> URLRequest? {
         guard case .follow = policy, let target = request.url,
             let targetOrigin = HTTPOrigin(target),
             let source = response.url, let sourceOrigin = HTTPOrigin(source)
@@ -160,5 +169,23 @@ private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable
             for name in sensitive { next.setValue(nil, forHTTPHeaderField: name) }
         }
         return next
+    }
+}
+
+/// Decides each redirect of one request.
+private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable {
+    private let policy: URLSessionTransport.RedirectPolicy
+
+    init(policy: URLSessionTransport.RedirectPolicy) {
+        self.policy = policy
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest
+    ) async -> URLRequest? {
+        RedirectRules.decide(policy: policy, task: task, response: response, newRequest: request)
     }
 }
