@@ -99,6 +99,7 @@ let package = Package(
             name: "PermissionSystem",
             dependencies: ["PermissionCore"],
             swiftSettings: [
+                .define("PERMISSION_LOCATION_ALWAYS", .when(platforms: [.iOS, .macOS, .macCatalyst])),
                 .define("PERMISSION_SPEECH", .when(platforms: [.iOS, .macOS, .macCatalyst])),
                 .define("PERMISSION_MOTION", .when(platforms: [.iOS, .macCatalyst])),
                 .define("PERMISSION_MEDIA_LIBRARY", .when(platforms: [.iOS, .macCatalyst])),

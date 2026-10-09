@@ -413,3 +413,119 @@ func theSystemProviderHasABackendForEveryKindThePlatformCanAsk() {
         #expect(TrackingBackend.map(.authorized) == .granted(.full))
     }
 #endif
+
+// MARK: The offer to raise location to "always"
+
+/// What the wait sees, in order, and everything it waits for, counted in virtual time.
+private final class Scene: Sendable {
+    private struct State {
+        var statuses: [PermissionStatus]
+        var foreground: [Bool]
+        var slept: [Duration] = []
+    }
+
+    private let state: OSAllocatedUnfairLock<State>
+
+    /// The last value of each list repeats, so a script need only say what changes.
+    init(statuses: [PermissionStatus], foreground: [Bool]) {
+        state = OSAllocatedUnfairLock(initialState: State(statuses: statuses, foreground: foreground))
+    }
+
+    var slept: [Duration] { state.withLock { $0.slept } }
+    var total: Duration { slept.reduce(.zero, +) }
+
+    func wait() -> AlwaysUpgradeWait {
+        AlwaysUpgradeWait(
+            status: { [self] in
+                state.withLock { $0.statuses.count > 1 ? $0.statuses.removeFirst() : $0.statuses[0] }
+            },
+            isInForeground: { [self] in
+                state.withLock { $0.foreground.count > 1 ? $0.foreground.removeFirst() : $0.foreground[0] }
+            },
+            sleep: { [self] duration in state.withLock { $0.slept.append(duration) } }
+        )
+    }
+}
+
+@Test
+func anOfferThatNeverShowsAWindowEndsAfterTheWatchWithTheStatusAsItIs() async {
+    // The system offered once before, so nothing appears: the app stays in front throughout.
+    let scene = Scene(statuses: [.granted(.whenInUse)], foreground: [true])
+
+    let status = await scene.wait().run()
+
+    #expect(status == .granted(.whenInUse))
+    #expect(scene.total == .milliseconds(1500), "it watched for the window and then stopped")
+    #expect(!scene.slept.contains(.milliseconds(300)), "no window, so nothing to let settle")
+}
+
+@Test
+func aWindowThatIsKeptAtWhenInUseEndsWhenTheAppIsInFrontAgain() async {
+    // In front, then the window is up for a while, then in front again; the status never changes.
+    let scene = Scene(
+        statuses: [.granted(.whenInUse)],
+        foreground: [true, true, false, false, false, false, true]
+    )
+
+    let status = await scene.wait().run()
+
+    #expect(status == .granted(.whenInUse))
+    #expect(scene.slept.last == .milliseconds(300), "the system is let settle before the status is read")
+    #expect(scene.total < .milliseconds(1500), "the wait ended with the window, not the watch")
+}
+
+@Test
+func aRaiseDuringTheWindowIsReadAtOnce() async {
+    let scene = Scene(
+        statuses: [.granted(.whenInUse), .granted(.whenInUse), .granted(.always)],
+        foreground: [true, false]
+    )
+
+    let status = await scene.wait().run()
+
+    #expect(status == .granted(.always))
+    #expect(!scene.slept.contains(.milliseconds(300)), "nothing to wait for once it is raised")
+}
+
+@Test
+func aRaiseThatShowsBeforeTheWindowIsSeenIsTheAnswer() async {
+    let scene = Scene(statuses: [.granted(.always)], foreground: [true])
+
+    let status = await scene.wait().run()
+
+    #expect(status == .granted(.always))
+    #expect(scene.slept.isEmpty)
+}
+
+@Test
+func aWindowThatNeverClosesIsGivenUpOnAtTheCeiling() async {
+    let scene = Scene(statuses: [.granted(.whenInUse)], foreground: [false])
+    var wait = scene.wait()
+    wait.ceiling = .seconds(2)
+
+    let status = await wait.run()
+
+    #expect(status == .granted(.whenInUse))
+    #expect(scene.total >= .seconds(2))
+    #expect(scene.total < .seconds(3))
+}
+
+@Test
+func aCancelledWaitReadsTheStatusAndWaitsForNothing() async {
+    let scene = Scene(statuses: [.granted(.whenInUse)], foreground: [false])
+    let task = Task { () -> PermissionStatus in
+        while !Task.isCancelled { await Task.yield() }
+        return await scene.wait().run()
+    }
+    task.cancel()
+
+    #expect(await task.value == .granted(.whenInUse))
+    #expect(scene.slept.isEmpty)
+}
+
+#if PERMISSION_LOCATION_ALWAYS
+    @Test
+    func theSystemProviderAsksForAlwaysWhereTheCallExists() {
+        #expect(SystemPermissionProvider.systemBackend(for: .location(.always)) != nil)
+    }
+#endif

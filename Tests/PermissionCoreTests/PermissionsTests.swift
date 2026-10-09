@@ -410,3 +410,46 @@ func followingEndsWhenItsTaskIsCancelled() async {
     following.cancel()
     await following.value
 }
+
+// MARK: Asking again for a higher level
+
+@Test
+func locationAlwaysCanBeAskedAfterWhenInUseAndNothingElseIsAskedTwice() {
+    let always = PermissionKind.location(.always)
+
+    #expect(always.canBeAsked(whenStatusIs: .notDetermined))
+    #expect(always.canBeAsked(whenStatusIs: .granted(.whenInUse)))
+    #expect(!always.canBeAsked(whenStatusIs: .granted(.always)))
+    #expect(!always.canBeAsked(whenStatusIs: .denied))
+    #expect(!always.canBeAsked(whenStatusIs: .restricted))
+    // Other kinds, and "when in use" itself, are asked only before the person has answered.
+    #expect(!PermissionKind.location(.whenInUse).canBeAsked(whenStatusIs: .granted(.whenInUse)))
+    #expect(!PermissionKind.camera.canBeAsked(whenStatusIs: .granted(.full)))
+    #expect(PermissionKind.camera.canBeAsked(whenStatusIs: .notDetermined))
+    #expect(!PermissionKind.photos(.readWrite).canBeAsked(whenStatusIs: .granted(.limited)))
+}
+
+@Test(.timeLimit(.minutes(1)))
+func aRequestForAlwaysAfterWhenInUseReachesTheProviderAndOneForAnythingElseDoesNot() async throws {
+    let provider = InMemoryPermissionProvider(statuses: [
+        .location(.always): .granted(.whenInUse),
+        .camera: .granted(.full),
+    ])
+    await provider.willAnswer(.granted(.always), for: .location(.always))
+    let permissions = Permissions(provider: provider)
+
+    #expect(try await permissions.request(.location(.always)) == .granted(.always))
+    #expect(try await permissions.request(.camera) == .granted(.full))
+
+    #expect(await provider.requests == [.location(.always)], "only the raise reached the system")
+}
+
+@Test(.timeLimit(.minutes(1)))
+func aRaiseThatLeavesWhenInUseIsTheAnswerAndTheStatusStaysAsItWas() async throws {
+    let provider = InMemoryPermissionProvider(statuses: [.location(.always): .granted(.whenInUse)])
+    await provider.willAnswer(.granted(.whenInUse), for: .location(.always))
+    let permissions = Permissions(provider: provider)
+
+    #expect(try await permissions.request(.location(.always)) == .granted(.whenInUse))
+    #expect(await permissions.status(of: .location(.always)) == .granted(.whenInUse))
+}

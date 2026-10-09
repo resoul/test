@@ -553,6 +553,7 @@
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsMultipleScenes = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "The demo shows what the system says before it asks for the camera.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "The demo shows what the system says before it asks to use your location all the time.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "The demo shows what the system says before it asks for your location.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "The demo shows what the system says before it asks for the microphone.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "The demo shows what the system says before it asks for your photos.";
@@ -585,6 +586,7 @@
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsMultipleScenes = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "The demo shows what the system says before it asks for the camera.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "The demo shows what the system says before it asks to use your location all the time.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "The demo shows what the system says before it asks for your location.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "The demo shows what the system says before it asks for the microphone.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "The demo shows what the system says before it asks for your photos.";

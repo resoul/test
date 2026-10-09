@@ -8,6 +8,7 @@ import PermissionCore
     /// delegate's calls come.
     struct LocationBackend: PermissionBackend {
         let access: PermissionKind.LocationAccess
+        let isInForeground: @Sendable () async -> Bool
 
         func status() async -> PermissionStatus {
             await MainActor.run { Self.map(CLLocationManager().authorizationStatus) }
@@ -18,11 +19,44 @@ import PermissionCore
             case .whenInUse:
                 return await Self.askWhenInUse()
             case .always:
-                // Asking for "always" comes after "when in use" and has a window of its own; it is not
-                // written yet, and does not pretend to be.
-                throw .system(description: "Asking for location always is not implemented")
+                // Location "always" is not asked on tvOS, where the call does not exist.
+                #if PERMISSION_LOCATION_ALWAYS
+                    return await Self.askAlways(isInForeground: isInForeground)
+                #else
+                    throw .unsupported(.platform)
+                #endif
             }
         }
+
+        #if PERMISSION_LOCATION_ALWAYS
+            /// From "not determined" the system shows its first window — on iOS the one for "when in
+            /// use", which is what it offers first — and the answer is returned as it is: the offer
+            /// to raise it to "always" is a second window, which is not shown behind the first one's
+            /// back, and the next request is the one that asks for it. From "when in use" the offer
+            /// is made and waited out. From any other status the system is not asked.
+            @MainActor
+            private static func askAlways(isInForeground: @escaping @Sendable () async -> Bool)
+                async -> PermissionStatus
+            {
+                let asker = LocationAsker()
+                let current = map(asker.currentStatus)
+                guard current == .notDetermined || current == .granted(.whenInUse) else {
+                    return current
+                }
+
+                if current == .notDetermined { return await asker.ask(always: true) }
+
+                asker.requestAlways()
+                let wait = AlwaysUpgradeWait(
+                    status: { await MainActor.run { map(CLLocationManager().authorizationStatus) } },
+                    isInForeground: isInForeground
+                )
+                // The request belongs to the manager: it must live until the window is gone.
+                let answer = await wait.run()
+                withExtendedLifetime(asker) {}
+                return answer
+            }
+        #endif
 
         @MainActor
         private static func askWhenInUse() async -> PermissionStatus {
@@ -48,13 +82,27 @@ import PermissionCore
         private let manager = CLLocationManager()
         private var waiting: CheckedContinuation<PermissionStatus, Never>?
 
-        func ask() async -> PermissionStatus {
+        var currentStatus: CLAuthorizationStatus { manager.authorizationStatus }
+
+        func ask(always: Bool = false) async -> PermissionStatus {
             manager.delegate = self
             return await withCheckedContinuation { continuation in
                 waiting = continuation
+                #if PERMISSION_LOCATION_ALWAYS
+                    if always {
+                        manager.requestAlwaysAuthorization()
+                        return
+                    }
+                #endif
                 manager.requestWhenInUseAuthorization()
             }
         }
+
+        #if PERMISSION_LOCATION_ALWAYS
+            func requestAlways() {
+                manager.requestAlwaysAuthorization()
+            }
+        #endif
 
         nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
             Task { @MainActor in self.heard() }
@@ -71,17 +119,19 @@ import PermissionCore
     }
 
     extension SystemPermissionProvider {
-        static func locationBackend(_ access: PermissionKind.LocationAccess) -> (
-            any PermissionBackend
-        )? {
-            LocationBackend(access: access)
+        static func locationBackend(
+            _ access: PermissionKind.LocationAccess,
+            isInForeground: @escaping @Sendable () async -> Bool
+        ) -> (any PermissionBackend)? {
+            LocationBackend(access: access, isInForeground: isInForeground)
         }
     }
 #else
     extension SystemPermissionProvider {
-        static func locationBackend(_ access: PermissionKind.LocationAccess) -> (
-            any PermissionBackend
-        )? {
+        static func locationBackend(
+            _ access: PermissionKind.LocationAccess,
+            isInForeground: @escaping @Sendable () async -> Bool
+        ) -> (any PermissionBackend)? {
             nil
         }
     }

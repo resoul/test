@@ -31,6 +31,7 @@ enum PermissionLayerProbe {
         ("photosAddOnly", .photos(.addOnly)),
         ("notifications", .notifications),
         ("location", .location(.whenInUse)),
+        ("locationAlways", .location(.always)),
     ]
 
     private static func makeProvider() -> SystemPermissionProvider {

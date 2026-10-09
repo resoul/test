@@ -46,6 +46,19 @@ public enum PermissionKind: Sendable, Hashable {
         case writeOnly
     }
 
+    /// Whether the system can still be asked for this kind when it says `status`.
+    ///
+    /// Always when nothing has been asked yet. A kind that comes in levels can also be asked again
+    /// for a higher level: location "always" after the person chose "when in use", which makes the
+    /// system offer to change it. The system shows that offer once; asking after that shows no
+    /// window and ends with the status unchanged, so the app must not make "always" a condition
+    /// of its screen working.
+    public func canBeAsked(whenStatusIs status: PermissionStatus) -> Bool {
+        if status == .notDetermined { return true }
+
+        return self == .location(.always) && status == .granted(.whenInUse)
+    }
+
     /// The `Info.plist` keys whose strings explain to the person why the app asks. Each must be
     /// present and not empty before the system is asked: for some kinds the system ends the app that
     /// asks without one, for others it quietly refuses, and an app is not to find out which in
