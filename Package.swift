@@ -169,7 +169,7 @@ let package = Package(
             name: "NodesRenderTests",
             dependencies: [
                 "Nodes", "NodesRender", "NodesUIKit", "NodesAppKit", "LayoutCore", "ThemeCore",
-                "RichTextCore",
+                "RichTextCore", "LocalizationCore",
             ]
         ),
         .testTarget(
