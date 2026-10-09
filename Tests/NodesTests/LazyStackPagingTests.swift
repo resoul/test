@@ -304,7 +304,7 @@ func theItemsTriggerCountsFromTheLastItemThatShowsInAGrid() async {
 
 @Test @MainActor
 func aPageOnItsWayIsMarkedFromTheRequestToTheAnswer() async {
-    let feed = PagedFeed(count: 20)
+    let feed = PagedFeed(count: 23)
     feed.behavior = { [weak feed] _ in feed?.append(10) }
     let host = host(feed)
     let marks = OSAllocatedUnfairLock<[Trace.Record]>(initialState: [])
@@ -314,11 +314,11 @@ func aPageOnItsWayIsMarkedFromTheRequestToTheAnswer() async {
     }
     defer { observation.cancel() }
 
-    scroll(feed, to: 200, in: host)
+    scroll(feed, to: 250, in: host)
 
-    #expect(await settle { feed.stack.items.count == 30 })
+    #expect(await settle { feed.stack.items.count == 33 })
     #expect(await settle { feed.stack.pageLoadState == .idle })
-    let seen = marks.withLock { $0 }.filter { $0.detail == "loaded 20" }
+    let seen = marks.withLock { $0 }.filter { $0.detail == "loaded 23" }
     #expect(seen.map(\.phase) == [.begin, .end])
     host.detach()
 }

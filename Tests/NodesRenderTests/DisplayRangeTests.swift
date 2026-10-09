@@ -147,15 +147,18 @@
         let (article, host, renderer) = setUp(range: .init(drawDistance: 1, releaseDistance: 2))
         let next = article.lines.firstIndex { renderer.layer(for: $0)?.contents == nil }!
         let line = article.lines[next]
+        // The line comes within a window length of the screen once the scroll is `enters` down.
+        let enters = line.frame.origin.y - 200
+        #expect(enters > 0 && enters < 24, "a line is shorter than a quarter of the scroll")
 
-        // The scroll is 100 long, so a review waits for a move of 25 points. After ten the line
-        // is within reach of the window, but nobody has looked.
-        scrollTo(10, article, host, renderer)
-        scrollTo(20, article, host, renderer)
+        // The scroll is 100 long, so a review waits for a move of 25 points. The line is within
+        // reach after `enters` and a little more, but nobody has looked.
+        scrollTo(enters + 1, article, host, renderer)
+        scrollTo(enters + 2, article, host, renderer)
         #expect(line.screenfulsToScreen! <= 1)
         #expect(renderer.layer(for: line)?.contents == nil)
 
-        scrollTo(60, article, host, renderer)
+        scrollTo(enters + 40, article, host, renderer)
         #expect(renderer.layer(for: line)?.contents != nil)
         host.detach()
     }

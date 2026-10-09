@@ -288,6 +288,10 @@
             CATransaction.setDisableActions(true)
             defer { CATransaction.commit() }
 
+            // Where each scroll was when it was last drawn or moved, before this call moves it:
+            // the first review waits for a move from there, not for the first move at all.
+            var before: [NodeID: LayoutPoint] = [:]
+            for scroll in scrolls { before[scroll.id] = drawnOffsets[scroll.id] }
             for scroll in scrolls {
                 guard let layer = layers[scroll.id] else { continue }
 
@@ -309,9 +313,10 @@
                 let offset = scroll.shownOffset
                 let size = scroll.frame.size
                 let step = max(size.width, size.height) / 4
-                if let reviewed = reviewedOffsets[scroll.id],
+                if let reviewed = reviewedOffsets[scroll.id] ?? before[scroll.id],
                     max(abs(offset.x - reviewed.x), abs(offset.y - reviewed.y)) < step
                 {
+                    reviewedOffsets[scroll.id] = reviewed
                     continue
                 }
                 reviewedOffsets[scroll.id] = offset
