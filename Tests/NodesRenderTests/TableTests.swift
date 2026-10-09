@@ -1,5 +1,7 @@
 #if canImport(CoreText)
+    import Foundation
     import LayoutCore
+    import LocalizationCore
     import Nodes
     import Testing
 
@@ -1059,7 +1061,9 @@
         let inbox = Inbox()
         var requests: [PageRequest] = []
         inbox.table.pagination = PaginationPolicy(pageSize: 15)
-        inbox.table.loadMore = { [unowned inbox] request in
+        inbox.table.loadMore = { [weak inbox] request in
+            guard let inbox else { return }
+
             requests.append(request)
             var sections = inbox.table.sections
             sections[1].items += (30..<45).map(Message.init)
@@ -1083,6 +1087,211 @@
         inbox.table.reachedEnd = true
         #expect(inbox.table.pageLoadState == .endReached)
         inbox.host.detach()
+    }
+
+    // MARK: - Page footer
+
+    /// The nodes of type `T` among `node` and the nodes inside it.
+    @MainActor
+    private func all<T: Node>(_ type: T.Type, in node: Node) -> [T] {
+        (node as? T).map { [$0] } ?? []
+            + node.subnodes.flatMap { all(type, in: $0) }
+    }
+
+    /// An inbox that pages: the loader waits until `release()`, then ends with `outcome`.
+    @MainActor
+    private final class PagingInbox {
+        let inbox = Inbox()
+        var requests = 0
+        var outcome: Result<Void, any Error> = .success(())
+        private var waiting: CheckedContinuation<Void, Never>?
+
+        init(footer: PageFooter? = PageFooter()) {
+            inbox.table.pageFooter = footer
+            inbox.table.pagination = PaginationPolicy(pageSize: 15)
+            inbox.table.loadMore = { [weak self] _ in
+                guard let self else { return }
+
+                requests += 1
+                await withCheckedContinuation { waiting = $0 }
+                try outcome.get()
+            }
+            inbox.host.layoutIfNeeded()
+        }
+
+        func release() {
+            waiting?.resume()
+            waiting = nil
+        }
+
+        /// Scrolls to the end and lets the table ask for a page.
+        func scrollToEnd() async {
+            inbox.table.scroll?.contentOffset = LayoutPoint(x: 0, y: 700)
+            for _ in 0..<50 {
+                inbox.host.layoutIfNeeded()
+                if requests > 0 { break }
+
+                await Task.yield()
+            }
+        }
+
+        func settle(_ condition: @MainActor () -> Bool) async {
+            for _ in 0..<100 {
+                inbox.host.layoutIfNeeded()
+                if condition() { return }
+
+                await Task.yield()
+            }
+        }
+
+        var footer: PageFooterNode? { all(PageFooterNode.self, in: inbox.table).first }
+        var spinners: [RefreshSpinner] { footer.map { all(RefreshSpinner.self, in: $0) } ?? [] }
+        var buttons: [Button] { footer.map { all(Button.self, in: $0) } ?? [] }
+        var texts: [String] {
+            footer.map { all(Text.self, in: $0).map(\.text).filter { !$0.isEmpty } } ?? []
+        }
+    }
+
+    @Test @MainActor
+    func aPagingTableHasABlankFooterAfterItsRowsUntilAPageLoads() async throws {
+        let paging = PagingInbox()
+        let footer = try #require(paging.footer)
+
+        #expect(footer.frame.size.height == 56)
+        #expect(paging.spinners.isEmpty && paging.buttons.isEmpty && paging.texts.isEmpty)
+        // It scrolls with the rows: it ends the scroll's content.
+        let scroll = try #require(paging.inbox.table.scroll)
+        scroll.contentOffset = scroll.offsetRange.highest
+        paging.inbox.host.layoutIfNeeded()
+        let shown = try #require(scroll.frame(of: footer))
+        #expect(
+            shown.origin.y + shown.size.height == scroll.offsetRange.highest.y
+                + scroll.frame.size.height
+        )
+        paging.inbox.host.detach()
+    }
+
+    @Test @MainActor
+    func theFooterShowsASpinnerWhileAPageLoads() async throws {
+        let paging = PagingInbox()
+
+        await paging.scrollToEnd()
+        await paging.settle { !paging.spinners.isEmpty }
+
+        #expect(paging.inbox.table.pageLoadState == .loading)
+        #expect(paging.spinners.count == 1)
+        #expect(paging.spinners.first?.accessibility.label == "Loading")
+        #expect(paging.buttons.isEmpty)
+        #expect(paging.footer?.frame.size.height == 56)
+        paging.release()
+        await paging.settle { paging.spinners.isEmpty }
+        #expect(paging.inbox.table.pageLoadState == .idle)
+        paging.inbox.host.detach()
+    }
+
+    @Test @MainActor
+    func aFailedPageShowsAMessageAndARetryButtonThatAsksAgain() async throws {
+        struct Offline: Error {}
+        let paging = PagingInbox()
+        paging.outcome = .failure(Offline())
+
+        await paging.scrollToEnd()
+        paging.release()
+        await paging.settle { !paging.buttons.isEmpty }
+
+        #expect(paging.inbox.table.pageLoadState == .failed)
+        #expect(paging.texts.contains("Couldn’t load more"))
+        let retry = try #require(paging.buttons.first)
+        #expect(retry.label.text == "Retry")
+        #expect(paging.spinners.isEmpty)
+
+        paging.outcome = .success(())
+        retry.onTap?()
+        await paging.settle { paging.requests == 2 }
+        #expect(paging.requests == 2)
+        paging.release()
+        await paging.settle { paging.buttons.isEmpty && paging.inbox.table.pageLoadState == .idle }
+        #expect(paging.inbox.table.pageLoadState == .idle)
+        paging.inbox.host.detach()
+    }
+
+    @Test @MainActor
+    func theEndShowsItsMessageIfThereIsOneAndNothingIfNot() async throws {
+        let silent = PagingInbox()
+        silent.inbox.table.reachedEnd = true
+        silent.inbox.host.layoutIfNeeded()
+        #expect(silent.inbox.table.pageLoadState == .endReached)
+        #expect(silent.texts.isEmpty)
+        #expect(silent.footer?.frame.size.height == 56, "a blank row at the end")
+        silent.inbox.host.detach()
+
+        let told = PagingInbox(
+            footer: PageFooter(endMessage: LocalizedText("end", defaultValue: "That’s all"))
+        )
+        told.inbox.table.reachedEnd = true
+        told.inbox.host.layoutIfNeeded()
+        #expect(told.texts == ["That’s all"])
+        told.inbox.host.detach()
+    }
+
+    @Test @MainActor
+    func theFootersTextsFollowTheLanguage() async throws {
+        var catalog = LocalizationCatalog()
+        catalog.insert(
+            .text("Не удалось загрузить"),
+            for: "table.pageFooter.failure",
+            language: "ru"
+        )
+        catalog.insert(.text("Повторить"), for: "table.pageFooter.retry", language: "ru")
+        struct Offline: Error {}
+        let paging = PagingInbox()
+        paging.inbox.host.localizer = CatalogLocalizer(catalog: catalog)
+        paging.inbox.host.locale = Locale(identifier: "ru_RU")
+        paging.outcome = .failure(Offline())
+
+        await paging.scrollToEnd()
+        paging.release()
+        await paging.settle { !paging.buttons.isEmpty }
+
+        #expect(paging.texts.contains("Не удалось загрузить"))
+        #expect(paging.buttons.first?.label.text == "Повторить")
+        paging.inbox.host.detach()
+    }
+
+    @Test @MainActor
+    func noFooterWithoutPagingOrWhenTheAppDrawsItsOwn() async throws {
+        let plain = Inbox()
+        #expect(all(PageFooterNode.self, in: plain.table).isEmpty)
+        plain.host.detach()
+
+        let own = PagingInbox(footer: nil)
+        await own.scrollToEnd()
+        #expect(own.footer == nil)
+        #expect(
+            own.inbox.table.pageLoadState == .loading,
+            "the paging goes on; only the footer is not drawn"
+        )
+        own.release()
+        own.inbox.host.detach()
+    }
+
+    @Test @MainActor
+    func aTableLetGoWhileItsPageIsStartingDoesNotCrashTheLoader() async {
+        var inbox: Inbox? = Inbox()
+        var loaded = 0
+        inbox?.table.pagination = PaginationPolicy(pageSize: 15)
+        inbox?.table.loadMore = { _ in loaded += 1 }
+        inbox?.host.layoutIfNeeded()
+        inbox?.table.scroll?.contentOffset = LayoutPoint(x: 0, y: 700)
+        // The layout asks for the page: its task is made, and has not run yet.
+        inbox?.host.layoutIfNeeded()
+
+        inbox?.host.detach()
+        inbox = nil
+        for _ in 0..<20 { await Task.yield() }
+
+        // The task ran after the table was gone, and did its work without it.
+        #expect(loaded <= 1)
     }
 
 #endif

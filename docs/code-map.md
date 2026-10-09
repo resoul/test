@@ -493,4 +493,5 @@
 | `PseudoLocalizer`, `Locale.isRightToLeft` | акценты, скобки, удлинение; направление по данным языка | то же |
 | `NodeHost.locale/localizer/resolveLocalized`, `Node.locale/localized(_:)`, `Text.localizedText` | локаль и локализатор хоста, слежение узлов | то же |
 | `NodeView.systemLocaleChanged`, `NodeNSView.systemLocaleChanged` | локаль системы в хост, если приложение не поставило свою | то же |
+| `PageFooter`, `PageFooterNode`, `TableBody`, `Table.pageFooter`, `Table.content` | подвал таблицы: кольцо, сообщение с «Повторить», конец; одной высоты; в содержимом прокрутки после строк | [19](19-pagination-and-localization.md#подвал-table) |
 

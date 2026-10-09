@@ -291,7 +291,7 @@
             self.estimatedRowHeight = estimatedRowHeight
             scroll = scrolls ? Scroll(.vertical) : nil
             super.init()
-            scroll?.content = stack
+            scroll?.content = content
             scroll?.onScroll = { [weak self] _ in self?.closeOpenRow() }
             stack.onLayoutApplied = { [weak self] in self?.stackLaidOut() }
         }
@@ -303,7 +303,40 @@
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public var pagination: PaginationPolicy? {
             get { stack.pagination }
-            set { stack.pagination = newValue }
+            set {
+                stack.pagination = newValue
+                updateContent()
+            }
+        }
+
+        /// What the table shows after its last row while it pages — a spinner while a page loads, a
+        /// message and a button to try again when it failed — or `nil` for none, when the app
+        /// draws its own from `pageLoadState`. There is a footer only while `pagination` is set.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var pageFooter: PageFooter? = PageFooter() {
+            didSet {
+                guard pageFooter != oldValue else { return }
+
+                footerNode.footer = pageFooter ?? PageFooter()
+                updateContent()
+            }
+        }
+
+        private lazy var footerNode = PageFooterNode(
+            state: { [unowned self] in stack.pageLoadState },
+            retry: { [unowned self] in stack.retryLoadingPage() }
+        )
+        private lazy var body = TableBody(stack: stack, footer: footerNode)
+
+        private var showsFooter: Bool { stack.pagination != nil && pageFooter != nil }
+
+        /// The node the rows are in: the stack alone, or the stack with the footer after it.
+        private var content: Node { showsFooter ? body : stack }
+
+        private func updateContent() {
+            scroll?.content = content
+            setNeedsLayout()
         }
 
         /// Loads the next page of rows, when the table asks for one: it adds them to `sections`
@@ -319,9 +352,12 @@
                     return
                 }
 
-                stack.loadMore = { @MainActor [unowned self] (request: PageRequest) async throws in
+                // A page can still be on its way when the table is let go: it ends without it.
+                stack.loadMore = { @MainActor [weak self] (request: PageRequest) async throws in
                     var request = request
-                    request.loadedCount = self.sections.reduce(0) { $0 + $1.items.count }
+                    if let sections = self?.sections {
+                        request.loadedCount = sections.reduce(0) { $0 + $1.items.count }
+                    }
                     try await load(request)
                 }
             }
@@ -365,7 +401,7 @@
         /// MainActor. Errors: none. Cancellation: none.
         public override func layoutSpec() -> LayoutSpec? {
             FlexContainer(.column) {
-                if let scroll { scroll } else { stack }
+                if let scroll { scroll } else { content }
             }
         }
 
