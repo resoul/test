@@ -24,6 +24,8 @@ import PackageDescription
 // PermissionAppKit say whether the app is in front and open its Settings.
 // LocalizationCore is texts looked up by key for the reader's language — catalogs, plural forms,
 // pseudo-localization — and depends on Foundation only; Nodes resolves them for its host's locale.
+// Tracing marks the stretches of work that decide smoothness — layout, drawing, decoding, paging —
+// as signposts for Instruments; it depends on Foundation only.
 // Nodes is the tree of nodes laid out by LayoutCore and driven by StateCore; NodesRender draws
 // it into CALayers (Apple platforms), NodesUIKit and NodesAppKit put it into views. ThemeCore
 // holds the theme — colors, text, radii, motion, spacing and breakpoints — for nodes and for
@@ -55,6 +57,7 @@ let package = Package(
         .library(name: "NetworkFoundation", targets: ["NetworkFoundation"]),
         .library(name: "NetworkStorage", targets: ["NetworkStorage"]),
         .library(name: "LocalizationCore", targets: ["LocalizationCore"]),
+        .library(name: "Tracing", targets: ["Tracing"]),
         .library(name: "Nodes", targets: ["Nodes"]),
         .library(name: "NodesRender", targets: ["NodesRender"]),
         .library(name: "NodesUIKit", targets: ["NodesUIKit"]),
@@ -118,15 +121,16 @@ let package = Package(
         .target(name: "NetworkFoundation", dependencies: ["NetworkCore"]),
         .target(name: "NetworkStorage", dependencies: ["NetworkCore", "StorageCore"]),
         .target(name: "LocalizationCore"),
+        .target(name: "Tracing"),
         .target(
             name: "Nodes",
-            dependencies: ["LayoutCore", "StateCore", "ThemeCore", "LocalizationCore"]
+            dependencies: ["LayoutCore", "StateCore", "ThemeCore", "LocalizationCore", "Tracing"]
         ),
         .target(
             name: "NodesRender",
             dependencies: [
                 "Nodes", "LayoutCore", "StateCore", "ThemeCore", "RichTextCore", "NetworkCore",
-                "LocalizationCore",
+                "LocalizationCore", "Tracing",
             ]
         ),
         .target(
@@ -163,7 +167,7 @@ let package = Package(
         ),
         .testTarget(
             name: "NodesTests",
-            dependencies: ["Nodes", "LayoutCore", "StateCore", "ThemeCore"]
+            dependencies: ["Nodes", "LayoutCore", "StateCore", "ThemeCore", "Tracing"]
         ),
         .testTarget(
             name: "NodesRenderTests",
@@ -209,6 +213,7 @@ let package = Package(
             ]
         ),
         .testTarget(name: "LocalizationCoreTests", dependencies: ["LocalizationCore"]),
+        .testTarget(name: "TracingTests", dependencies: ["Tracing"]),
         .testTarget(name: "NetworkCoreTests", dependencies: ["NetworkCore"]),
         .testTarget(
             name: "NetworkFoundationTests",

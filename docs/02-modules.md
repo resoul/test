@@ -22,6 +22,8 @@ Nodes           дерево нод: Node, NodeHost; раскладка всег
 NodesRender     дерево нод → дерево CALayer (QuartzCore), общий для UIKit и AppKit;
                 Text (CoreText), Button, Image с ImagePipeline/ImageCache (ImageIO,
                 сеть через URLSession; см. 11).
+Tracing         метки (signpost) для Instruments на раскладке, рисовании, разборе картинок и страницах
+                списка; наблюдатель для тестов. Только Foundation и os (см. 20).
 NodesUIKit      встраивание нод в UIKit: view.addSubnode(node)
 NodesAppKit     встраивание нод в AppKit
 ThemeCore       тема: цвета (Color), типографика, радиусы, анимации, пороги, шкала

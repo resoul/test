@@ -21,7 +21,8 @@ import ThemeCore
 /// camera permission (`PermissionFlowProbe`), `DEBUG_OVERLAY=1` the debug overlay over a tree with a scroll
 /// (`DebugOverlayProbe`), `BACKGROUND_PROBE=1` background transfers across the app's endings
 /// (`BackgroundProbe`), `PAGING_PROBE=1` a list that asks for its next page (`PagingProbe`; `=table` a table with its page footer),
-/// `LOCALIZATION_PROBE=1` texts in the system's language (`LocalizationProbe`).
+/// `LOCALIZATION_PROBE=1` texts in the system's language (`LocalizationProbe`), `DRAWING_PROBE=1` text drawn in
+/// the background and kept only near the screen (`DrawingProbe`; `=lazy` a list that tells what it prefetched).
 @MainActor
 enum ContainerProbe {
     static func content(_ environment: [String: String]) -> (any SceneContent)? {
@@ -49,6 +50,9 @@ enum ContainerProbe {
             return probe == "table" ? TablePagingProbe.content() : PagingProbe.content()
         }
         if environment["LOCALIZATION_PROBE"] != nil { return LocalizationProbe.content() }
+        if let probe = environment["DRAWING_PROBE"] {
+            return DrawingProbe.content(lazy: probe == "lazy")
+        }
         if let probe = environment["PERMISSION_PROBE"] {
             return PermissionProbe.content(auto: environment["PERMISSION_AUTO"] ?? (probe == "1" ? nil : probe))
         }

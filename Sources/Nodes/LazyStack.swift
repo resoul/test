@@ -1,5 +1,6 @@
 import LayoutCore
 import StateCore
+import Tracing
 
 /// A column (or row) of nodes for `items` that lays out only the items near the part of it
 /// that shows — on screen and about a screen before and after — however many items there
@@ -62,6 +63,94 @@ public final class LazyStack<Item: Identifiable>: Node {
     /// Counts the changes of `items`, and the one the last `layoutSpec()` placed.
     private var itemsVersion = 0
     private var placedVersion = -1
+
+    // MARK: - Prefetching
+
+    /// How far from the window, in window lengths along the axis, an item counts as near
+    /// enough to prepare its data — before its node exists: the start of a download, the
+    /// decoding of a thumbnail. Two by default.
+    ///
+    /// An item that was told to ``prefetch`` is told to ``cancelPrefetch`` only once it is a
+    /// window length farther than that, so that a scroll that wavers at the edge does not
+    /// start and stop the same work again and again.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var prefetchDistance: Double = 2 {
+        didSet { if prefetchDistance != oldValue { setNeedsLayout() } }
+    }
+
+    /// Called with the items that came within ``prefetchDistance`` of the window, once each
+    /// until they leave it: a chance to start work whose result their nodes will use. The
+    /// items already shown are included when the stack first learns where the window is.
+    /// Items are passed in list order, on the main actor.
+    ///
+    /// Ownership: the stack keeps it; it must not keep the stack. Isolation: MainActor.
+    /// Errors: none. Cancellation: see ``cancelPrefetch``.
+    public var prefetch: (@MainActor ([Item]) -> Void)?
+
+    /// Called with items that were prefetched and are now far from the window, or are gone
+    /// from `items`, or whose stack left the screen: work started for them that nobody has
+    /// asked for yet can stop. Work whose result is already in use is not this call's to
+    /// stop; it does not know which that is.
+    ///
+    /// Ownership: the stack keeps it; it must not keep the stack. Isolation: MainActor.
+    /// Errors: none. Cancellation: not applicable.
+    public var cancelPrefetch: (@MainActor ([Item]) -> Void)?
+
+    /// The items ``prefetch`` has been called with and ``cancelPrefetch`` has not, in list
+    /// order of the moment they were told.
+    private var prefetched: [Item.ID: Item] = [:]
+    private var prefetchedWindow: (start: Double, end: Double, version: Int)?
+
+    /// Tells ``prefetch`` and ``cancelPrefetch`` which items entered and left the zone around
+    /// `span`, the part of the stack that shows.
+    private func evaluatePrefetch(window span: (start: Double, end: Double)) {
+        guard prefetch != nil || cancelPrefetch != nil else { return }
+
+        let length = span.end - span.start
+        guard length > 0 else { return }
+
+        // A window that moved a fraction of its length lands in the same zone.
+        if let last = prefetchedWindow, last.version == itemsVersion,
+            abs(span.start - last.start) < length / 8, abs(span.end - last.end) < length / 8
+        {
+            return
+        }
+        prefetchedWindow = (span.start, span.end, itemsVersion)
+        updateStarts()
+        let total = self.length
+        let reach = max(0, prefetchDistance) * length
+        let near = lines(from: max(0, span.start - reach), to: min(total, span.end + reach))
+        let keep = lines(
+            from: max(0, span.start - reach - length),
+            to: min(total, span.end + reach + length)
+        )
+        func items(in lines: Range<Int>) -> ArraySlice<Item> {
+            guard !lines.isEmpty else { return [] }
+
+            return self.items[
+                lines.lowerBound * perLine..<min(self.items.count, lines.upperBound * perLine)
+            ]
+        }
+
+        let staying = Set(items(in: keep).map(\.id))
+        let left = prefetched.filter { !staying.contains($0.key) }.map(\.value)
+        for item in left { prefetched[item.id] = nil }
+        let entered = items(in: near).filter { prefetched[$0.id] == nil }
+        for item in entered { prefetched[item.id] = item }
+        if !left.isEmpty { cancelPrefetch?(left) }
+        if !entered.isEmpty { prefetch?(Array(entered)) }
+    }
+
+    /// Cancels everything prefetched: the stack left the screen.
+    private func cancelAllPrefetches() {
+        prefetchedWindow = nil
+        guard !prefetched.isEmpty else { return }
+
+        let all = Array(prefetched.values)
+        prefetched = [:]
+        cancelPrefetch?(all)
+    }
 
     // MARK: - Paging
 
@@ -464,11 +553,16 @@ public final class LazyStack<Item: Identifiable>: Node {
             self?.loadState.value = .loading
             self?.pageLoadError = nil
             var failure: (any Error)?
+            let interval = Trace.begin(
+                .pageLoad,
+                "loaded \(request.loadedCount)\(isRetry ? " retry" : "")"
+            )
             do {
                 try await load(request)
             } catch {
                 failure = error
             }
+            Trace.end(interval)
             guard let self, generation == self.loadGeneration else { return }
 
             if Task.isCancelled {
@@ -499,7 +593,10 @@ public final class LazyStack<Item: Identifiable>: Node {
     /// A page on its way does not outlast the stack's place on the screen: it is asked for
     /// again when the stack shows again, if the end is near.
     public override func mountedChanged(_ isMounted: Bool) {
-        if !isMounted { cancelPageLoad() }
+        if !isMounted {
+            cancelPageLoad()
+            cancelAllPrefetches()
+        }
     }
 
     // MARK: - Where it shows
@@ -774,6 +871,7 @@ public final class LazyStack<Item: Identifiable>: Node {
         guard let host, let span = visibleSpan() else { return }
 
         evaluatePagination(window: span)
+        evaluatePrefetch(window: span)
         updateStarts()
         let reach = along(host.size) / 2
         let needed = (start: max(0, span.start - reach), end: min(length, span.end + reach))

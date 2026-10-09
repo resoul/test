@@ -136,6 +136,12 @@
             )
             NotificationCenter.default.addObserver(
                 self,
+                selector: #selector(memoryWarningReceived),
+                name: UIApplication.didReceiveMemoryWarningNotification,
+                object: nil
+            )
+            NotificationCenter.default.addObserver(
+                self,
                 selector: #selector(systemLocaleChanged),
                 name: NSLocale.currentLocaleDidChangeNotification,
                 object: nil
@@ -237,6 +243,8 @@
             host.focusLook = isTV ? .lift : .ring
             host.layoutIfNeeded()
             revealEditingField()
+            renderer.drawingMode = host.drawingMode
+            renderer.displayRange = host.displayRange
             if host.needsRender {
                 renderer.render(
                     host.root,
@@ -610,7 +618,13 @@
 
         /// The tree is in the background while the scene it is in is.
         private func updateBackground() {
+            let wasInBackground = host.isInBackground
             host.isInBackground = window?.windowScene?.activationState == .background
+            if host.isInBackground && !wasInBackground { renderer.trimMemory() }
+        }
+
+        @objc private func memoryWarningReceived() {
+            renderer.trimMemory()
         }
 
         @objc private func sceneActivationChanged() {

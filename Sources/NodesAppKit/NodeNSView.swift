@@ -227,6 +227,8 @@
             host.direction =
                 userInterfaceLayoutDirection == .rightToLeft ? .rightToLeft : .leftToRight
             host.layoutIfNeeded()
+            renderer.drawingMode = host.drawingMode
+            renderer.displayRange = host.displayRange
             if host.needsRender {
                 renderer.render(
                     host.root,
@@ -507,7 +509,9 @@
         /// The tree is in the background while no part of its window can be seen: minimized, the
         /// app hidden, the window covered or on another space.
         private func updateBackground() {
+            let wasInBackground = host.isInBackground
             host.isInBackground = window.map { !$0.occlusionState.contains(.visible) } ?? false
+            if host.isInBackground && !wasInBackground { renderer.trimMemory() }
         }
 
         @objc private func occlusionChanged() {

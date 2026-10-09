@@ -7,6 +7,7 @@
     import ThemeCore
     import QuartzCore
     import StateCore
+    import Tracing
     import os
 
     /// Where an image is read from. File URLs are read directly; remote URLs use the disk cache.
@@ -284,7 +285,9 @@
                 let task = Task.detached(priority: Task.currentPriority) { [decodeGate] in
                     try await decodeGate.acquire(isUrgent: { shared.isUrgent })
                     await self.decodeStarted()
+                    let interval = Trace.begin(.decode, "\(data.count) bytes limit \(limit ?? 0)")
                     let result = Result { try Self.decode(data, pixelDimension: limit) }
+                    Trace.end(interval)
                     await self.decodeFinished()
                     await decodeGate.release()
                     return try result.get()

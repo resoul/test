@@ -3,6 +3,7 @@ import LayoutCore
 import LocalizationCore
 import StateCore
 import ThemeCore
+import Tracing
 
 /// Lays out a tree of nodes in a given size. A platform adapter owns one per root: it sets
 /// `size`, `scale` and `direction`, is told through `onNeedsLayout` when the tree must be laid
@@ -501,6 +502,24 @@ public final class NodeHost: CommandTarget {
         )
     }
 
+    /// Where the content the tree draws — text — is made; see ``DrawingMode``. The adapter that
+    /// shows the tree draws accordingly. Synchronous by default.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var drawingMode: DrawingMode = .synchronous {
+        didSet { if drawingMode != oldValue { setNeedsRender() } }
+    }
+
+    /// How far from the screen drawn content is kept; see ``DisplayRange``. `nil` keeps all
+    /// that is mounted, drawn as soon as it is, which is the default. The adapter also lets go
+    /// of the content that is off screen when the app goes to the background and when the
+    /// system warns that memory is short.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var displayRange: DisplayRange? {
+        didSet { if displayRange != oldValue { setNeedsRender() } }
+    }
+
     /// Runs pending state updates, then lays the tree out if anything asked for it.
     ///
     /// Ownership: sets frames and subnodes of the tree. Isolation: MainActor; synchronous.
@@ -542,6 +561,8 @@ public final class NodeHost: CommandTarget {
             let context = LayoutContext(trace: trace, stackBudget: mainThreadStackBudget)
             let clock = ContinuousClock()
             let start = clock.now
+            let interval = Trace.begin(.layoutOnMain, "host \(number) pass \(generation)")
+            defer { Trace.end(interval) }
             do {
                 let result = try FlexboxEngine.layout(
                     prepared.input,
@@ -629,6 +650,8 @@ public final class NodeHost: CommandTarget {
         }
         guard duplicates.isEmpty else { return false }
 
+        let interval = Trace.begin(.layoutApply, "host \(number) pass \(generation)")
+        defer { Trace.end(interval) }
         passes += 1
         needsRender = true
         if let animation {
@@ -703,8 +726,14 @@ public final class NodeHost: CommandTarget {
             node.pendingHost = self
             pending.append(node)
         }
+        let label = "host \(number) pass \(pass)"
         solving = Task { [weak self] in
-            let outcome = await NodeHost.solve(input, size: rect.size, trace: trace) { thread in
+            let outcome = await NodeHost.solve(
+                input,
+                size: rect.size,
+                trace: trace,
+                label: label
+            ) { thread in
                 self?.adopt(thread, pass: pass)
             }
             guard let self, pass == self.generation else { return }
@@ -751,6 +780,7 @@ public final class NodeHost: CommandTarget {
         _ input: LayoutNode,
         size: LayoutSize,
         trace: LayoutTraceRequest?,
+        label: String,
         started: @escaping @MainActor @Sendable (Thread) -> Void
     ) async -> SolveOutcome {
         await withCheckedContinuation { continuation in
@@ -764,6 +794,8 @@ public final class NodeHost: CommandTarget {
                 )
                 let clock = ContinuousClock()
                 let start = clock.now
+                let interval = Trace.begin(.layoutInBackground, label)
+                defer { Trace.end(interval) }
                 let outcome: SolveOutcome
                 do {
                     let result = try FlexboxEngine.layout(input, size: size, context: context)
@@ -849,6 +881,7 @@ public final class NodeHost: CommandTarget {
 
         pressed = target
         target.pressChanged(true)
+        target.pressBegan(at: localPoint(point, in: target))
         return true
     }
 

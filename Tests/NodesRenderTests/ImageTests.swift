@@ -7,6 +7,7 @@
     @testable import NodesRender
     import QuartzCore
     import Testing
+    import Tracing
 
     private func encodedImage(
         width: Int,
@@ -361,6 +362,26 @@
         // Shown turned upright, as the original would be.
         let shown = try await ImagePipeline().load(.data(saved), targetPixelDimension: 64)
         #expect(shown.size == LayoutSize(width: 8, height: 12))
+    }
+
+    @Test
+    func decodingAnImageIsMarkedAndEnded() async throws {
+        let original = try cameraJPEG()
+        let marks = OSAllocatedUnfairLock<[Trace.Record]>(initialState: [])
+        let observation = Trace.observe { record in
+            guard record.name == .decode,
+                record.detail.hasPrefix("\(original.count) bytes ")
+            else { return }
+            marks.withLock { $0.append(record) }
+        }
+        defer { observation.cancel() }
+
+        _ = try await ImagePipeline().load(.data(original), targetPixelDimension: 64)
+
+        // Other tests decode the same bytes at the same time, so the records are not only ours.
+        let seen = marks.withLock { $0 }
+        #expect(seen.contains { $0.phase == .begin })
+        #expect(seen.contains { $0.phase == .end })
     }
 
     /// A lossless 1×1 WebP. Image I/O decodes WebP but cannot encode it.
@@ -1948,5 +1969,91 @@
             context?.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
         }
         return (pixels[0], pixels[1], pixels[2], pixels[3])
+    }
+
+    // MARK: Prefetching
+
+    @Test @MainActor
+    func aPrefetchedImageIsOnDiskAndNotDownloadedAgain() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = stubCache(directory)
+        let prefetcher = ImagePrefetcher(pipeline: ImagePipeline(cache: cache))
+        let url = URL(string: "https://image-cache.test/prefetch-a.webp")!
+
+        prefetcher.prefetch([url])
+        while prefetcher.activeCount > 0 { await Task.yield() }
+
+        #expect(try await cache.cachedData(for: url) == webP)
+        #expect(stubRequests.withLock { $0[url.path] } == 1)
+        #expect(try await cache.load(url) == webP)
+        #expect(stubRequests.withLock { $0[url.path] } == 1, "the node finds it on disk")
+    }
+
+    @Test @MainActor
+    func theSameURLIsNotPrefetchedTwiceAtOnce() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = stubCache(directory)
+        let prefetcher = ImagePrefetcher(pipeline: ImagePipeline(cache: cache))
+        let url = URL(string: "https://image-cache.test/prefetch-twice.webp")!
+        stubHeld.withLock { _ = $0.insert(url.path) }
+        defer { stubHeld.withLock { _ = $0.remove(url.path) } }
+
+        prefetcher.prefetch([url])
+        prefetcher.prefetch([url, url])
+        #expect(prefetcher.activeCount == 1)
+        stubHeld.withLock { _ = $0.remove(url.path) }
+        while prefetcher.activeCount > 0 { await Task.yield() }
+
+        #expect(stubRequests.withLock { $0[url.path] } == 1)
+    }
+
+    @Test @MainActor
+    func aCancelledPrefetchLeavesNothingOnDisk() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = stubCache(directory)
+        let prefetcher = ImagePrefetcher(pipeline: ImagePipeline(cache: cache))
+        let url = URL(string: "https://image-cache.test/prefetch-cancelled.webp")!
+        stubHeld.withLock { _ = $0.insert(url.path) }
+        defer { stubHeld.withLock { _ = $0.remove(url.path) } }
+
+        prefetcher.prefetch([url])
+        while await cache.downloadWaiters(for: url) < 1 { await Task.yield() }
+        prefetcher.cancel([url])
+        #expect(prefetcher.activeCount == 0)
+        while await cache.downloadWaiters(for: url) > 0 { await Task.yield() }
+
+        #expect(try await cache.cachedData(for: url) == nil)
+    }
+
+    @Test @MainActor
+    func filesAreNotPrefetchedAndCancellingAllStopsEverything() async throws {
+        let directory = temporaryCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = stubCache(directory)
+        let prefetcher = ImagePrefetcher(pipeline: ImagePipeline(cache: cache))
+        let first = URL(string: "https://image-cache.test/prefetch-all-1.webp")!
+        let second = URL(string: "https://image-cache.test/prefetch-all-2.webp")!
+        stubHeld.withLock {
+            _ = $0.insert(first.path)
+            _ = $0.insert(second.path)
+        }
+        defer {
+            stubHeld.withLock {
+                _ = $0.remove(first.path)
+                _ = $0.remove(second.path)
+            }
+        }
+
+        prefetcher.prefetch([URL(fileURLWithPath: "/tmp/not-fetched.png"), first, second])
+        #expect(prefetcher.activeCount == 2)
+        prefetcher.cancelAll()
+
+        #expect(prefetcher.activeCount == 0)
+        while await cache.downloadWaiters(for: first) > 0 { await Task.yield() }
+        while await cache.downloadWaiters(for: second) > 0 { await Task.yield() }
+        #expect(try await cache.cachedData(for: first) == nil)
     }
 #endif

@@ -1,6 +1,7 @@
 #if canImport(QuartzCore)
     import LayoutCore
     import Nodes
+    import Tracing
     import ThemeCore
     import QuartzCore
 
@@ -30,6 +31,16 @@
         /// Cancellation: none.
         func draw(in context: CGContext, size: CGSize)
 
+        /// Everything `draw` needs, taken as a value, so that the renderer can draw off the main
+        /// thread; `nil` when the drawing can only be done on the main actor, which is the
+        /// default. The snapshot is taken on the main actor at the moment the renderer decides
+        /// to draw, and describes the content of that revision: changes made to the node
+        /// afterwards are drawn by the next revision, not by this snapshot.
+        ///
+        /// Ownership: the snapshot owns copies of what it needs and keeps nothing of the node.
+        /// Isolation: MainActor. Errors: none. Cancellation: none.
+        func drawingSnapshot() -> (any DrawingSnapshot)?
+
         /// An image the layer can show as it is, instead of a drawing, or `nil` to draw. The
         /// layer then references the image and keeps no bitmap of its own: a decoded photo is
         /// held once, not again at the frame's size. `drawingRevision` still marks changes.
@@ -37,6 +48,19 @@
         /// Ownership: returns a reference to an image the drawing holds. Isolation:
         /// MainActor. Errors: none. Cancellation: none.
         var layerImage: LayerImage? { get }
+    }
+
+    /// A drawing as a value that can be carried to another thread: what a node would draw,
+    /// without the node. The renderer draws it into a bitmap in the background and puts the
+    /// bitmap into the layer on the main thread.
+    ///
+    /// Ownership: value. Isolation: none; `draw` may run on any thread, once, with a context
+    /// of its own. Errors: none. Cancellation: not applicable; a result nobody wants any more
+    /// is dropped by the renderer.
+    public protocol DrawingSnapshot: Sendable {
+        /// Draws the content in a box of `size` points whose origin is at the bottom left, as
+        /// `LayerDrawing.draw(in:size:)` does.
+        func draw(in context: CGContext, size: CGSize)
     }
 
     /// A node that shows a layer of its own — a video's surface — inside its frame. The
@@ -59,6 +83,9 @@
     extension LayerDrawing {
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public func prepareDrawing(size: CGSize, scale: Double) {}
+
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public func drawingSnapshot() -> (any DrawingSnapshot)? { nil }
 
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public var layerImage: LayerImage? { nil }
@@ -98,8 +125,48 @@
     /// Isolation: MainActor. Errors: none. Cancellation: not applicable.
     @MainActor
     public final class LayerRenderer {
+        /// Where drawn content is made.
+        public typealias DrawingMode = Nodes.DrawingMode
+
+        /// How far from the screen drawn content is kept.
+        public typealias DisplayRange = Nodes.DisplayRange
+
+        /// Where drawn content is made; see ``DrawingMode``. A change applies to the next
+        /// draw. Drawings that cannot be drawn in the background are always drawn on the main
+        /// thread.
+        public var drawingMode: DrawingMode = .synchronous
+
+        /// Limits drawing to the content near the screen, and keeps the memory of content far
+        /// from it low: in a long page of many texts, only those within reach hold a bitmap.
+        /// `nil` draws everything that is mounted, as soon as it is, and keeps it, which is
+        /// the default. Nodes are measured by `Node.screenfulsToScreen`, where the host's window
+        /// is the screen.
+        ///
+        /// The ranges are reviewed after each render and, while scrolling, whenever a scroll
+        /// has moved by a quarter of its length since the last review.
+        public var displayRange: DisplayRange?
+
         private var layers: [NodeID: CALayer] = [:]
         private var drawn: [NodeID: Drawing] = [:]
+        /// Drawings on their way from the background, by node.
+        private var pendingDraws: [NodeID: PendingDraw] = [:]
+        private var nextDrawToken: UInt64 = 0
+        /// Every mounted node with a drawing, for the review of `displayRange`.
+        private var drawingEntries: [NodeID: DrawingEntry] = [:]
+        /// The scale of the last render, which later reviews draw at.
+        private var lastScale = 1.0
+        /// The offset of each scroll at the last review of `displayRange`.
+        private var reviewedOffsets: [NodeID: LayoutPoint] = [:]
+
+        private struct DrawingEntry {
+            weak var node: Node?
+            weak var layer: CALayer?
+        }
+
+        private struct PendingDraw {
+            let token: UInt64
+            let task: Task<CGImage?, Never>
+        }
         /// Layers of nodes that left in an animated render, fading out in place. They are
         /// dropped at the first render after their fade is over.
         private var leaving: [NodeID: CALayer] = [:]
@@ -179,7 +246,9 @@
                 container.addSublayer(rootLayer)
             }
 
+            lastScale = scale
             for entry in pass.drawings {
+                drawingEntries[entry.node.id] = DrawingEntry(node: entry.node, layer: entry.layer)
                 draw(
                     entry.drawing,
                     of: entry.node,
@@ -196,10 +265,16 @@
                 }
                 transitions[id] = nil
                 drawn[id] = nil
+                cancelDraw(of: id)
+                drawingEntries[id] = nil
+                reviewedOffsets[id] = nil
                 indicators[id] = nil
                 drawnOffsets[id] = nil
             }
             settle(pass.detached, gone: gone, pass: pass)
+            // The drawings of this pass were already placed by their distance; what is left is
+            // to let go of the content that is far now.
+            if displayRange != nil { reviewDisplayRange(drawingNear: false) }
         }
 
         /// Moves the content of `scrolls` to their offsets, and shows their indicators, without
@@ -213,6 +288,10 @@
             CATransaction.setDisableActions(true)
             defer { CATransaction.commit() }
 
+            // Where each scroll was when it was last drawn or moved, before this call moves it:
+            // the first review waits for a move from there, not for the first move at all.
+            var before: [NodeID: LayoutPoint] = [:]
+            for scroll in scrolls { before[scroll.id] = drawnOffsets[scroll.id] }
             for scroll in scrolls {
                 guard let layer = layers[scroll.id] else { continue }
 
@@ -226,6 +305,76 @@
                     sticky.removeAnimation(forKey: "position")
                     sticky.position = LayerRenderer.position(of: node)
                 }
+            }
+            guard displayRange != nil else { return }
+
+            var moved = false
+            for scroll in scrolls {
+                let offset = scroll.shownOffset
+                let size = scroll.frame.size
+                let step = max(size.width, size.height) / 4
+                if let reviewed = reviewedOffsets[scroll.id] ?? before[scroll.id],
+                    max(abs(offset.x - reviewed.x), abs(offset.y - reviewed.y)) < step
+                {
+                    reviewedOffsets[scroll.id] = reviewed
+                    continue
+                }
+                reviewedOffsets[scroll.id] = offset
+                moved = true
+            }
+            if moved { reviewDisplayRange(drawingNear: true) }
+        }
+
+        /// Releases the content that has gone out of `displayRange` and, with `drawingNear`,
+        /// draws the content that has come within it. Does nothing without a range.
+        private func reviewDisplayRange(drawingNear: Bool) {
+            guard let range = displayRange else { return }
+
+            for (id, entry) in drawingEntries {
+                guard let node = entry.node, let layer = entry.layer,
+                    let drawing = node as? any LayerDrawing
+                else { continue }
+
+                guard let distance = node.screenfulsToScreen else { continue }
+
+                if distance <= range.drawDistance {
+                    guard drawingNear else { continue }
+
+                    draw(
+                        drawing,
+                        of: node,
+                        into: layer,
+                        scale: lastScale * LayerRenderer.zoom(of: node),
+                        animation: nil
+                    )
+                } else if distance > range.releaseDistance, drawn[id] != nil {
+                    release(id, layer: layer)
+                }
+            }
+        }
+
+        /// Takes the bitmap out of the layer of `id`; it is made again when the node is drawn.
+        private func release(_ id: NodeID, layer: CALayer) {
+            cancelDraw(of: id)
+            drawn[id] = nil
+            layer.contents = nil
+        }
+
+        /// Releases the bitmaps of content that is not on the screen, to give memory back — when
+        /// the app goes to the background or the system warns that memory is short. What shows
+        /// stays; the rest is drawn again when it comes into reach, or at the next render when
+        /// there is no `displayRange` to keep it away.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: drawings on
+        /// their way for released content are dropped.
+        public func trimMemory() {
+            for (id, entry) in drawingEntries {
+                guard let node = entry.node, let layer = entry.layer, drawn[id] != nil,
+                    node is any LayerDrawing, let distance = node.screenfulsToScreen,
+                    distance > 0
+                else { continue }
+
+                release(id, layer: layer)
             }
         }
 
@@ -827,7 +976,18 @@
             layer.contentsRect = CGRect(x: 0, y: 0, width: 1, height: 1)
             guard before != wanted else { return }
 
+            // Content far from the screen waits: the review draws it when it comes near.
+            if let range = displayRange, let distance = node.screenfulsToScreen,
+                distance > range.drawDistance
+            {
+                return
+            }
             drawn[node.id] = wanted
+            if drawingMode == .asynchronous, let snapshot = drawing.drawingSnapshot() {
+                drawInBackground(snapshot, of: node, into: layer, size: size, scale: scale)
+                return
+            }
+            cancelDraw(of: node.id)
             let pixelWidth = Int((Double(size.width) * scale).rounded(.up))
             let pixelHeight = Int((Double(size.height) * scale).rounded(.up))
             guard pixelWidth > 0, pixelHeight > 0,
@@ -849,7 +1009,12 @@
             // An image in `contents` is shown as it is, top row at the top, whatever the
             // geometry of the layers around it — so it is drawn upright.
             context.scaleBy(x: CGFloat(scale), y: CGFloat(scale))
+            let interval = Trace.begin(
+                .draw,
+                "\(pixelWidth)x\(pixelHeight) \(type(of: drawing))"
+            )
             drawing.draw(in: context, size: size)
+            Trace.end(interval)
             let shown = layer.contents
             let image = context.makeImage()
             layer.contentsScale = CGFloat(scale)
@@ -868,6 +1033,88 @@
                     makeAnimation("contents", from: shown, to: image, curve),
                     forKey: "contents"
                 )
+            }
+        }
+
+        /// Starts drawing `snapshot` on a background thread; the bitmap becomes the layer's
+        /// contents on the main thread, unless the node has been drawn again or has left by
+        /// then. A drawing nearer the screen goes before one far from it.
+        private func drawInBackground(
+            _ snapshot: any DrawingSnapshot,
+            of node: Node,
+            into layer: CALayer,
+            size: CGSize,
+            scale: Double
+        ) {
+            cancelDraw(of: node.id)
+            nextDrawToken &+= 1
+            let token = nextDrawToken
+            let id = node.id
+            let priority: TaskPriority = node.distanceToScreen == 0 ? .userInitiated : .utility
+            let task = Task.detached(priority: priority) {
+                LayerRenderer.bitmap(of: snapshot, size: size, scale: scale)
+            }
+            pendingDraws[id] = PendingDraw(token: token, task: task)
+            Task { [weak self, weak layer] in
+                let image = await task.value
+                guard let self, let layer, self.pendingDraws[id]?.token == token else { return }
+
+                self.pendingDraws[id] = nil
+                layer.contentsScale = CGFloat(scale)
+                layer.contents = image
+            }
+        }
+
+        /// A bitmap of `snapshot` for a box of `size` points at `scale`, or `nil` when the box
+        /// has no pixels or the work was cancelled before it began.
+        private nonisolated static func bitmap(
+            of snapshot: any DrawingSnapshot,
+            size: CGSize,
+            scale: Double
+        ) -> CGImage? {
+            guard !Task.isCancelled else { return nil }
+
+            let pixelWidth = Int((Double(size.width) * scale).rounded(.up))
+            let pixelHeight = Int((Double(size.height) * scale).rounded(.up))
+            guard pixelWidth > 0, pixelHeight > 0,
+                let context = CGContext(
+                    data: nil,
+                    width: pixelWidth,
+                    height: pixelHeight,
+                    bitsPerComponent: 8,
+                    bytesPerRow: 0,
+                    space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                        | CGBitmapInfo.byteOrder32Little.rawValue
+                )
+            else { return nil }
+
+            context.scaleBy(x: CGFloat(scale), y: CGFloat(scale))
+            let interval = Trace.begin(.draw, "\(pixelWidth)x\(pixelHeight) background")
+            snapshot.draw(in: context, size: size)
+            Trace.end(interval)
+            return context.makeImage()
+        }
+
+        /// Drops the drawing on its way for `id`, if any.
+        private func cancelDraw(of id: NodeID) {
+            pendingDraws.removeValue(forKey: id)?.task.cancel()
+        }
+
+        /// How many drawings are on their way from the background.
+        public var pendingDrawCount: Int { pendingDraws.count }
+
+        /// Returns once every drawing that was started has been put into its layer or dropped.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: returns early if
+        /// the calling task is cancelled.
+        public func drawingsFinished() async {
+            while !pendingDraws.isEmpty, !Task.isCancelled {
+                for pending in Array(pendingDraws.values) {
+                    _ = await pending.task.value
+                }
+                // The tasks that put the bitmaps into the layers run after the drawing ends.
+                await Task.yield()
             }
         }
 

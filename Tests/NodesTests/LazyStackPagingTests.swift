@@ -1,6 +1,8 @@
 import LayoutCore
 import StateCore
 import Testing
+import Tracing
+import os
 
 @testable import Nodes
 
@@ -298,4 +300,25 @@ func theItemsTriggerCountsFromTheLastItemThatShowsInAGrid() async {
     #expect(other.requests.isEmpty)
     firstHost.detach()
     otherHost.detach()
+}
+
+@Test @MainActor
+func aPageOnItsWayIsMarkedFromTheRequestToTheAnswer() async {
+    let feed = PagedFeed(count: 23)
+    feed.behavior = { [weak feed] _ in feed?.append(10) }
+    let host = host(feed)
+    let marks = OSAllocatedUnfairLock<[Trace.Record]>(initialState: [])
+    let observation = Trace.observe { record in
+        guard record.name == .pageLoad else { return }
+        marks.withLock { $0.append(record) }
+    }
+    defer { observation.cancel() }
+
+    scroll(feed, to: 250, in: host)
+
+    #expect(await settle { feed.stack.items.count == 33 })
+    #expect(await settle { feed.stack.pageLoadState == .idle })
+    let seen = marks.withLock { $0 }.filter { $0.detail == "loaded 23" }
+    #expect(seen.map(\.phase) == [.begin, .end])
+    host.detach()
 }
