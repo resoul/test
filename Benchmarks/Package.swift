@@ -31,6 +31,7 @@ let package = Package(
                 .product(name: "StateCore", package: "Espalier"),
                 .product(name: "Nodes", package: "Espalier"),
                 .product(name: "NodesRender", package: "Espalier"),
+                .product(name: "AppShell", package: "Espalier"),
             ]
         ),
     ],

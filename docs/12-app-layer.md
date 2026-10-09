@@ -35,7 +35,7 @@
 ## Что взято из Weave, а что нет
 
 Weave — предыдущий проект, изученный как внешний источник идей, а не зависимость.
-Проверены исходники относительно его корня: `Sources/Weave/Application.swift`,
+Проверены исходники относительно его корня (папка `Weave/` убрана из дерева 2026-10-10, последнее состояние — тег `weave-final`): `Sources/Weave/Application.swift`,
 `Sources/Weave/Platform/ApplicationEntryPoint.swift`, `Sources/WeaveUI/Navigation.swift`,
 `Sources/WeaveUI/Coordinator.swift`, `Sources/WeaveUI/DeepLink.swift`,
 `Sources/WeaveUI/NavigationRestoration.swift`, `Sources/WeaveUI/Lifecycle.swift`.
