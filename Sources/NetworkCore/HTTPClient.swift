@@ -127,40 +127,92 @@ public struct HTTPClient: Sendable {
     /// accepted answer that is not a `2xx` (a `404` taken as an answer, say) has no file; its body
     /// comes back in the response and `destination` stays as it was.
     ///
-    /// - Parameter maxBytes: The most body bytes to accept; `nil` for no limit, which is the default
-    ///   because a download exists for what does not fit ``maxResponseBytes``. The disk is the limit
-    ///   then.
+    /// **Continuing.** Given `partial`, the bytes are collected in its file, which **stays** when the
+    /// download breaks off — by a failure or by cancellation — together with a record of what
+    /// the server said the bytes belong to. The next call with the same `partial` asks the server for the
+    /// rest only, on condition that the thing is unchanged (see ``PartialDownload``); a retry inside
+    /// one call does the same, so a connection lost halfway costs only what was not yet received. If the
+    /// thing changed, or cannot be continued, the file starts over. When the answer is complete
+    /// the file is moved to `destination` and the record removed. An answer that says the range is
+    /// beyond the end is taken to mean that the file was already whole if its size is the thing's
+    /// size — the answer returned is then that `416`, and the `file` of the result is
+    /// `destination` — and otherwise the partial file is discarded and the download is made again
+    /// whole.
+    ///
+    /// - Parameters:
+    ///   - maxBytes: The most body bytes to accept; `nil` for no limit, which is the default
+    ///     because a download exists for what does not fit ``maxResponseBytes``. The disk is the limit
+    ///     then. With `partial` it limits the size of the whole file.
+    ///   - partial: Where the unfinished download is kept, to be continued; `nil` for a download
+    ///     that is started over each time.
     /// - Returns: The answer with an empty body and the file at `destination`.
     /// - Throws: As ``send(_:expecting:)``, ``HTTPError/responseTooLarge(limit:)`` when the body
-    ///   passes `maxBytes`, and ``HTTPError/fileSystem(underlying:)`` when the file cannot be
-    ///   written or put in place. After cancellation, ``HTTPError/cancelled``.
+    ///   passes `maxBytes` (a partial file is then discarded: nothing is gained by continuing what is
+    ///   too big), and ``HTTPError/fileSystem(underlying:)`` when the file cannot be written or put in
+    ///   place. After cancellation, ``HTTPError/cancelled``.
     public func download(
         _ request: HTTPRequest,
         to destination: URL,
         expecting statuses: HTTPStatuses = .success,
-        maxBytes: Int? = nil
+        maxBytes: Int? = nil,
+        continuing partial: PartialDownload? = nil
     ) async throws(HTTPError) -> HTTPDownload {
-        var result = try await perform(
-            request,
-            expecting: statuses,
-            response: { $0.response },
-            discard: { Self.removeQuietly($0.file) },
-            transmit: { (outgoing: HTTPRequest) async throws(HTTPError) -> HTTPDownload in
-                try await transport.download(outgoing, maxBytes: maxBytes)
+        var result: HTTPDownload
+        do {
+            result = try await perform(
+                request,
+                expecting: statuses,
+                response: { $0.response },
+                // A partial file belongs to its download, whatever one attempt came to.
+                discard: { if partial == nil { Self.removeQuietly($0.file) } },
+                transmit: { (outgoing: HTTPRequest) async throws(HTTPError) -> HTTPDownload in
+                    var attempt = outgoing
+                    if let headers = partial?.resumeHeaders() {
+                        for (name, value) in headers.all { attempt.headers[name] = value }
+                    }
+                    return try await transport.download(
+                        attempt,
+                        maxBytes: maxBytes,
+                        partial: partial
+                    )
+                }
+            )
+        } catch {
+            if case .responseTooLarge = error { partial?.discard() }
+            guard let partial, case .status(let refused) = error, refused.status == 416 else {
+                throw error
             }
-        )
+
+            // The range starts beyond the end of the thing. If the file is as big as the thing, it
+            // is the thing; otherwise it is not what was thought, and is made again whole.
+            guard let total = PartialDownload.contentRange(of: refused.headers)?.total,
+                total == partial.size
+            else {
+                partial.discard()
+                return try await download(
+                    request,
+                    to: destination,
+                    expecting: statuses,
+                    maxBytes: maxBytes,
+                    continuing: partial
+                )
+            }
+
+            result = HTTPDownload(response: refused, file: partial.file, bytes: Int(total))
+        }
         guard let temporary = result.file else { return result }
 
         if Task.isCancelled {
-            Self.removeQuietly(temporary)
+            if partial == nil { Self.removeQuietly(temporary) }
             throw .cancelled
         }
         do {
             try Self.place(temporary, at: destination)
         } catch {
-            Self.removeQuietly(temporary)
+            if partial == nil { Self.removeQuietly(temporary) }
             throw .fileSystem(underlying: error)
         }
+        partial?.discardRecord()
         result.file = destination
         return result
     }
@@ -186,6 +238,31 @@ public struct HTTPClient: Sendable {
             discard: { _ in },
             transmit: { (outgoing: HTTPRequest) async throws(HTTPError) -> HTTPResponse in
                 try await transport.upload(outgoing, fromFile: file, maxResponseBytes: maxResponseBytes)
+            }
+        )
+    }
+
+    /// Sends `request` with the stream `body` as its body: one that is produced as it goes, so that
+    /// it need not be in memory or in a file.
+    ///
+    /// Statuses, retries and credentials work as for ``send(_:expecting:)``, and every attempt takes a
+    /// new stream from `body`, which therefore has to be able to start over; see ``HTTPBodyStream``.
+    /// The request's own `body` is ignored.
+    ///
+    /// - Throws: As ``send(_:expecting:)``, and ``HTTPError/fileSystem(underlying:)`` when a stream
+    ///   cannot be made or read.
+    public func upload(
+        _ request: HTTPRequest,
+        from body: HTTPBodyStream,
+        expecting statuses: HTTPStatuses = .success
+    ) async throws(HTTPError) -> HTTPResponse {
+        try await perform(
+            request,
+            expecting: statuses,
+            response: { $0 },
+            discard: { _ in },
+            transmit: { (outgoing: HTTPRequest) async throws(HTTPError) -> HTTPResponse in
+                try await transport.upload(outgoing, from: body, maxResponseBytes: maxResponseBytes)
             }
         )
     }
@@ -342,26 +419,38 @@ public struct HTTPClient: Sendable {
     /// - Throws: ``HTTPError/invalidRequest(_:)`` without an `http` or `https` base URL, or with a
     ///   `.` or `..` segment.
     public func url(for path: String, query: [URLQueryItem] = []) throws(HTTPError) -> URL {
-        guard let baseURL, HTTPOrigin(baseURL) != nil,
-            var parts = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
-        else { throw .invalidRequest("the client has no http or https base URL") }
+        guard let baseURL, HTTPOrigin(baseURL) != nil else {
+            throw .invalidRequest("the client has no http or https base URL")
+        }
+
+        return try Self.address(of: path, on: baseURL, query: query)
+    }
+
+    /// The address of `path` on `base`, which may also be a `ws` or `wss` URL; the rules are those of
+    /// ``url(for:query:)``, which checks that the base is an `http` or `https` one first.
+    static func address(of path: String, on base: URL, query: [URLQueryItem] = [])
+        throws(HTTPError) -> URL
+    {
+        guard var parts = URLComponents(url: base, resolvingAgainstBaseURL: false),
+            parts.host?.isEmpty == false
+        else { throw .invalidRequest("\(base) is not an address with a host") }
 
         let segments = path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
         if segments.contains(where: { $0 == "." || $0 == ".." }) {
             throw .invalidRequest("\(path) has a . or .. segment")
         }
-        var base = parts.percentEncodedPath
-        while base.hasSuffix("/") { base.removeLast() }
+        var prefix = parts.percentEncodedPath
+        while prefix.hasSuffix("/") { prefix.removeLast() }
         parts.percentEncodedPath =
-            base + "/"
-            + segments.map { Self.encode($0, allowing: Self.segmentCharacters) }.joined(separator: "/")
+            prefix + "/"
+            + segments.map { encode($0, allowing: segmentCharacters) }.joined(separator: "/")
         parts.fragment = nil
         parts.percentEncodedQuery =
             query.isEmpty
             ? nil
             : query.map {
-                Self.encode($0.name, allowing: Self.unreservedCharacters) + "="
-                    + Self.encode($0.value ?? "", allowing: Self.unreservedCharacters)
+                encode($0.name, allowing: unreservedCharacters) + "="
+                    + encode($0.value ?? "", allowing: unreservedCharacters)
             }.joined(separator: "&")
         guard let url = parts.url else { throw .invalidRequest("\(path) is not a valid path") }
 

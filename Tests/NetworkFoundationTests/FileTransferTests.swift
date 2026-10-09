@@ -433,3 +433,143 @@ private final class CallCounter: Sendable {
         }
     }
 }
+
+// MARK: Uploading a stream
+
+/// A stream of `content`, read from memory but counted: how many were made says how many times the
+/// body was started.
+private final class CountedBody: Sendable {
+    private let made = OSAllocatedUnfairLock(initialState: 0)
+    let content: Data
+
+    init(_ content: Data) { self.content = content }
+
+    var count: Int { made.withLock { $0 } }
+
+    func body(length: Int64?) -> HTTPBodyStream {
+        HTTPBodyStream(length: length) { [self] in
+            made.withLock { $0 += 1 }
+            return InputStream(data: content)
+        }
+    }
+}
+
+@Test(.timeLimit(.minutes(1)))
+func aStreamOfKnownLengthIsSentWithItsLength() async throws {
+    let workspace = try Workspace()
+    defer { workspace.remove() }
+    let counted = CountedBody(pattern(300 * 1024))
+    let server = try await LocalServer.start { request in
+        ServerReply(200, "got \(request.body.count)")
+    }
+    defer { server.stop() }
+
+    let response = try await workspace.transport().upload(
+        HTTPRequest(.put, server.url("/blob"), headers: ["Content-Type": "application/octet-stream"]),
+        from: counted.body(length: Int64(counted.content.count)),
+        maxResponseBytes: nil
+    )
+
+    #expect(String(decoding: response.body, as: UTF8.self) == "got \(counted.content.count)")
+    let seen = try #require(server.requests.first)
+    #expect(seen.body == counted.content)
+    #expect(seen.headers["content-length"] == "\(counted.content.count)")
+    #expect(seen.headers["transfer-encoding"] == nil)
+    #expect(counted.count == 1)
+}
+
+@Test(.timeLimit(.minutes(1)))
+func aStreamOfUnknownLengthIsSentInChunks() async throws {
+    let workspace = try Workspace()
+    defer { workspace.remove() }
+    let counted = CountedBody(pattern(200 * 1024))
+    let server = try await LocalServer.start { request in
+        ServerReply(200, "got \(request.body.count)")
+    }
+    defer { server.stop() }
+
+    let response = try await workspace.transport().upload(
+        HTTPRequest(.post, server.url("/blob")),
+        from: counted.body(length: nil),
+        maxResponseBytes: nil
+    )
+
+    #expect(String(decoding: response.body, as: UTF8.self) == "got \(counted.content.count)")
+    let seen = try #require(server.requests.first)
+    #expect(seen.body == counted.content)
+    #expect(seen.headers["transfer-encoding"]?.lowercased().contains("chunked") == true)
+    #expect(seen.headers["content-length"] == nil)
+}
+
+@Test(.timeLimit(.minutes(1)))
+func aRetryOfAStreamTakesANewStreamAndSendsTheSameBody() async throws {
+    let workspace = try Workspace()
+    defer { workspace.remove() }
+    let counted = CountedBody(pattern(64 * 1024))
+    let calls = CallCounter()
+    let server = try await LocalServer.start { _ in
+        calls.next() == 1 ? ServerReply(503) : ServerReply(200, "stored")
+    }
+    defer { server.stop() }
+    let client = HTTPClient(
+        transport: workspace.transport(),
+        retry: RetryPolicy(maxAttempts: 3),
+        environment: HTTPClient.Environment(sleep: { _ in })
+    )
+
+    let response = try await client.upload(
+        HTTPRequest(.put, server.url("/blob")),
+        from: counted.body(length: Int64(counted.content.count))
+    )
+
+    #expect(String(decoding: response.body, as: UTF8.self) == "stored")
+    #expect(server.requests.count == 2)
+    #expect(server.requests.allSatisfy { $0.body == counted.content })
+    #expect(counted.count == 2, "each attempt took a new stream")
+}
+
+@Test(.timeLimit(.minutes(1)))
+func aStreamThatCannotBeMadeFailsTheRequestWithThatReason() async throws {
+    let workspace = try Workspace()
+    defer { workspace.remove() }
+    let server = try await LocalServer.start { _ in ServerReply(200) }
+    defer { server.stop() }
+    struct Broken: Error {}
+
+    do {
+        _ = try await workspace.transport().upload(
+            HTTPRequest(.put, server.url("/blob")),
+            from: HTTPBodyStream(length: 10) { throw Broken() },
+            maxResponseBytes: nil
+        )
+        Issue.record("a broken stream was sent")
+    } catch {
+        guard case .fileSystem(let underlying) = error, underlying is Broken else {
+            Issue.record("expected fileSystem with the stream's error, got \(error)")
+            return
+        }
+    }
+}
+
+@Test(.timeLimit(.minutes(1)))
+func aFileStreamSendsTheFileAndReportsItsSize() async throws {
+    let workspace = try Workspace()
+    defer { workspace.remove() }
+    let content = pattern(100 * 1024)
+    let source = workspace.file("source.bin")
+    try content.write(to: source)
+    let server = try await LocalServer.start { request in
+        ServerReply(200, "got \(request.body.count)")
+    }
+    defer { server.stop() }
+    let body = HTTPBodyStream.file(at: source)
+
+    _ = try await workspace.transport().upload(
+        HTTPRequest(.put, server.url("/blob")),
+        from: body,
+        maxResponseBytes: nil
+    )
+
+    #expect(body.length == Int64(content.count))
+    #expect(server.requests.first?.body == content)
+}

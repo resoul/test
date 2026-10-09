@@ -71,6 +71,10 @@ public actor WebSocketClient {
     /// "cancelled" must not stand in for the real cause.
     private var sessionEnd: SessionEnd?
 
+    /// The wait before the next attempt, while there is one, and whether it was ended on purpose.
+    private var backoffWait: Task<Void, any Error>?
+    private var wokenEarly = false
+
     private var isSending = false
     private var waitingToSend: [CheckedContinuation<Void, Never>] = []
 
@@ -91,6 +95,44 @@ public actor WebSocketClient {
         self.configuration = configuration
         self.authorizer = authorizer
         self.environment = environment
+    }
+
+    /// A client for the socket at `path` on `baseURL`, with the address made as ``HTTPClient``
+    /// makes the addresses of its requests (see ``HTTPClient/url(for:query:)``): each segment of
+    /// the path is encoded, `.` and `..` are refused, the base's own query is dropped and `query`
+    /// is encoded strictly.
+    ///
+    /// - Parameters:
+    ///   - baseURL: A `ws`, `wss`, `http` or `https` URL with a host; the transport takes `http`
+    ///     for `ws` and `https` for `wss`.
+    ///   - headers: Sent with the upgrade request.
+    /// - Throws: ``HTTPError/invalidRequest(_:)`` for another scheme, a base without a host, or a
+    ///   path with a `.` or `..` segment.
+    public init(
+        baseURL: URL,
+        path: String,
+        query: [URLQueryItem] = [],
+        headers: HTTPHeaders = [:],
+        transport: any WebSocketTransport,
+        configuration: WebSocketConfiguration = WebSocketConfiguration(),
+        authorizer: (any HTTPAuthorizer)? = nil,
+        environment: NetworkEnvironment = NetworkEnvironment()
+    ) throws(HTTPError) {
+        guard let scheme = baseURL.scheme?.lowercased(),
+            ["ws", "wss", "http", "https"].contains(scheme)
+        else { throw .invalidRequest("\(baseURL) is not a ws, wss, http or https URL") }
+
+        self.init(
+            request: HTTPRequest(
+                .get,
+                try HTTPClient.address(of: path, on: baseURL, query: query),
+                headers: headers
+            ),
+            transport: transport,
+            configuration: configuration,
+            authorizer: authorizer,
+            environment: environment
+        )
     }
 
     // MARK: Lifecycle
@@ -187,6 +229,40 @@ public actor WebSocketClient {
                 if Task.isCancelled { return }
 
                 if active { await resume() } else { await suspend() }
+            }
+        } catch {
+            return
+        }
+    }
+
+    /// Ends the wait before the next attempt, if the client is in one, and connects now; does nothing in
+    /// any other state. For when something says that trying is likely to work — the network came back —
+    /// so that the person does not wait out a pause that was only needed while it was down.
+    ///
+    /// It does not reset the count of failures in a row: a server that keeps refusing is still given
+    /// up on at the attempt limit.
+    public func reconnectNow() {
+        guard case .reconnecting = state, let wait = backoffWait else { return }
+
+        wokenEarly = true
+        wait.cancel()
+    }
+
+    /// Connects at once whenever `paths` says the network is reachable, for as long as the
+    /// sequence goes on — typically a ``NetworkPathMonitoring`` stream. A client that is not waiting to
+    /// reconnect ignores the values, so it is safe to leave this running for the life of the client.
+    ///
+    /// Returns when the sequence ends, when it throws, or when the calling task is cancelled; run it
+    /// in a task of its own. A path that is reachable is a hint (see ``NetworkPath``): the attempt
+    /// it brings forward may fail, and then the usual pauses go on.
+    public nonisolated func reconnectWhenReachable<Paths: AsyncSequence & Sendable>(
+        _ paths: Paths
+    ) async where Paths.Element == NetworkPath {
+        do {
+            for try await path in paths {
+                if Task.isCancelled { return }
+
+                if path.isReachable { await reconnectNow() }
             }
         } catch {
             return
@@ -417,10 +493,23 @@ public actor WebSocketClient {
             random: environment.random()
         )
         setState(.reconnecting(attempt: failures, after: delay, cause: cause))
+        // The wait is a task of its own so that ``reconnectNow()`` can end it early; cancelling
+        // the run still ends it, and that is told apart by who asked.
+        wokenEarly = false
+        let environment = environment
+        let wait = Task { try await environment.sleep(delay) }
+        backoffWait = wait
+        defer { backoffWait = nil }
         do {
-            try await environment.sleep(delay)
+            try await withTaskCancellationHandler {
+                try await wait.value
+            } onCancel: {
+                wait.cancel()
+            }
         } catch {
-            return false
+            guard wokenEarly else { return false }
+
+            wokenEarly = false
         }
         return gen == generation
     }

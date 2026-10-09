@@ -395,6 +395,12 @@
 | `HTTPValidators` | свежесть и валидаторы ответа по `Cache-Control`, `Age`, `Expires`, `ETag`, `Last-Modified`; вынесено из `ImageCache` | то же, S8; [14](14-storage-and-network.md#6-cache-общий-кэш-и-существующие-изображения) |
 | `ImageCache` (`HTTPValidators.read/write`) | хранение валидаторов в расширенном атрибуте файла остаётся в картинках | то же |
 | `NetworkStorage` (`HTTPClient.download(_:into:at:)`, `DownloadError`, `StoredDownload`) | скачивание в `FileStore` через временный файл; хранилище применяет свои предел и замену | то же |
+| `WebSocketClient.init(baseURL:path:…)`, `HTTPClient.address(of:on:query:)` | адрес сокета тем же построителем, что у запросов | [14](14-storage-and-network.md#остатки-сети-2026-10-09-второй-проход) |
+| `HTTPBodyStream`, `HTTPClient.upload(_:from:)`, `HTTPTransport.upload(_:from:…)`, `TransferDelegate.urlSession(_:task:needNewBodyStream:)` | тело потоком; новый поток на каждую попытку и повтор тела | то же |
+| `PartialDownload`, `HTTPClient.download(…continuing:)`, `HTTPTransport.download(_:maxBytes:partial:)` | докачка: `Range` и `If-Range`, запись валидаторов транспортом, файл остаётся при обрыве, `416` | то же |
+| `TransferDelegate.Sink.partial`, `openFile`, `keepsFile` | дозапись `206`, перезапись остальных `2xx`, файл не удаляется при сбое | то же |
+| `NetworkPath`, `NetworkPathMonitoring`, `SystemNetworkPathMonitor` | подсказка о маршруте; `NWPathMonitor` на каждый поток | то же |
+| `WebSocketClient.reconnectNow`, `reconnectWhenReachable`, `backoffWait`, `wokenEarly` | досрочное окончание ожидания перед переподключением | то же |
 | `FileStore.importFile(at:to:)` | копирование внешнего файла в хранилище стало требованием протокола | то же |
 | `ReconnectPolicy`, `Heartbeat`, `WebSocketConfiguration` | пауза с потолком и джиттером, сброс после устойчивого соединения, окончательные коды закрытия, ping | [14](14-storage-and-network.md#9-websocket) |
 | `WebSocketTransport`, `WebSocketConnection`, `URLSessionWebSocketTransport` | соединение открыто после ответа на ping; отказ апгрейда — со статусом HTTP | [14](14-storage-and-network.md#9-websocket) |
