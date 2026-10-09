@@ -9,6 +9,14 @@ protocol PermissionBackend: Sendable {
 
     /// Asks the system, which shows its window, and returns what it says after.
     func request() async throws(PermissionError) -> PermissionStatus
+
+    /// The `Info.plist` keys to check in place of the kind's own, when the system this runs on
+    /// wants others — calendars and reminders before iOS 17 — or `nil` to check the kind's own.
+    var usageDescriptionKeys: [String]? { get }
+}
+
+extension PermissionBackend {
+    var usageDescriptionKeys: [String]? { nil }
 }
 
 /// A ``PermissionProvider`` that asks the system's own frameworks.
@@ -69,7 +77,7 @@ public struct SystemPermissionProvider: PermissionProvider {
         guard let backend = backendFor(kind) else { throw .unsupported(.platform) }
 
         // A missing string is a mistake of the app, and shows the same in front or behind.
-        for key in kind.usageDescriptionKeys {
+        for key in backend.usageDescriptionKeys ?? kind.usageDescriptionKeys {
             let text = usageDescription(key)?.trimmingCharacters(in: .whitespacesAndNewlines)
             guard let text, !text.isEmpty else { throw .missingUsageDescription(key: key) }
         }
@@ -86,6 +94,14 @@ public struct SystemPermissionProvider: PermissionProvider {
         case .photos(let access): photosBackend(access)
         case .notifications: notificationsBackend()
         case .location(let access): locationBackend(access)
+        case .contacts: contactsBackend()
+        case .calendar(let access): calendarBackend(access)
+        case .reminders: remindersBackend()
+        case .bluetooth: bluetoothBackend()
+        case .speechRecognition: speechBackend()
+        case .tracking: trackingBackend()
+        case .motion: motionBackend()
+        case .mediaLibrary: mediaLibraryBackend()
         }
     }
 }

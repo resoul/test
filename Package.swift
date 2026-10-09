@@ -13,11 +13,13 @@ import PackageDescription
 // the SQLite database — migrations, transactions, observation, backup — over GRDB, the one
 // target that imports it. NetworkCore is an HTTP client over a transport protocol — statuses,
 // retries, credentials — and depends on Foundation only; NetworkFoundation is the URLSession
-// transport. DataAsyncRay turns the observations of the storage and network layers into AsyncRay
+// transport. NetworkStorage joins the two: it downloads an HTTP answer into a file store.
+// DataAsyncRay turns the observations of the storage and network layers into AsyncRay
 // streams, whose subscriptions end the observation; SyncDemo is a worked example that joins
 // them — a repository over the database, HTTP and a socket, and a model for the screens.
 // PermissionCore is what the app knows about the system's permissions — kinds, status, errors, and
-// one order of asking — with a stand-in for tests; it depends on Foundation only. PermissionSystem
+// one order of asking — with a stand-in for tests; it depends on Foundation only. PermissionAsyncRay
+// offers a kind's status as an AsyncRay stream. PermissionSystem
 // asks the system's frameworks and checks the Info.plist keys before it does; PermissionUIKit and
 // PermissionAppKit say whether the app is in front and open its Settings.
 // Nodes is the tree of nodes laid out by LayoutCore and driven by StateCore; NodesRender draws
@@ -44,10 +46,12 @@ let package = Package(
         .library(name: "SyncDemo", targets: ["SyncDemo"]),
         .library(name: "PermissionCore", targets: ["PermissionCore"]),
         .library(name: "PermissionSystem", targets: ["PermissionSystem"]),
+        .library(name: "PermissionAsyncRay", targets: ["PermissionAsyncRay"]),
         .library(name: "PermissionUIKit", targets: ["PermissionUIKit"]),
         .library(name: "PermissionAppKit", targets: ["PermissionAppKit"]),
         .library(name: "NetworkCore", targets: ["NetworkCore"]),
         .library(name: "NetworkFoundation", targets: ["NetworkFoundation"]),
+        .library(name: "NetworkStorage", targets: ["NetworkStorage"]),
         .library(name: "Nodes", targets: ["Nodes"]),
         .library(name: "NodesRender", targets: ["NodesRender"]),
         .library(name: "NodesUIKit", targets: ["NodesUIKit"]),
@@ -88,15 +92,33 @@ let package = Package(
             ]
         ),
         .target(name: "PermissionCore"),
-        .target(name: "PermissionSystem", dependencies: ["PermissionCore"]),
+        // Some frameworks are in a platform's SDK with their calls marked unavailable, which
+        // `canImport` cannot tell from a framework that works; these conditions name the
+        // platforms where the calls exist.
+        .target(
+            name: "PermissionSystem",
+            dependencies: ["PermissionCore"],
+            swiftSettings: [
+                .define("PERMISSION_SPEECH", .when(platforms: [.iOS, .macOS, .macCatalyst])),
+                .define("PERMISSION_MOTION", .when(platforms: [.iOS, .macCatalyst])),
+                .define("PERMISSION_MEDIA_LIBRARY", .when(platforms: [.iOS, .macCatalyst])),
+            ]
+        ),
+        .target(
+            name: "PermissionAsyncRay",
+            dependencies: ["PermissionCore", .product(name: "AsyncRay", package: "asyncray")]
+        ),
         .target(name: "PermissionUIKit", dependencies: ["PermissionSystem", "PermissionCore"]),
         .target(name: "PermissionAppKit", dependencies: ["PermissionSystem", "PermissionCore"]),
         .target(name: "NetworkCore"),
         .target(name: "NetworkFoundation", dependencies: ["NetworkCore"]),
+        .target(name: "NetworkStorage", dependencies: ["NetworkCore", "StorageCore"]),
         .target(name: "Nodes", dependencies: ["LayoutCore", "StateCore", "ThemeCore"]),
         .target(
             name: "NodesRender",
-            dependencies: ["Nodes", "LayoutCore", "StateCore", "ThemeCore", "RichTextCore"]
+            dependencies: [
+                "Nodes", "LayoutCore", "StateCore", "ThemeCore", "RichTextCore", "NetworkCore",
+            ]
         ),
         .target(
             name: "NodesUIKit",
@@ -171,10 +193,20 @@ let package = Package(
             name: "PermissionSystemTests",
             dependencies: ["PermissionSystem", "PermissionCore"]
         ),
+        .testTarget(
+            name: "PermissionAsyncRayTests",
+            dependencies: [
+                "PermissionAsyncRay", "PermissionCore", .product(name: "AsyncRay", package: "asyncray"),
+            ]
+        ),
         .testTarget(name: "NetworkCoreTests", dependencies: ["NetworkCore"]),
         .testTarget(
             name: "NetworkFoundationTests",
             dependencies: ["NetworkFoundation", "NetworkCore"]
+        ),
+        .testTarget(
+            name: "NetworkStorageTests",
+            dependencies: ["NetworkStorage", "NetworkCore", "StorageCore", "StorageFoundation"]
         ),
         .testTarget(name: "AppShellTests", dependencies: ["AppShell", "Nodes", "StateCore"]),
         .testTarget(

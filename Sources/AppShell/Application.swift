@@ -458,6 +458,41 @@ public final class Shell: CommandResponder {
         return .background
     }
 
+    /// The app's ``activation`` now, and then each time it changes, as a sequence.
+    ///
+    /// This is for code that is not on the main actor or wants to wait for the app to come and go —
+    /// keeping a socket open only while the app shows, for instance, by passing
+    /// `shell.activations().map { $0 != .background }` to a web socket client's `follow`. A
+    /// change that leaves the answer the same, such as one scene going inactive while another is
+    /// still active, is not repeated. If the consumer is slower than the app, it gets the latest
+    /// value and misses the ones in between.
+    ///
+    /// The sequence does not keep the shell alive, and ends when the shell goes. Stopping the
+    /// iteration, or dropping the sequence, stops the observation.
+    public func activations() -> AsyncStream<SceneActivation> {
+        let (stream, continuation) = AsyncStream.makeStream(
+            of: SceneActivation.self,
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        var last: SceneActivation?
+        let effect = Effect { [weak self] in
+            guard let self else {
+                continuation.finish()
+                return
+            }
+
+            let current = activation
+            if current != last {
+                last = current
+                continuation.yield(current)
+            }
+        }
+        continuation.onTermination = { _ in
+            Task { @MainActor in effect.cancel() }
+        }
+        return stream
+    }
+
     /// For platform adapters: the running `application`.
     package init(application: any Application) {
         self.application = application

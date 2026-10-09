@@ -17,7 +17,8 @@ import ThemeCore
 /// (`RichProbe`), `RICH_EDITOR_PROBE=1` the rich text editor (`RichEditorProbe`), `VIDEO_PROBE=1` a video
 /// (`VideoProbe`), `SYNC_PROBE=1` a list kept in step with a server (`SyncProbe`), `PERMISSION_PROBE=1` what the
 /// system says about permissions (`PermissionProbe`), `PERMISSION_LAYER=1` the same through the
-/// permission layer (`PermissionLayerProbe`).
+/// permission layer (`PermissionLayerProbe`), `PERMISSION_FLOW=1` the explanation and refusal screens around the
+/// camera permission (`PermissionFlowProbe`).
 @MainActor
 enum ContainerProbe {
     static func content(_ environment: [String: String]) -> (any SceneContent)? {
@@ -38,6 +39,7 @@ enum ContainerProbe {
         }
         if environment["SYNC_PROBE"] != nil { return SyncProbe.content() }
         if environment["PERMISSION_LAYER"] != nil { return PermissionLayerProbe.content() }
+        if environment["PERMISSION_FLOW"] != nil { return PermissionFlowProbe.content() }
         if let probe = environment["PERMISSION_PROBE"] {
             return PermissionProbe.content(auto: environment["PERMISSION_AUTO"] ?? (probe == "1" ? nil : probe))
         }

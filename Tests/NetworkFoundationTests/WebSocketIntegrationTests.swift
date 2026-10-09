@@ -278,3 +278,30 @@ func aURLThatIsNotASocketAddressIsRefusedAtOnce() async throws {
         }
     }
 }
+
+@Test(.timeLimit(.minutes(1)))
+func aSuspendedSocketIsClosedForTheServerAndResumedAsANewConnection() async throws {
+    let server = try await LocalWebSocketServer.start(onMessage: { message, server in
+        server.broadcast(message)
+    })
+    defer { server.stop() }
+    let client = makeClient(server.url("/echo"))
+    await client.connect()
+    #expect(isConnected(await client.nextEvent(), reconnect: false))
+    #expect(await waitUntil { server.openConnections == 1 })
+
+    await client.suspend()
+
+    // The server sees the connection go, with "going away".
+    #expect(await waitUntil { server.openConnections == 0 })
+    #expect(isDisconnected(await client.nextEvent(), willReconnect: false))
+    try await Task.sleep(for: .milliseconds(300))
+    #expect(server.totalConnections == 1, "a suspended client does not reconnect on its own")
+
+    await client.resume()
+    #expect(isConnected(await client.nextEvent(), reconnect: true))
+    try await client.send(.text("after"))
+    #expect(isMessage(await client.nextEvent(), "after"))
+    #expect(server.totalConnections == 2)
+    await client.close()
+}

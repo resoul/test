@@ -385,6 +385,17 @@
 | `WebSocketClient` (`connect`, `close`, `send`, `nextEvent`, `states`) | клиент WebSocket: сам держит соединение, события по одному, исходящие по одному, без очереди на время разрыва | [14](14-storage-and-network.md#9-websocket), S6 |
 | `WebSocketClient.run`, `runSession`, `noteEnd`, `generation` | цикл подключения; причина окончания фиксируется до закрытия; поколения защищают от запоздавшего соединения | [14](14-storage-and-network.md#9-websocket) |
 | `WebSocketClient.deliver`, `OverflowPolicy` | очередь с пределом: остановить чтение или сообщить `resyncRequired` и пересоздать соединение | [14](14-storage-and-network.md#9-websocket) |
+| `HTTPClient.baseURL`, `url(for:query:)`, `request(_:_:query:headers:body:timeout:)` | адрес от базового: путь кодируется по сегментам, `.`/`..` отвергаются, запрос кодируется строго (`+` и `&` — данные) | [14](14-storage-and-network.md#s5-s6-s8-остатки-2026-10-09), S5 |
+| `HTTPClient.perform` | один цикл попыток, повторов и обновления токена для `send`, `download`, `upload`; файл отвергнутой попытки удаляется | то же |
+| `HTTPClient.download(_:to:)`, `HTTPTransport.download`, `HTTPDownload` | тело `2xx` — в файл, не в память; на место назначения попадает только принятый ответ; тело ошибки в памяти, не больше 64 КиБ | то же |
+| `HTTPClient.upload(_:fromFile:)`, `HTTPTransport.upload` | тело из файла; повтор читает файл заново | то же |
+| `TransferDelegate`, `URLSessionTransport.download/upload` | потоковая запись кусками, предел по объявленному и по принятому размеру, файл убирается при сбое и отмене; правила редиректа общие с `send` (`RedirectRules`) | то же |
+| `WebSocketClient.suspend/resume/follow`, `WebSocketState.suspended` | пауза без конца клиента: поток событий жив, переподключение не идёт; `follow` связывает с потоком «приложение впереди» | [14](14-storage-and-network.md#s5-s6-s8-остатки-2026-10-09), S6 |
+| `Shell.activations()` | `activation` приложения как `AsyncStream` без повторов | то же |
+| `HTTPValidators` | свежесть и валидаторы ответа по `Cache-Control`, `Age`, `Expires`, `ETag`, `Last-Modified`; вынесено из `ImageCache` | то же, S8; [14](14-storage-and-network.md#6-cache-общий-кэш-и-существующие-изображения) |
+| `ImageCache` (`HTTPValidators.read/write`) | хранение валидаторов в расширенном атрибуте файла остаётся в картинках | то же |
+| `NetworkStorage` (`HTTPClient.download(_:into:at:)`, `DownloadError`, `StoredDownload`) | скачивание в `FileStore` через временный файл; хранилище применяет свои предел и замену | то же |
+| `FileStore.importFile(at:to:)` | копирование внешнего файла в хранилище стало требованием протокола | то же |
 | `ReconnectPolicy`, `Heartbeat`, `WebSocketConfiguration` | пауза с потолком и джиттером, сброс после устойчивого соединения, окончательные коды закрытия, ping | [14](14-storage-and-network.md#9-websocket) |
 | `WebSocketTransport`, `WebSocketConnection`, `URLSessionWebSocketTransport` | соединение открыто после ответа на ping; отказ апгрейда — со статусом HTTP | [14](14-storage-and-network.md#9-websocket) |
 | `NetworkEnvironment` | часы, ожидание и случайность, общие для HTTP и WebSocket | [14](14-storage-and-network.md#9-websocket) |
@@ -431,4 +442,10 @@
 | `PermissionBackend`, `CaptureBackend`, `PhotosBackend`, `NotificationsBackend`, `LocationBackend` | по фреймворку: чтение статуса без окна, запрос, таблица соответствия статусов; геолокация ждёт делегата | [18 §13](18-permissions.md#13-p2-результаты-на-2026-10-02), [18 §11](18-permissions.md#11-p0-результаты-на-2026-10-02) |
 | `UIKitPermissions`, `AppKitPermissions` | впереди ли приложение, поставщик, переход в Настройки; UIKit и AppKit только здесь | [18 §13](18-permissions.md#13-p2-результаты-на-2026-10-02), AGENTS (платформа) |
 | `PermissionLayerProbe` (`PERMISSION_LAYER=1`), `iOSUITests/PermissionLayerTests` | слой разрешений над настоящей системой на Simulator | [18 §13](18-permissions.md#13-p2-результаты-на-2026-10-02) |
-
+| `PermissionKind` (контакты, календарь, напоминания, Bluetooth, речь, слежение, движение, медиатека), `Grant.writeOnly` | остальные виды по матрице P0 | [18](18-permissions.md#14-p3-результаты-на-2026-10-09), P3 |
+| `PermissionBackend.usageDescriptionKeys` | ключи другого поколения системы вместо ключей вида: календарь и напоминания до iOS 17 | то же |
+| `ContactsBackend`, `EventsBackend`, `BluetoothBackend`, `SpeechBackend`, `TrackingBackend`, `MotionBackend`, `MediaLibraryBackend` | поставщики; статус событий и `limited` контактов читаются по числу; Bluetooth и движение спрашивают косвенно | то же |
+| `Package.swift` (`PERMISSION_SPEECH`, `PERMISSION_MOTION`, `PERMISSION_MEDIA_LIBRARY`) | условия по платформам вместо `#if os`: вызовы есть в SDK, но помечены недоступными | то же; AGENTS.md «Платформа» |
+| `Permissions.follow(_:)`, `UIKitPermissions/AppKitPermissions.foregroundChanges()` | чтение заново при возврате на передний план | [18](18-permissions.md#15-p4-результаты-на-2026-10-09), P4 |
+| `PermissionAsyncRay` (`Permissions.statusRay(of:)`) | статус потоком AsyncRay для привязки к `State` | то же |
+| `Demo/Shared/PermissionFlowProbe.swift` | экраны объяснения и отказа с «Open Settings» | то же |

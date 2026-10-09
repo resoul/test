@@ -359,3 +359,54 @@ func onlyAGrantIsGranted() {
         #expect(!status.isGranted)
     }
 }
+
+// MARK: Following the app to the front
+
+@Test(.timeLimit(.minutes(1)))
+func comingBackToTheFrontReadsTheObservedKindsAgain() async throws {
+    let provider = InMemoryPermissionProvider(statuses: [.camera: .denied])
+    let permissions = Permissions(provider: provider)
+    var changes = await permissions.statusChanges(of: .camera).makeAsyncIterator()
+    #expect(await changes.next() == .denied)
+    let (foreground, input) = AsyncStream.makeStream(of: Bool.self)
+    let following = Task { await permissions.follow(foreground) }
+
+    // The person changes the permission in Settings and comes back.
+    await provider.setStatus(.granted(.full), for: .camera)
+    input.yield(false)
+    input.yield(true)
+
+    #expect(await changes.next() == .granted(.full))
+    input.finish()
+    await following.value
+}
+
+@Test(.timeLimit(.minutes(1)))
+func leavingTheFrontReadsNothing() async throws {
+    let provider = InMemoryPermissionProvider(statuses: [.camera: .denied])
+    let permissions = Permissions(provider: provider)
+    // The observer lives as long as its stream does, so the stream is kept to the end.
+    let changes = await permissions.statusChanges(of: .camera)
+    let readsAfterObserving = await provider.statusReads
+    let (foreground, input) = AsyncStream.makeStream(of: Bool.self)
+    let following = Task { await permissions.follow(foreground) }
+
+    input.yield(false)
+    input.yield(false)
+    input.finish()
+    await following.value
+
+    #expect(await provider.statusReads == readsAfterObserving)
+    withExtendedLifetime(changes) {}
+}
+
+@Test(.timeLimit(.minutes(1)))
+func followingEndsWhenItsTaskIsCancelled() async {
+    let permissions = Permissions(provider: InMemoryPermissionProvider())
+    let (foreground, input) = AsyncStream.makeStream(of: Bool.self)
+    _ = input
+    let following = Task { await permissions.follow(foreground) }
+
+    following.cancel()
+    await following.value
+}

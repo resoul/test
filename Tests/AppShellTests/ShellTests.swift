@@ -1,5 +1,6 @@
 import Foundation
 import Nodes
+import StateCore
 import Testing
 
 @testable import AppShell
@@ -259,4 +260,26 @@ func scenesOfOneKindKeepTheirOwnPathsAndALinkGoesToTheSceneItCameTo() throws {
     // Without a scene named, a link goes to the first one left.
     #expect(shell.open(URL(string: "mail:/messages/8")!) == .opened)
     #expect(secondStack.path == [.inbox, .message(8)])
+}
+
+@Test @MainActor
+func theActivationsSequenceStartsWithTheCurrentValueAndFollowsChanges() async throws {
+    reset()
+    let shell = Shell(application: MailApp())
+    let first = try #require(shell.makeSession())
+    let second = try #require(shell.makeSession())
+    var iterator = shell.activations().makeAsyncIterator()
+
+    #expect(await iterator.next() == .background)
+    first.setActivation(.active)
+    StateUpdates.flush()
+    #expect(await iterator.next() == .active)
+
+    // Another scene going inactive while the first stays active changes nothing for the app, so
+    // nothing is delivered; the next value that is delivered is the one that differs.
+    second.setActivation(.inactive)
+    StateUpdates.flush()
+    first.setActivation(.background)
+    StateUpdates.flush()
+    #expect(await iterator.next() == .inactive)
 }

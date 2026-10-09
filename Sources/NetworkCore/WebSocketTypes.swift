@@ -69,6 +69,9 @@ public enum WebSocketState: Sendable {
     /// Gave up: the failure is not worth repeating, or the attempts ran out. Calling
     /// ``WebSocketClient/connect()`` starts again.
     case failed(WebSocketError)
+    /// Paused by ``WebSocketClient/suspend()``: no connection and none being made, but the client
+    /// is not over — its events go on, and ``WebSocketClient/resume()`` connects again.
+    case suspended
 
     public var isConnected: Bool {
         if case .connected = self { return true }
@@ -83,8 +86,9 @@ public enum WebSocketEvent: Sendable {
     /// missed meanwhile, so this is the moment to ask the server for them, from the application's
     /// own cursor — the client does not replay or deduplicate anything.
     case connected(isReconnect: Bool)
-    /// The connection ended. `cause` is `nil` when the client closed it. `willReconnect` says
-    /// whether a new connection will be attempted.
+    /// The connection ended. `cause` is `nil` when the client closed or suspended it.
+    /// `willReconnect` says whether a new connection will be attempted without being asked; a
+    /// suspended client waits for ``WebSocketClient/resume()``.
     case disconnected(cause: WebSocketError?, willReconnect: Bool)
     /// Messages were lost because the consumer did not keep up, under
     /// ``OverflowPolicy/resync``. The connection is dropped and re-made; resynchronise from the

@@ -5,10 +5,11 @@ import Foundation
 ///
 /// **Life.** ``connect()`` starts it; ``close(code:reason:)`` ends it. Between them the client keeps a
 /// connection open on its own, making a new one when the old one is lost, as the
-/// ``ReconnectPolicy`` allows. Closing is the only way to stop it — the client does not watch the
-/// app's lifecycle, so an app that must not hold a socket in the background closes it when it
-/// goes there and connects again when it returns. Hiding a screen does not close it: the
-/// connection belongs to whoever created the client.
+/// ``ReconnectPolicy`` allows. The client does not watch the app's lifecycle itself. An app that
+/// must not hold a socket in the background calls ``suspend()`` when it goes there and
+/// ``resume()`` when it returns — or hands the client a sequence of "is the app in front" values
+/// with ``follow(_:)`` — and the consumer's events carry on across the pause. Hiding a screen
+/// does neither: the connection belongs to whoever created the client.
 ///
 /// **Ownership.** The client holds a task while it is connected or waiting to reconnect, and that
 /// task holds the client. Close the client when done with it; releasing it is not enough.
@@ -95,15 +96,16 @@ public actor WebSocketClient {
     // MARK: Lifecycle
 
     /// Starts connecting. Does nothing while the client is already connecting, connected or waiting
-    /// to reconnect; after it was closed or gave up, starts again.
+    /// to reconnect; after it was closed or gave up, starts again. After ``suspend()`` it does what
+    /// ``resume()`` does.
     public func connect() {
         switch state {
         case .connecting, .connected, .reconnecting: return
-        case .idle, .closed, .failed: break
+        case .suspended: break
+        case .idle, .closed, .failed: hasConnectedBefore = false
         }
         generation += 1
         isFinished = false
-        hasConnectedBefore = false
         setState(.connecting)
         let current = generation
         runner = Task { await self.run(generation: current) }
@@ -125,6 +127,70 @@ public actor WebSocketClient {
             push(.disconnected(cause: nil, willReconnect: false))
         }
         finish(.closed(WebSocketClose(code: code, reason: reason ?? "", initiator: .client)))
+    }
+
+    /// Drops the connection and stops reconnecting until ``resume()``, without ending the client.
+    ///
+    /// The connection is closed with code 1001, the consumer gets
+    /// ``WebSocketEvent/disconnected(cause:willReconnect:)`` with no cause, and the state becomes
+    /// ``WebSocketState/suspended``. Events already queued stay queued and the consumer's wait
+    /// goes on: nothing is finished, unlike ``close(code:reason:)``. A message being read at this
+    /// moment may be lost, and sends fail with ``WebSocketError/notConnected`` meanwhile.
+    ///
+    /// Does nothing unless the client is connecting, connected or waiting to reconnect: one that
+    /// was never started, was closed or gave up stays as it is, so that pausing and resuming
+    /// with the app cannot bring back a client that was ended on purpose.
+    public func suspend() {
+        switch state {
+        case .connecting, .connected, .reconnecting: break
+        case .idle, .closed, .failed, .suspended: return
+        }
+        generation += 1
+        runner?.cancel()
+        runner = nil
+        let open = connection
+        connection = nil
+        open?.close(code: 1001, reason: "suspended")
+        if open != nil {
+            push(.disconnected(cause: nil, willReconnect: false))
+        }
+        // A reader waiting for the consumer to take a message must not wait for it any more: its
+        // run is over, and it finds that out when it wakes.
+        readerWaitingForRoom?.resume()
+        readerWaitingForRoom = nil
+        setState(.suspended)
+    }
+
+    /// Connects again after ``suspend()``; the next ``WebSocketEvent/connected(isReconnect:)`` says
+    /// it is a reconnect, because messages may have been missed meanwhile. Does nothing in any
+    /// other state.
+    public func resume() {
+        guard case .suspended = state else { return }
+
+        connect()
+    }
+
+    /// Suspends the client while `isActive` says `false` and resumes it when it says `true`, for as
+    /// long as the sequence goes on — typically "the app is in front".
+    ///
+    /// Returns when the sequence ends, when it throws, or when the calling task is cancelled; the
+    /// client is left in whatever state it was then. Run it in a task of its own and cancel that
+    /// task when the client no longer follows the app. A client that was not started, or was
+    /// closed, ignores the values; see ``suspend()``.
+    ///
+    /// - Parameter isActive: The values to follow. The first one is applied at once, so a
+    ///   sequence that starts with the current value puts the client in step with it.
+    public nonisolated func follow<Activity: AsyncSequence & Sendable>(_ isActive: Activity) async
+    where Activity.Element == Bool {
+        do {
+            for try await active in isActive {
+                if Task.isCancelled { return }
+
+                if active { await resume() } else { await suspend() }
+            }
+        } catch {
+            return
+        }
     }
 
     /// The state now, then each change. Changes between two reads collapse into the latest.
