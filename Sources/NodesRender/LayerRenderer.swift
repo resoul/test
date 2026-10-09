@@ -1,6 +1,7 @@
 #if canImport(QuartzCore)
     import LayoutCore
     import Nodes
+    import Tracing
     import ThemeCore
     import QuartzCore
 
@@ -849,7 +850,12 @@
             // An image in `contents` is shown as it is, top row at the top, whatever the
             // geometry of the layers around it — so it is drawn upright.
             context.scaleBy(x: CGFloat(scale), y: CGFloat(scale))
+            let interval = Trace.begin(
+                .draw,
+                "\(pixelWidth)x\(pixelHeight) \(type(of: drawing))"
+            )
             drawing.draw(in: context, size: size)
+            Trace.end(interval)
             let shown = layer.contents
             let image = context.makeImage()
             layer.contentsScale = CGFloat(scale)

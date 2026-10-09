@@ -6,6 +6,8 @@
     import Nodes
     import QuartzCore
     import Testing
+    import Tracing
+    import os
 
     @testable import NodesRender
 
@@ -171,6 +173,29 @@
         renderer.render(box, in: root, scale: 1)
         let rightToLeft = inkColumns(try #require(renderer.layer(for: text)?.contents) as! CGImage)
         #expect(try #require(rightToLeft.min()) > 100)
+        host.detach()
+    }
+
+    @Test @MainActor
+    func drawingATextIsMarkedWithTheSizeOfItsBitmap() throws {
+        let column = Column(Text("Hello"), height: 100)
+        let host = NodeHost(root: column, size: LayoutSize(width: 300, height: 100))
+        host.layoutIfNeeded()
+        let marks = OSAllocatedUnfairLock<[Trace.Record]>(initialState: [])
+        let observation = Trace.observe { record in
+            guard record.name == .draw else { return }
+            marks.withLock { $0.append(record) }
+        }
+        defer { observation.cancel() }
+        let renderer = LayerRenderer()
+
+        renderer.render(column, in: CALayer(), scale: 1)
+
+        let image = try #require(renderer.layer(for: column.text)?.contents) as! CGImage
+        let size = "\(image.width)x\(image.height) "
+        let ours = marks.withLock { $0 }.filter { $0.detail.hasPrefix(size) }
+        #expect(ours.contains { $0.phase == .begin })
+        #expect(ours.contains { $0.phase == .end })
         host.detach()
     }
 
@@ -341,7 +366,6 @@
         }.value
         #expect(name == CTFontCopyPostScriptName(bold) as String)
     }
-
 
     @Test @MainActor
     func aTextShowsItsLocalizedTextAndFollowsTheLanguage() {

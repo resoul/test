@@ -7,6 +7,7 @@
     @testable import NodesRender
     import QuartzCore
     import Testing
+    import Tracing
 
     private func encodedImage(
         width: Int,
@@ -361,6 +362,23 @@
         // Shown turned upright, as the original would be.
         let shown = try await ImagePipeline().load(.data(saved), targetPixelDimension: 64)
         #expect(shown.size == LayoutSize(width: 8, height: 12))
+    }
+
+    @Test
+    func decodingAnImageIsMarkedAndEnded() async throws {
+        let original = try cameraJPEG()
+        let marks = OSAllocatedUnfairLock<[Trace.Record]>(initialState: [])
+        let observation = Trace.observe { record in
+            guard record.name == .decode,
+                record.detail.hasPrefix("\(original.count) bytes ")
+            else { return }
+            marks.withLock { $0.append(record) }
+        }
+        defer { observation.cancel() }
+
+        _ = try await ImagePipeline().load(.data(original), targetPixelDimension: 64)
+
+        #expect(marks.withLock { $0 }.map(\.phase) == [.begin, .end])
     }
 
     /// A lossless 1×1 WebP. Image I/O decodes WebP but cannot encode it.

@@ -1,5 +1,6 @@
 import LayoutCore
 import StateCore
+import Tracing
 
 /// A column (or row) of nodes for `items` that lays out only the items near the part of it
 /// that shows — on screen and about a screen before and after — however many items there
@@ -464,11 +465,16 @@ public final class LazyStack<Item: Identifiable>: Node {
             self?.loadState.value = .loading
             self?.pageLoadError = nil
             var failure: (any Error)?
+            let interval = Trace.begin(
+                .pageLoad,
+                "loaded \(request.loadedCount)\(isRetry ? " retry" : "")"
+            )
             do {
                 try await load(request)
             } catch {
                 failure = error
             }
+            Trace.end(interval)
             guard let self, generation == self.loadGeneration else { return }
 
             if Task.isCancelled {

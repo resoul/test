@@ -108,6 +108,70 @@ open class Node: LayoutElement {
         return self
     }
 
+    /// How far the part of the node that answers touches and the pointer reaches beyond its
+    /// box, per edge, in points; a negative value takes the edge in. A small icon becomes easy
+    /// to hit without taking more room in the layout.
+    ///
+    /// The area is found like the box: a node drawn over it, a later sibling or a deeper node,
+    /// still gets the touch first, and an ancestor that clips its content cuts it at its own
+    /// box — a touch outside a clipping ancestor reaches nothing inside. `leading` and `trailing` follow the host's
+    /// direction. The default is zero on every edge.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var hitTestInsets = Edges<Double>(all: 0)
+
+    /// The smallest width and height the part that answers touches has, centered on the node's
+    /// box, in points; `nil` for no minimum. 44 is the size Apple's guidelines ask for a touch
+    /// target. It widens an area that is smaller, together with `hitTestInsets`, and never
+    /// narrows one.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var minimumHitSize: LayoutSize?
+
+    /// Sets `hitTestInsets` and returns the node, for use where it is placed.
+    ///
+    /// Ownership: returns `self`. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    @discardableResult
+    public func hitTestInsets(_ insets: Edges<Double>) -> Self {
+        hitTestInsets = insets
+        return self
+    }
+
+    /// Sets `minimumHitSize` and returns the node, for use where it is placed:
+    /// `icon.minimumHitSize(LayoutSize(width: 44, height: 44))`.
+    ///
+    /// Ownership: returns `self`. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    @discardableResult
+    public func minimumHitSize(_ size: LayoutSize?) -> Self {
+        minimumHitSize = size
+        return self
+    }
+
+    /// The part of the node's box and around it that answers touches, in the node's own
+    /// coordinates, as `hitTestInsets` and `minimumHitSize` make it.
+    func hitArea(direction: LayoutDirection) -> LayoutRect {
+        let size = frame.size
+        let left = direction == .leftToRight ? hitTestInsets.leading : hitTestInsets.trailing
+        let right = direction == .leftToRight ? hitTestInsets.trailing : hitTestInsets.leading
+        var x = -left
+        var y = -hitTestInsets.top
+        var width = size.width + left + right
+        var height = size.height + hitTestInsets.top + hitTestInsets.bottom
+        if let minimum = minimumHitSize {
+            if width < minimum.width {
+                x -= (minimum.width - width) / 2
+                width = minimum.width
+            }
+            if height < minimum.height {
+                y -= (minimum.height - height) / 2
+                height = minimum.height
+            }
+        }
+        return LayoutRect(x: x, y: y, width: max(0, width), height: max(0, height))
+    }
+
     /// The bar above the keyboard set on this node; see `keyboardBar`.
     var keyboardBarStorage: KeyboardBar?
 
@@ -625,14 +689,18 @@ open class Node: LayoutElement {
             var next: Int
         }
 
+        let direction = host?.direction ?? .leftToRight
         func enter(_ node: Node, at point: LayoutPoint) -> Level? {
             guard !node.isHidden, node.appearance.opacity > 0 else { return nil }
 
-            let isInside =
+            let isInBox =
                 point.x >= 0 && point.y >= 0 && point.x < node.frame.size.width
                 && point.y < node.frame.size.height
-            if node.appearance.clipsContent && !isInside { return nil }
+            if node.appearance.clipsContent && !isInBox { return nil }
 
+            // The node answers where its hit area is — its box unless it asks for another — and
+            // only for itself: its subnodes are found by where they are drawn.
+            let isInside = node.isInHitArea(point, direction: direction) ?? isInBox
             let subnodes = node.subnodesInDrawingOrder
             return Level(
                 node: node,
@@ -667,6 +735,17 @@ open class Node: LayoutElement {
             if done.isInside { return done.node }
         }
         return nil
+    }
+
+    /// Whether `point`, in the node's coordinates, is in the area `hitTestInsets` and
+    /// `minimumHitSize` give it; `nil` for a node that sets neither, whose area is its box.
+    private func isInHitArea(_ point: LayoutPoint, direction: LayoutDirection) -> Bool? {
+        guard hitTestInsets != Edges(all: 0) || minimumHitSize != nil else { return nil }
+
+        let area = hitArea(direction: direction)
+        return point.x >= area.origin.x && point.y >= area.origin.y
+            && point.x < area.origin.x + area.size.width
+            && point.y < area.origin.y + area.size.height
     }
 
     /// Visits this node and the visible ones under it in pre-order, each with where the
