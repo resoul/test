@@ -296,6 +296,63 @@
             stack.onLayoutApplied = { [weak self] in self?.stackLaidOut() }
         }
 
+        // MARK: - Paging
+
+        /// How the table pages: when it asks for more rows. See `LazyStack.pagination`.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var pagination: PaginationPolicy? {
+            get { stack.pagination }
+            set { stack.pagination = newValue }
+        }
+
+        /// Loads the next page of rows, when the table asks for one: it adds them to `sections`
+        /// before it returns. `PageRequest.loadedCount` is the number of rows, not counting the
+        /// section headers. See `LazyStack.loadMore` for failure and cancellation.
+        ///
+        /// Ownership: the table keeps it; it must not keep the table. Isolation: MainActor.
+        /// Errors: see `LazyStack.loadMore`. Cancellation: see `LazyStack.loadMore`.
+        public var loadMore: (@MainActor (PageRequest) async throws -> Void)? {
+            didSet {
+                guard let load = loadMore else {
+                    stack.loadMore = nil
+                    return
+                }
+
+                stack.loadMore = { @MainActor [unowned self] (request: PageRequest) async throws in
+                    var request = request
+                    request.loadedCount = self.sections.reduce(0) { $0 + $1.items.count }
+                    try await load(request)
+                }
+            }
+        }
+
+        /// Whether there are no more pages.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var reachedEnd: Bool {
+            get { stack.reachedEnd }
+            set { stack.reachedEnd = newValue }
+        }
+
+        /// What the paging is doing, for a footer; reading it under tracking depends on it.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var pageLoadState: PageLoadState { stack.pageLoadState }
+
+        /// Why the last page failed.
+        ///
+        /// Ownership: the table's stack keeps it. Isolation: MainActor. Errors: none.
+        /// Cancellation: not applicable.
+        public var pageLoadError: (any Error)? { stack.pageLoadError }
+
+        /// Asks for the page that failed again; see `LazyStack.retryLoadingPage()`.
+        public func retryLoadingPage() { stack.retryLoadingPage() }
+
+        /// Starts paging over, for rows that are another list now; see
+        /// `LazyStack.restartPagination()`.
+        public func restartPagination() { stack.restartPagination() }
+
         /// Puts back the row showing its actions, if any.
         ///
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: not applicable.

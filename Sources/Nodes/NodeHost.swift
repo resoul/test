@@ -1,5 +1,6 @@
 import Foundation
 import LayoutCore
+import LocalizationCore
 import StateCore
 import ThemeCore
 
@@ -62,6 +63,53 @@ public final class NodeHost: CommandTarget {
     public var conditions: DisplayConditions {
         get { untracked { conditionsState.value } }
         set { conditionsState.value = newValue }
+    }
+
+    /// The locale the tree's texts are resolved for (`Node.localized(_:)`): the system's by
+    /// default. The adapters set it from the system's settings, and set it again when the person
+    /// changes language or region while the app runs — unless the app has set one of its own in
+    /// the meantime, which they leave alone. A change makes the nodes that resolved a text
+    /// resolve it again, and lays the tree out again.
+    ///
+    /// The layout direction is not taken from it: that is the platform's, as the adapters set
+    /// `direction`.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var locale: Locale {
+        get { untracked { localeState.value } }
+        set {
+            guard newValue != locale else { return }
+
+            localeState.value = newValue
+            setNeedsLayout()
+        }
+    }
+
+    /// What turns a `LocalizedText` into a string: the strings of the app's main bundle by
+    /// default. Setting one — a catalog built in code, a `PseudoLocalizer` around it for a
+    /// look at the layout in a longer language — makes the nodes that resolved a text resolve it
+    /// again.
+    ///
+    /// Ownership: the host keeps it. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    public var localizer: any Localizer {
+        get { localizerStorage }
+        set {
+            localizerStorage = newValue
+            localizerRevision.value &+= 1
+            setNeedsLayout()
+        }
+    }
+
+    private let localeState = State(Locale.current)
+    private var localizerStorage: any Localizer = CatalogLocalizer(catalog: .main)
+    private let localizerRevision = State(0)
+
+    /// `text` for the tree's locale, resolved so that the reader follows a change of the locale
+    /// or of the localizer.
+    func resolveLocalized(_ text: LocalizedText) -> ResolvedText {
+        _ = localizerRevision.value
+        return localizerStorage.resolve(text, locale: localeState.value)
     }
 
     /// The points of spacing steps (`.s1` … `.s9`) in the tree's layouts: the theme's.

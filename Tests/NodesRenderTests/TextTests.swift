@@ -2,6 +2,7 @@
     import CoreText
     import Foundation
     import LayoutCore
+    import LocalizationCore
     import Nodes
     import QuartzCore
     import Testing
@@ -339,6 +340,31 @@
                 as String
         }.value
         #expect(name == CTFontCopyPostScriptName(bold) as String)
+    }
+
+
+    @Test @MainActor
+    func aTextShowsItsLocalizedTextAndFollowsTheLanguage() {
+        var catalog = LocalizationCatalog()
+        catalog.insert(.text("Hello, %1$@!"), for: "hello", language: "en")
+        catalog.insert(.text("Привет, %1$@!"), for: "hello", language: "ru")
+        let text = Text(localized: LocalizedText("hello", arguments: ["Ana"]))
+        #expect(text.text == "hello", "before it is in a tree: the default value")
+        let host = NodeHost(root: text, size: LayoutSize(width: 300, height: 100))
+        host.localizer = CatalogLocalizer(catalog: catalog)
+        host.locale = Locale(identifier: "en_US")
+        host.layoutIfNeeded()
+        #expect(text.text == "Hello, Ana!")
+
+        host.locale = Locale(identifier: "ru_RU")
+        host.layoutIfNeeded()
+        #expect(text.text == "Привет, Ana!")
+
+        // A text set afterwards is resolved too.
+        text.localizedText = LocalizedText("hello", arguments: ["Boris"])
+        host.layoutIfNeeded()
+        #expect(text.text == "Привет, Boris!")
+        host.detach()
     }
 
 #endif

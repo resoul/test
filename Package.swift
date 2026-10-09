@@ -22,6 +22,8 @@ import PackageDescription
 // offers a kind's status as an AsyncRay stream. PermissionSystem
 // asks the system's frameworks and checks the Info.plist keys before it does; PermissionUIKit and
 // PermissionAppKit say whether the app is in front and open its Settings.
+// LocalizationCore is texts looked up by key for the reader's language — catalogs, plural forms,
+// pseudo-localization — and depends on Foundation only; Nodes resolves them for its host's locale.
 // Nodes is the tree of nodes laid out by LayoutCore and driven by StateCore; NodesRender draws
 // it into CALayers (Apple platforms), NodesUIKit and NodesAppKit put it into views. ThemeCore
 // holds the theme — colors, text, radii, motion, spacing and breakpoints — for nodes and for
@@ -52,6 +54,7 @@ let package = Package(
         .library(name: "NetworkCore", targets: ["NetworkCore"]),
         .library(name: "NetworkFoundation", targets: ["NetworkFoundation"]),
         .library(name: "NetworkStorage", targets: ["NetworkStorage"]),
+        .library(name: "LocalizationCore", targets: ["LocalizationCore"]),
         .library(name: "Nodes", targets: ["Nodes"]),
         .library(name: "NodesRender", targets: ["NodesRender"]),
         .library(name: "NodesUIKit", targets: ["NodesUIKit"]),
@@ -114,11 +117,16 @@ let package = Package(
         .target(name: "NetworkCore"),
         .target(name: "NetworkFoundation", dependencies: ["NetworkCore"]),
         .target(name: "NetworkStorage", dependencies: ["NetworkCore", "StorageCore"]),
-        .target(name: "Nodes", dependencies: ["LayoutCore", "StateCore", "ThemeCore"]),
+        .target(name: "LocalizationCore"),
+        .target(
+            name: "Nodes",
+            dependencies: ["LayoutCore", "StateCore", "ThemeCore", "LocalizationCore"]
+        ),
         .target(
             name: "NodesRender",
             dependencies: [
                 "Nodes", "LayoutCore", "StateCore", "ThemeCore", "RichTextCore", "NetworkCore",
+                "LocalizationCore",
             ]
         ),
         .target(
@@ -200,6 +208,7 @@ let package = Package(
                 "PermissionAsyncRay", "PermissionCore", .product(name: "AsyncRay", package: "asyncray"),
             ]
         ),
+        .testTarget(name: "LocalizationCoreTests", dependencies: ["LocalizationCore"]),
         .testTarget(name: "NetworkCoreTests", dependencies: ["NetworkCore"]),
         .testTarget(
             name: "NetworkFoundationTests",

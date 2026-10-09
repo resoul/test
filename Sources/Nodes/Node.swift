@@ -1,4 +1,6 @@
+import Foundation
 import LayoutCore
+import LocalizationCore
 import StateCore
 import ThemeCore
 
@@ -775,6 +777,38 @@ open class Node: LayoutElement {
             readThemeAway = true
         }
         return resolved
+    }
+
+    /// The locale the tree's texts are resolved for. Read in `update()` or `layoutSpec()`, the
+    /// node follows it.
+    ///
+    /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    public var locale: Locale {
+        let host = self.host ?? pendingHost ?? NodeHost.preparing
+        return host?.locale ?? .current
+    }
+
+    /// `text` in the tree's language: the string the host's `localizer` makes of it for the
+    /// host's `locale`. Read in `update()` or `layoutSpec()`, the node follows a change of the
+    /// language or of the localizer, and shows the new text.
+    ///
+    ///     override func update() {
+    ///         title.text = localized(LocalizedText("inbox.unread", count: model.unread))
+    ///     }
+    ///
+    /// A key that no catalog has shows its default value; see ``ResolvedText/missing`` for
+    /// finding those, with `CatalogLocalizer.onMissing`.
+    ///
+    /// Ownership: returns a value. Isolation: MainActor. Errors: none. Cancellation: not
+    /// applicable.
+    public func localized(_ text: LocalizedText) -> String {
+        let host = self.host ?? pendingHost ?? NodeHost.preparing
+        guard let host else {
+            return CatalogLocalizer(catalog: .main).resolve(text, locale: .current).text
+        }
+
+        return host.resolveLocalized(text).text
     }
 
     /// A change of the theme for this node and the nodes inside it — its color scheme, its
