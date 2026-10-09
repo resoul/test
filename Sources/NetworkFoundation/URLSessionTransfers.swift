@@ -10,8 +10,8 @@ extension URLSessionTransport {
     /// bytes written after that; either way the connection is dropped and the file removed. An
     /// answer that is not a `2xx` is not written: its body, cut at ``HTTPDownload/errorBodyLimit``,
     /// comes back in memory. A `HEAD` request has no body to download and is refused.
-    public func download(_ request: HTTPRequest, maxBytes: Int?) async throws(HTTPError)
-        -> HTTPDownload
+    public func download(_ request: HTTPRequest, maxBytes: Int?, partial: PartialDownload?)
+        async throws(HTTPError) -> HTTPDownload
     {
         guard request.method != .head else {
             throw .invalidRequest("a HEAD request has no body to download")
@@ -21,7 +21,7 @@ extension URLSessionTransport {
         let delegate = TransferDelegate(
             policy: redirects,
             limit: maxBytes,
-            sink: .file(directory: downloadDirectory)
+            sink: partial.map { .partial($0) } ?? .file(directory: downloadDirectory)
         )
         let task = session.dataTask(with: urlRequest)
         task.delegate = delegate
@@ -56,6 +56,28 @@ extension URLSessionTransport {
         return Self.response(of: result, fallback: request.url)
     }
 
+    /// Sends `body` as it is read: the system asks for a new stream at the start and again for each
+    /// repeat of the body it has to make (a redirect that keeps it), and each time `body` makes one.
+    /// With a known length the request carries `Content-Length`; without one it is sent in chunks.
+    public func upload(_ request: HTTPRequest, from body: HTTPBodyStream, maxResponseBytes: Int?)
+        async throws(HTTPError) -> HTTPResponse
+    {
+        var urlRequest = try Self.makeURLRequest(request, includingBody: false)
+        if let length = body.length, urlRequest.value(forHTTPHeaderField: "Content-Length") == nil {
+            urlRequest.setValue("\(length)", forHTTPHeaderField: "Content-Length")
+        }
+        let delegate = TransferDelegate(
+            policy: redirects,
+            limit: maxResponseBytes,
+            sink: .memory,
+            bodyStream: body
+        )
+        let task = session.uploadTask(withStreamedRequest: urlRequest)
+        task.delegate = delegate
+        let result = try await delegate.run(task)
+        return Self.response(of: result, fallback: request.url)
+    }
+
     private static func response(of result: TransferDelegate.Result, fallback: URL)
         -> HTTPResponse
     {
@@ -85,6 +107,9 @@ final class TransferDelegate: NSObject, URLSessionDataDelegate, Sendable {
         case file(directory: URL)
         /// Every body is kept in memory, up to the limit.
         case memory
+        /// A `2xx` body goes to the file of a partial download, added to it for a `206` that carries
+        /// what comes next and replacing it otherwise; the file stays if the transfer breaks off.
+        case partial(PartialDownload)
     }
 
     struct Result: Sendable {
@@ -111,12 +136,19 @@ final class TransferDelegate: NSObject, URLSessionDataDelegate, Sendable {
     private let policy: URLSessionTransport.RedirectPolicy
     private let limit: Int?
     private let sink: Sink
+    private let bodyStream: HTTPBodyStream?
     private let state = OSAllocatedUnfairLock(initialState: State())
 
-    init(policy: URLSessionTransport.RedirectPolicy, limit: Int?, sink: Sink) {
+    init(
+        policy: URLSessionTransport.RedirectPolicy,
+        limit: Int?,
+        sink: Sink,
+        bodyStream: HTTPBodyStream? = nil
+    ) {
         self.policy = policy
         self.limit = limit
         self.sink = sink
+        self.bodyStream = bodyStream
     }
 
     /// Runs `task` to its end. Cancelling the calling task cancels `task`; a task that never got
@@ -155,27 +187,39 @@ final class TransferDelegate: NSObject, URLSessionDataDelegate, Sendable {
 
         let announced = http.expectedContentLength
         let writesFile: Bool
-        if case .file = sink, (200...299).contains(http.statusCode) {
-            writesFile = true
-        } else {
-            writesFile = false
+        switch sink {
+        case .file, .partial: writesFile = (200...299).contains(http.statusCode)
+        case .memory: writesFile = false
         }
-        if let limit, announced > Int64(limit), writesFile || isMemory {
+        var existing: Int64 = 0
+        var appends = false
+        if writesFile, case .partial(let partial) = sink {
+            if http.statusCode == 206 {
+                existing = partial.size
+                let first = PartialDownload.contentRange(of: Self.head(of: http).headers)?.first
+                guard first == existing else {
+                    // A part that does not follow the file would corrupt it; the answer is reported.
+                    stop(with: .status(Self.head(of: http)))
+                    return .cancel
+                }
+
+                appends = true
+            }
+        }
+        if let limit, announced > Int64(limit) - existing, writesFile || isMemory {
             stop(with: .responseTooLarge(limit: limit))
             return .cancel
         }
 
         state.withLock { $0.response = http }
-        if writesFile, case .file(let directory) = sink {
-            let file = directory.appendingPathComponent("download-" + UUID().uuidString)
+        if writesFile {
+            let alreadyWritten = Int(existing)
             do {
-                guard FileManager.default.createFile(atPath: file.path, contents: nil) else {
-                    throw CocoaError(.fileWriteUnknown, userInfo: [NSURLErrorKey: file])
-                }
-                let handle = try FileHandle(forWritingTo: file)
+                let (file, handle) = try openFile(appending: appends, existing: existing, for: http)
                 state.withLock {
                     $0.file = file
                     $0.handle = handle
+                    $0.bytes = alreadyWritten
                 }
             } catch {
                 stop(with: .fileSystem(underlying: error))
@@ -183,6 +227,51 @@ final class TransferDelegate: NSObject, URLSessionDataDelegate, Sendable {
             }
         }
         return .allow
+    }
+
+    /// The file a body is written to, open for writing: a new one in the download directory, or the
+    /// partial download's own, which a `206` is added to and anything else empties. For a partial
+    /// download the record of validators is written first, so that a break-off later can be continued.
+    private func openFile(appending: Bool, existing: Int64, for http: HTTPURLResponse) throws
+        -> (URL, FileHandle)
+    {
+        switch sink {
+        case .partial(let partial):
+            if !appending {
+                guard FileManager.default.createFile(atPath: partial.file.path, contents: nil)
+                else {
+                    throw CocoaError(.fileWriteUnknown, userInfo: [NSURLErrorKey: partial.file])
+                }
+            }
+            partial.store(
+                HTTPValidators(
+                    etag: http.value(forHTTPHeaderField: "ETag"),
+                    lastModified: http.value(forHTTPHeaderField: "Last-Modified")
+                )
+            )
+            let handle = try FileHandle(forWritingTo: partial.file)
+            if appending { try handle.seekToEnd() }
+            return (partial.file, handle)
+        case .file(let directory):
+            let file = directory.appendingPathComponent("download-" + UUID().uuidString)
+            guard FileManager.default.createFile(atPath: file.path, contents: nil) else {
+                throw CocoaError(.fileWriteUnknown, userInfo: [NSURLErrorKey: file])
+            }
+            return (file, try FileHandle(forWritingTo: file))
+        case .memory:
+            throw CocoaError(.fileWriteUnknown)
+        }
+    }
+
+    /// The answer's head, for an error that names it.
+    private static func head(of http: HTTPURLResponse) -> HTTPResponse {
+        var headers = HTTPHeaders()
+        for (name, value) in http.allHeaderFields {
+            if let name = name as? String, let value = value as? String {
+                headers.add(value, for: name)
+            }
+        }
+        return HTTPResponse(status: http.statusCode, headers: headers, url: http.url ?? URL(fileURLWithPath: "/"))
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
@@ -203,11 +292,11 @@ final class TransferDelegate: NSObject, URLSessionDataDelegate, Sendable {
             let cap: Int
             switch sink {
             case .memory: cap = limit ?? Int.max
-            case .file: cap = HTTPDownload.errorBodyLimit
+            case .file, .partial: cap = HTTPDownload.errorBodyLimit
             }
             let room = cap - state.body.count
             if data.count > room {
-                guard case .file = sink else { return .responseTooLarge(limit: cap) }
+                if case .memory = sink { return .responseTooLarge(limit: cap) }
 
                 state.body.append(data.prefix(max(room, 0)))
                 state.truncated = true
@@ -235,24 +324,48 @@ final class TransferDelegate: NSObject, URLSessionDataDelegate, Sendable {
             return (state, continuation)
         }
         let (final, continuation) = finished
+        // A partial download's file is the app's, and what it holds is what the next try goes on from.
+        let discards: (URL?) -> Void = { [keeps = keepsFile] file in
+            if !keeps { Self.remove(file) }
+        }
         guard let continuation else {
-            Self.remove(final.file)
+            discards(final.file)
             return
         }
 
         if let failure = final.failure {
-            Self.remove(final.file)
+            discards(final.file)
             continuation.resume(throwing: failure)
         } else if let error, !final.truncated {
-            Self.remove(final.file)
+            discards(final.file)
             continuation.resume(throwing: error)
         } else if let http = final.response ?? (task.response as? HTTPURLResponse) {
             continuation.resume(
                 returning: Result(http: http, body: final.body, file: final.file, bytes: final.bytes)
             )
         } else {
-            Self.remove(final.file)
+            discards(final.file)
             continuation.resume(throwing: HTTPError.notHTTPResponse)
+        }
+    }
+
+    /// A body that is a stream: a new one for the first send and for every repeat. A stream that
+    /// cannot be made ends the transfer with the reason.
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        needNewBodyStream completionHandler: @escaping @Sendable (InputStream?) -> Void
+    ) {
+        guard let bodyStream else {
+            completionHandler(nil)
+            return
+        }
+
+        do {
+            completionHandler(try bodyStream.make())
+        } catch {
+            stop(with: .fileSystem(underlying: error), task: task)
+            completionHandler(nil)
         }
     }
 
@@ -269,6 +382,12 @@ final class TransferDelegate: NSObject, URLSessionDataDelegate, Sendable {
 
     private var isMemory: Bool {
         if case .memory = sink { return true }
+        return false
+    }
+
+    /// Whether the file is to stay when the transfer fails: a partial download's does.
+    private var keepsFile: Bool {
+        if case .partial = sink { return true }
         return false
     }
 

@@ -152,8 +152,20 @@ final class LocalServer: Sendable {
                     headers[line[..<colon].lowercased()] =
                         line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
                 }
-                let length = Int(headers["content-length"] ?? "") ?? 0
                 var body = Data(buffer[range.upperBound...])
+                if headers["transfer-encoding"]?.lowercased().contains("chunked") == true {
+                    guard let decoded = await readChunks(connection, starting: body) else {
+                        return nil
+                    }
+
+                    return ServerRequest(
+                        method: String(parts[0]),
+                        path: String(parts[1]),
+                        headers: headers,
+                        body: decoded
+                    )
+                }
+                let length = Int(headers["content-length"] ?? "") ?? 0
                 while body.count < length {
                     guard let more = await receive(connection) else { return nil }
                     body.append(more)
@@ -167,6 +179,37 @@ final class LocalServer: Sendable {
             }
             guard let more = await receive(connection) else { return nil }
             buffer.append(more)
+        }
+    }
+
+    /// The body of a chunked request: each chunk is its size in hexadecimal, a line break, that many
+    /// bytes and a line break, ending with a chunk of size zero.
+    private static func readChunks(_ connection: NWConnection, starting: Data) async -> Data? {
+        var buffer = starting
+        var body = Data()
+        let lineEnd = Data("\r\n".utf8)
+        while true {
+            guard let end = buffer.range(of: lineEnd) else {
+                guard let more = await receive(connection) else { return nil }
+                buffer.append(more)
+                continue
+            }
+
+            let sizeText = String(decoding: buffer[..<end.lowerBound], as: UTF8.self)
+                .split(separator: ";").first.map(String.init) ?? ""
+            guard let size = Int(sizeText.trimmingCharacters(in: .whitespaces), radix: 16) else {
+                return nil
+            }
+
+            let start = end.upperBound
+            while buffer.count < start + size + 2 {
+                guard let more = await receive(connection) else { return nil }
+                buffer.append(more)
+            }
+            if size == 0 { return body }
+
+            body.append(buffer[start..<(start + size)])
+            buffer = Data(buffer[(start + size + 2)...])
         }
     }
 

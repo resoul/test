@@ -154,7 +154,9 @@ private actor StreamingTransport: HTTPTransport {
         throw .invalidRequest("this transport only downloads")
     }
 
-    func download(_ request: HTTPRequest, maxBytes: Int?) async throws(HTTPError) -> HTTPDownload {
+    func download(_ request: HTTPRequest, maxBytes: Int?, partial: PartialDownload?)
+        async throws(HTTPError) -> HTTPDownload
+    {
         downloads += 1
         let (status, content) = plan(downloads)
         let response = HTTPResponse(status: status, url: request.url)
@@ -390,4 +392,195 @@ func anUploadIsRetriedLikeAnyRequestOfItsMethod() async throws {
         #expect(response.status == 503)
     }
     #expect(await posts.requests.count == 1)
+}
+
+// MARK: Uploading a stream through the default
+
+@Test
+func theDefaultUploadOfAStreamReadsItAndSendsItsBytes() async throws {
+    let transport = FakeTransport(script: [.success(reply(200, "ok"))])
+    let client = makeClient(transport)
+    let made = OSAllocatedUnfairLock(initialState: 0)
+
+    let response = try await client.upload(
+        HTTPRequest(.put, testURL, body: Data("not this".utf8)),
+        from: HTTPBodyStream(length: 5) {
+            made.withLock { $0 += 1 }
+            return InputStream(data: Data("hello".utf8))
+        }
+    )
+
+    #expect(response.status == 200)
+    let sent = try #require(await transport.requests.first)
+    #expect(String(decoding: try #require(sent.body), as: UTF8.self) == "hello")
+    #expect(made.withLock { $0 } == 1)
+}
+
+@Test
+func aStreamThatCannotBeMadeIsAFileSystemErrorAndNothingIsSent() async throws {
+    let transport = FakeTransport(script: [.success(reply(200))])
+    let client = makeClient(transport)
+    struct Broken: Error {}
+
+    do {
+        _ = try await client.upload(
+            HTTPRequest(.put, testURL),
+            from: HTTPBodyStream { throw Broken() }
+        )
+        Issue.record("a broken stream was sent")
+    } catch {
+        guard case .fileSystem = error else {
+            Issue.record("expected fileSystem, got \(error)")
+            return
+        }
+    }
+    #expect(await transport.requests.isEmpty)
+}
+
+@Test
+func aRetryOfAStreamThroughTheDefaultTakesANewStreamEachTime() async throws {
+    let transport = FakeTransport(script: [.success(reply(503)), .success(reply(200))])
+    let client = makeClient(transport, retry: RetryPolicy(maxAttempts: 3))
+    let made = OSAllocatedUnfairLock(initialState: 0)
+
+    _ = try await client.upload(
+        HTTPRequest(.put, testURL),
+        from: HTTPBodyStream {
+            made.withLock { $0 += 1 }
+            return InputStream(data: Data("again".utf8))
+        }
+    )
+
+    #expect(made.withLock { $0 } == 2)
+    #expect(await transport.requests.count == 2)
+}
+
+@Test
+func aDataBodyStreamHasItsLengthAndCanBeStartedOverAsOftenAsWanted() throws {
+    let body = HTTPBodyStream.data(Data("abc".utf8))
+
+    #expect(body.length == 3)
+    #expect(try body.readAll() == Data("abc".utf8))
+    #expect(try body.readAll() == Data("abc".utf8))
+}
+
+// MARK: Continuing a download
+
+@Test
+func aDownloadCanBeContinuedOnlyWithBytesAndAValidatorThatIfRangeAccepts() throws {
+    let directory = try workspace()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let partial = PartialDownload(file: directory.appendingPathComponent("a.part"))
+    #expect(partial.resumeHeaders() == nil, "no file")
+
+    try Data("hello".utf8).write(to: partial.file)
+    #expect(partial.resumeHeaders() == nil, "bytes with no record")
+
+    partial.store(HTTPValidators(etag: "\"abc\""))
+    let strong = try #require(partial.resumeHeaders())
+    #expect(strong["Range"] == "bytes=5-")
+    #expect(strong["If-Range"] == "\"abc\"")
+
+    partial.store(HTTPValidators(etag: "W/\"abc\"", lastModified: "Sat, 01 Jan 2022 00:00:00 GMT"))
+    #expect(
+        partial.resumeHeaders()?["If-Range"] == "Sat, 01 Jan 2022 00:00:00 GMT",
+        "a weak tag is not allowed in If-Range, so the date is used"
+    )
+
+    partial.store(HTTPValidators(etag: "W/\"abc\""))
+    #expect(partial.resumeHeaders() == nil, "a weak tag alone cannot be used")
+
+    partial.store(HTTPValidators(freshUntil: Date()))
+    #expect(partial.resumeHeaders() == nil, "freshness is not a validator")
+
+    partial.discard()
+    #expect(!FileManager.default.fileExists(atPath: partial.file.path))
+    #expect(!FileManager.default.fileExists(atPath: partial.validatorsFile.path))
+}
+
+@Test
+func theContentRangeIsReadForItsFirstByteAndTotal() {
+    func read(_ text: String) -> (first: Int64?, total: Int64?)? {
+        var headers = HTTPHeaders()
+        headers["Content-Range"] = text
+        return PartialDownload.contentRange(of: headers)
+    }
+
+    #expect(read("bytes 5-10/11")?.first == 5)
+    #expect(read("bytes 5-10/11")?.total == 11)
+    #expect(read("bytes */11")?.first == nil)
+    #expect(read("bytes */11")?.total == 11)
+    #expect(read("bytes 0-9/*")?.total == nil)
+    #expect(read("items 0-9/10") == nil)
+    #expect(read("bytes nonsense") == nil)
+    #expect(PartialDownload.contentRange(of: HTTPHeaders()) == nil)
+}
+
+@Test
+func theDefaultTransportAddsASixteenHundredAndSixPartToTheFileAndAnythingElseStartsOver() async throws {
+    let directory = try workspace()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let partial = PartialDownload(file: directory.appendingPathComponent("a.part"))
+    try Data("hello".utf8).write(to: partial.file)
+    partial.store(HTTPValidators(etag: "\"v1\""))
+    let part = reply(
+        206,
+        " world",
+        headers: ["Content-Range": "bytes 5-10/11", "ETag": "\"v1\""]
+    )
+    let transport = FakeTransport(script: [.success(part)])
+    let client = makeClient(transport)
+    let destination = directory.appendingPathComponent("a.txt")
+
+    let download = try await client.download(
+        HTTPRequest(.get, testURL),
+        to: destination,
+        continuing: partial
+    )
+
+    let sent = try #require(await transport.requests.first)
+    #expect(sent.headers["Range"] == "bytes=5-")
+    #expect(sent.headers["If-Range"] == "\"v1\"")
+    #expect(String(decoding: try Data(contentsOf: destination), as: UTF8.self) == "hello world")
+    #expect(download.bytes == 11)
+    #expect(!FileManager.default.fileExists(atPath: partial.file.path))
+
+    // The same file, now answered with the whole thing: it starts over.
+    try Data("hello".utf8).write(to: partial.file)
+    partial.store(HTTPValidators(etag: "\"v1\""))
+    let whole = FakeTransport(script: [.success(reply(200, "brand new", headers: ["ETag": "\"v2\""]))])
+    _ = try await makeClient(whole).download(
+        HTTPRequest(.get, testURL),
+        to: destination,
+        continuing: partial
+    )
+    #expect(String(decoding: try Data(contentsOf: destination), as: UTF8.self) == "brand new")
+}
+
+@Test
+func theDefaultTransportRefusesAPartThatDoesNotFollowTheFile() async throws {
+    let directory = try workspace()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let partial = PartialDownload(file: directory.appendingPathComponent("a.part"))
+    try Data("hello".utf8).write(to: partial.file)
+    partial.store(HTTPValidators(etag: "\"v1\""))
+    let transport = FakeTransport(
+        script: [.success(reply(206, "xx", headers: ["Content-Range": "bytes 0-1/7"]))]
+    )
+
+    do {
+        _ = try await makeClient(transport).download(
+            HTTPRequest(.get, testURL),
+            to: directory.appendingPathComponent("a.txt"),
+            continuing: partial
+        )
+        Issue.record("a misplaced part was accepted")
+    } catch {
+        guard case .status(let response) = error else {
+            Issue.record("expected status, got \(error)")
+            return
+        }
+        #expect(response.status == 206)
+    }
+    #expect(String(decoding: try Data(contentsOf: partial.file), as: UTF8.self) == "hello")
 }

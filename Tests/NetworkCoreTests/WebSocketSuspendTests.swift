@@ -72,8 +72,11 @@ func messagesQueuedBeforeASuspendAreStillDelivered() async throws {
     await client.connect()
     _ = await client.nextEvent()
     for number in 1...3 { connection.push(text: "q\(number)") }
-    // Let the reader take them into the queue.
+    // Let the reader take them into the queue. A message the reader has only just taken from the
+    // connection may still be lost to a suspend (the client says so), so the test also gives it time
+    // to put them down.
     #expect(await waitUntil { connection.unread == 0 })
+    try await Task.sleep(for: .milliseconds(150))
 
     await client.suspend()
 
