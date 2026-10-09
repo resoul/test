@@ -80,6 +80,21 @@
             return true
         }
 
+        /// The system has results of background transfers for the app: the shell hands them to
+        /// the app (`Shell.backgroundSessionHandler`), whose completion goes back to the system.
+        func application(
+            _ application: UIApplication,
+            handleEventsForBackgroundURLSession identifier: String,
+            completionHandler: @escaping () -> Void
+        ) {
+            guard let shell = Self.shell else {
+                completionHandler()
+                return
+            }
+
+            shell.backgroundSessionEvents(identifier: identifier) { completionHandler() }
+        }
+
         /// The user closed scenes for good — in the app switcher, with Close Window: their
         /// sessions go, with their content.
         func application(

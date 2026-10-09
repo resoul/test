@@ -493,6 +493,43 @@ public final class Shell: CommandResponder {
         return stream
     }
 
+    /// What the app does when the system starts it, or wakes it, to deliver the results of transfers that
+    /// went on without it: it gets the identifier of the background `URLSession` they belong to and a
+    /// completion to call once the app has taken in the results.
+    ///
+    /// The app makes its background transfers object for that identifier (or already has) and passes the
+    /// completion to it, which calls it when the events are delivered; for a session that is not the app's, call
+    /// the completion at once. A call that came before the handler was set waits for it, and is made
+    /// when it is set. Only apps on iPhone, iPad and Apple TV are told; a Mac app is started by the
+    /// system without a call.
+    public var backgroundSessionHandler:
+        (@MainActor (_ identifier: String, _ completion: @escaping @MainActor () -> Void) -> Void)?
+    {
+        didSet {
+            guard let backgroundSessionHandler else { return }
+
+            let waiting = pendingBackgroundSessions
+            pendingBackgroundSessions = []
+            for (identifier, completion) in waiting {
+                backgroundSessionHandler(identifier, completion)
+            }
+        }
+    }
+    private var pendingBackgroundSessions: [(String, @MainActor () -> Void)] = []
+
+    /// For platform adapters: the system has events for the background session `identifier`.
+    package func backgroundSessionEvents(
+        identifier: String,
+        completion: @escaping @MainActor () -> Void
+    ) {
+        guard let backgroundSessionHandler else {
+            pendingBackgroundSessions.append((identifier, completion))
+            return
+        }
+
+        backgroundSessionHandler(identifier, completion)
+    }
+
     /// For platform adapters: the running `application`.
     package init(application: any Application) {
         self.application = application

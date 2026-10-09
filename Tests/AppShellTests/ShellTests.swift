@@ -283,3 +283,45 @@ func theActivationsSequenceStartsWithTheCurrentValueAndFollowsChanges() async th
     StateUpdates.flush()
     #expect(await iterator.next() == .inactive)
 }
+
+@Test @MainActor
+func backgroundSessionEventsGoToTheHandlerWithTheirCompletion() {
+    reset()
+    let shell = Shell(application: MailApp())
+    var heard: [String] = []
+    var completed = 0
+    shell.backgroundSessionHandler = { identifier, completion in
+        heard.append(identifier)
+        completion()
+    }
+
+    shell.backgroundSessionEvents(identifier: "uploads") { completed += 1 }
+
+    #expect(heard == ["uploads"])
+    #expect(completed == 1)
+}
+
+@Test @MainActor
+func backgroundSessionEventsThatCameBeforeTheHandlerWaitForItInOrder() {
+    reset()
+    let shell = Shell(application: MailApp())
+    var heard: [String] = []
+    var completed = 0
+
+    // The system calls before the app has had time to say what it does.
+    shell.backgroundSessionEvents(identifier: "one") { completed += 1 }
+    shell.backgroundSessionEvents(identifier: "two") { completed += 1 }
+    #expect(heard.isEmpty)
+    #expect(completed == 0)
+
+    shell.backgroundSessionHandler = { identifier, completion in
+        heard.append(identifier)
+        completion()
+    }
+    #expect(heard == ["one", "two"])
+    #expect(completed == 2)
+
+    // They are given once: setting the handler again does not repeat them.
+    shell.backgroundSessionHandler = { identifier, _ in heard.append("again " + identifier) }
+    #expect(heard == ["one", "two"])
+}
