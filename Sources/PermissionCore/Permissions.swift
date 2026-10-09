@@ -3,7 +3,8 @@ import Foundation
 /// The one place an app asks about permissions: reads statuses, asks in the right order, and
 /// tells what changes.
 ///
-/// **Asking.** ``request(_:)`` shows the system's window only for a kind that has not been asked about.
+/// **Asking.** ``request(_:)`` shows the system's window only for a kind that has not been asked about
+/// (and for location "always" after "when in use": see ``PermissionKind/canBeAsked(whenStatusIs:)``).
 /// For any other status it returns the status as it is, without asking again: the system would not
 /// show a window, and the caller needs the answer, not a second attempt. Callers that ask for the same
 /// kind while it is being asked share one request and all get its result. Requests for different
@@ -95,7 +96,7 @@ public actor Permissions {
 
     private func ask(_ kind: PermissionKind) async -> Result<PermissionStatus, PermissionError> {
         let current = await provider.status(of: kind)
-        guard current == .notDetermined else { return .success(current) }
+        guard kind.canBeAsked(whenStatusIs: current) else { return .success(current) }
 
         do {
             return .success(try await provider.request(kind))

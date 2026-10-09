@@ -449,6 +449,11 @@
 | `Permissions.follow(_:)`, `UIKitPermissions/AppKitPermissions.foregroundChanges()` | чтение заново при возврате на передний план | [18](18-permissions.md#15-p4-результаты-на-2026-10-09), P4 |
 | `PermissionAsyncRay` (`Permissions.statusRay(of:)`) | статус потоком AsyncRay для привязки к `State` | то же |
 | `Demo/Shared/PermissionFlowProbe.swift` | экраны объяснения и отказа с «Open Settings» | то же |
+| `PermissionKind.canBeAsked(whenStatusIs:)`, `Permissions.ask` | «всегда» можно спросить снова после «при использовании» | [18](18-permissions.md#17-запрос-геолокации-всегда-2026-10-09) |
+| `LocationBackend.askAlways`, `LocationAsker.ask(always:)` | из `notDetermined` — первое окно, ответ как есть; из «при использовании» — повышение и ожидание | то же |
+| `AlwaysUpgradeWait` | конец окна повышения — по уходу приложения с переднего плана и возвращению; без окна — статус как есть | то же |
+| `Package.swift` (`PERMISSION_LOCATION_ALWAYS`) | вызова «всегда» нет на tvOS | то же |
+| `iOSUITests/PermissionAlwaysTests`, `PermissionLayerProbe` (`locationAlways`) | проверка повышения на Simulator | то же |
 
 ## `Sources/Nodes` и `Sources/NodesRender` (отладочный оверлей, остатки видео)
 
@@ -463,4 +468,3 @@
 | `AVVideoSession.readMetadata` | отмена задачи останавливает загрузку описания | то же |
 | `NodeHost.isInBackground`, `Node.backgroundChanged`, `Video.backgroundChanged` | приложение или окно не видно: подготовка не идёт; играющее не трогается | то же |
 | `NodeView.updateBackground`, `NodeNSView.updateBackground` | фон по состоянию сцены (UIKit) и видимости окна (AppKit) | то же |
-

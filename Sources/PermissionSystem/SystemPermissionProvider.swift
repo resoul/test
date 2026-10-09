@@ -52,7 +52,7 @@ public struct SystemPermissionProvider: PermissionProvider {
         self.init(
             isInForeground: isInForeground,
             usageDescription: usageDescription,
-            backends: Self.systemBackend(for:)
+            backends: { kind in Self.systemBackend(for: kind, isInForeground: isInForeground) }
         )
     }
 
@@ -87,13 +87,16 @@ public struct SystemPermissionProvider: PermissionProvider {
     }
 
     /// The backend for `kind` on this platform, or `nil` when no framework here has it.
-    static func systemBackend(for kind: PermissionKind) -> (any PermissionBackend)? {
+    static func systemBackend(
+        for kind: PermissionKind,
+        isInForeground: @escaping @Sendable () async -> Bool = { true }
+    ) -> (any PermissionBackend)? {
         switch kind {
         case .camera: captureBackend(isVideo: true)
         case .microphone: captureBackend(isVideo: false)
         case .photos(let access): photosBackend(access)
         case .notifications: notificationsBackend()
-        case .location(let access): locationBackend(access)
+        case .location(let access): locationBackend(access, isInForeground: isInForeground)
         case .contacts: contactsBackend()
         case .calendar(let access): calendarBackend(access)
         case .reminders: remindersBackend()
