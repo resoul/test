@@ -134,6 +134,12 @@
                 name: UIAccessibility.reduceMotionStatusDidChangeNotification,
                 object: nil
             )
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(systemLocaleChanged),
+                name: NSLocale.currentLocaleDidChangeNotification,
+                object: nil
+            )
             for name in [
                 UIScene.didEnterBackgroundNotification, UIScene.willEnterForegroundNotification,
             ] {
@@ -625,6 +631,19 @@
 
         @objc private func systemSettingsChanged() {
             updateConditions()
+        }
+
+        /// The locale the system had when the host last took it.
+        private var systemLocale = Locale.current
+
+        /// The person changed language or region: the host takes the system's locale, unless
+        /// the app has set one of its own.
+        @objc private func systemLocaleChanged() {
+            let current = Locale.current
+            guard current != systemLocale else { return }
+
+            if host.locale == systemLocale { host.locale = current }
+            systemLocale = current
         }
 
         /// The remote's select button presses the focused node, and held down carries out

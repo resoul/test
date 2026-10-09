@@ -15,6 +15,7 @@
 | Хранение и сеть | [14](14-storage-and-network.md) | S0–S8 и остатки S5/S6 (`baseURL`, скачивание в файл и `FileStore`, отправка файла и потока, докачка, пауза WebSocket, reachability, background transfers) | проверка на устройствах |
 | AsyncRay 1.1.0 (потоки с ошибками) | [14](14-storage-and-network.md#15-план-asyncray-110-потоки-с-ошибками), раздел 15 | — | R0–R4; S7 обошёлся без него (`Result` в потоке) |
 | Разрешения системы | [18](18-permissions.md) | P0–P4 (`PermissionCore`, `PermissionSystem` для 13 видов, `follow`, `PermissionAsyncRay`, экран-пример в демо) | проверка новых видов на системе, P5 каталог CLI (нет CLI) |
+| Подгрузка страниц и локализация | [19](19-pagination-and-localization.md) | `LazyStack`/`Table` просят страницы сами; `LocalizationCore` и `Text(localized:)` | проверка на Simulator и при смене языка в работающем приложении; язык на всё приложение (`Shell`); направление по локали |
 | Проект и CLI | [17](17-project-cli.md) | — | см. документ |
 
 ## Не сделано (план C7)

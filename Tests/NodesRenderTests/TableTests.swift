@@ -1053,4 +1053,36 @@
         #expect(inbox.shownTop(1) == start + 88)
         #expect(inbox.row(1)?.appearance.offset == .zero)
     }
+
+    @Test @MainActor
+    func aTableAsksForMoreRowsNearItsEndCountingRowsNotHeaders() async throws {
+        let inbox = Inbox()
+        var requests: [PageRequest] = []
+        inbox.table.pagination = PaginationPolicy(pageSize: 15)
+        inbox.table.loadMore = { [unowned inbox] request in
+            requests.append(request)
+            var sections = inbox.table.sections
+            sections[1].items += (30..<45).map(Message.init)
+            inbox.table.sections = sections
+        }
+        inbox.host.layoutIfNeeded()
+        #expect(requests.isEmpty)
+        #expect(inbox.table.pageLoadState == .idle)
+
+        // Thirty rows and two headers are well over two windows of 400.
+        let scroll = try #require(inbox.table.scroll)
+        scroll.contentOffset = LayoutPoint(x: 0, y: 700)
+        for _ in 0..<50 {
+            inbox.host.layoutIfNeeded()
+            if !requests.isEmpty { break }
+
+            await Task.yield()
+        }
+
+        #expect(requests == [PageRequest(pageSize: 15, loadedCount: 30)])
+        inbox.table.reachedEnd = true
+        #expect(inbox.table.pageLoadState == .endReached)
+        inbox.host.detach()
+    }
+
 #endif

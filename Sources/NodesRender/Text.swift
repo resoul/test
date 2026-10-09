@@ -3,8 +3,10 @@
     import Foundation
     import os
     import LayoutCore
+    import LocalizationCore
     import Nodes
     import RichTextCore
+    import StateCore
     import ThemeCore
     import QuartzCore
 
@@ -152,6 +154,18 @@
             didSet { if text != oldValue { contentChanged() } }
         }
 
+        /// A localized text shown instead of `text`, or `nil` to show `text`. The node resolves it
+        /// for the tree's locale (`Node.localized(_:)`) and shows the result in `text`; when
+        /// the language or the localizer changes it resolves it again.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var localizedText: LocalizedText? {
+            get { localizedState.value }
+            set { localizedState.value = newValue }
+        }
+
+        private let localizedState = State<LocalizedText?>(nil)
+
         /// Styled text shown instead of `text`, or `nil` to show `text`. Its blocks are set one
         /// under another, in the node's style with the marks of each run on top: bold, italic,
         /// a monospaced font, strikethrough, underline and links, which show in the theme's
@@ -228,6 +242,16 @@
             super.init()
         }
 
+        /// Shows `localized` in the tree's language; see `localizedText`. Until the node is in a
+        /// tree, `text` is the text's default value.
+        ///
+        /// Ownership: the caller owns the node. Isolation: MainActor. Errors: none.
+        /// Cancellation: not applicable.
+        public convenience init(localized: LocalizedText, style: TextStyle = TextStyle()) {
+            self.init(localized.defaultValue, style: style)
+            localizedText = localized
+        }
+
         /// Shows styled text; see `rich`.
         ///
         /// Ownership: the caller owns the node. Isolation: MainActor. Errors: none.
@@ -242,6 +266,9 @@
         ///
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func update() {
+            if let localizedText {
+                text = localized(localizedText)
+            }
             restyle()
         }
 

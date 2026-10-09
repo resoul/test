@@ -478,3 +478,19 @@
 | `AVVideoSession.readMetadata` | отмена задачи останавливает загрузку описания | то же |
 | `NodeHost.isInBackground`, `Node.backgroundChanged`, `Video.backgroundChanged` | приложение или окно не видно: подготовка не идёт; играющее не трогается | то же |
 | `NodeView.updateBackground`, `NodeNSView.updateBackground` | фон по состоянию сцены (UIKit) и видимости окна (AppKit) | то же |
+
+## `Sources/Nodes/Pagination.swift`, `LazyStack` (подгрузка), `Sources/LocalizationCore`
+
+| Код | Что | Основание |
+|---|---|---|
+| `PaginationGate.evaluate/complete/fail/retry/userDidScroll/itemsChanged` | автомат «просить ли страницу»: один запрос на версию, остановки после ошибки и пустой страницы, предел автостраниц | [19](19-pagination-and-localization.md#1-подгрузка-страниц) |
+| `LazyStack.evaluatePagination`, `startPageLoad`, `cancelPageLoad`, `mountedChanged` | расстояние до конца от последней видимой строки (с `lanes`); задача страницы с поколением, отмена при уходе с экрана | то же |
+| `LazyStack.pagination/loadMore/reachedEnd/pageLoadState/pageLoadError/retryLoadingPage/restartPagination`, `Table` — те же | публичная часть подгрузки | то же |
+| `LocalizedText`, `LocalizedArgument` | ключ, таблица, значение по умолчанию, число и аргументы | [19](19-pagination-and-localization.md#2-локализация) |
+| `PluralRules.category` | правила множественного числа CLDR для целых | то же |
+| `LocalizationCatalog` (`insert`, `entry`, `loading(from:)`, `main`) | строки по языку, таблице, ключу; чтение `.strings` и `.stringsdict` | то же |
+| `CatalogLocalizer.resolve`, `Interpolation.format`, `LanguageChain.candidates` | цепочка языков, форма от ответившего языка, подстановки по локали | то же |
+| `PseudoLocalizer`, `Locale.isRightToLeft` | акценты, скобки, удлинение; направление по данным языка | то же |
+| `NodeHost.locale/localizer/resolveLocalized`, `Node.locale/localized(_:)`, `Text.localizedText` | локаль и локализатор хоста, слежение узлов | то же |
+| `NodeView.systemLocaleChanged`, `NodeNSView.systemLocaleChanged` | локаль системы в хост, если приложение не поставило свою | то же |
+

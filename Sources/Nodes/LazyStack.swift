@@ -45,6 +45,7 @@ public final class LazyStack<Item: Identifiable>: Node {
     public var items: [Item] {
         didSet {
             itemsVersion &+= 1
+            gate.itemsChanged(count: items.count)
             startsAreStale = true
             setNeedsLayout()
         }
@@ -61,6 +62,99 @@ public final class LazyStack<Item: Identifiable>: Node {
     /// Counts the changes of `items`, and the one the last `layoutSpec()` placed.
     private var itemsVersion = 0
     private var placedVersion = -1
+
+    // MARK: - Paging
+
+    /// How the stack pages. Without it, or without ``loadMore``, the stack does not ask for
+    /// more. Changing it starts paging over, as ``restartPagination()`` does, except that the
+    /// end is not forgotten.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var pagination: PaginationPolicy? {
+        didSet {
+            guard pagination != oldValue else { return }
+
+            cancelPageLoad()
+            gate = PaginationGate(policy: pagination ?? PaginationPolicy())
+            setNeedsLayout()
+        }
+    }
+
+    /// Loads the next page, when the stack asks for one (``pagination``): the end of the list
+    /// is within the policy's trigger distance of the window. It is called on the main actor
+    /// and is expected to add the page to `items` before it returns; the stack asks again only
+    /// after it has returned and only when the end is near once more. A page may also say
+    /// that it was the last: set ``reachedEnd``.
+    ///
+    /// Throwing marks the page failed (``pageLoadState``, ``pageLoadError``): the stack does not
+    /// ask again by itself, and ``retryLoadingPage()`` does. Cancelling the load — it is
+    /// cancelled when the stack leaves the screen, and when paging is restarted — is not a
+    /// failure: whatever it throws is dropped, and the stack asks again when it shows again.
+    ///
+    /// Ownership: the stack keeps it; it must not keep the stack. Isolation: MainActor.
+    /// Errors: see above. Cancellation: see above.
+    public var loadMore: (@MainActor (PageRequest) async throws -> Void)?
+
+    /// Whether there are no more pages: the stack asks no more while it is `true`. Set it from
+    /// ``loadMore`` when a page comes back short or says it is the last.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var reachedEnd: Bool {
+        get { endState.value }
+        set {
+            guard newValue != untracked({ endState.value }) else { return }
+
+            endState.value = newValue
+            if !newValue { setNeedsLayout() }
+        }
+    }
+
+    /// What the paging is doing, for a footer: reading it under tracking depends on it.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var pageLoadState: PageLoadState {
+        endState.value ? .endReached : loadState.value
+    }
+
+    /// Why the last page failed; `nil` unless ``pageLoadState`` is ``PageLoadState/failed``.
+    ///
+    /// Ownership: the stack keeps the error. Isolation: MainActor. Errors: none. Cancellation:
+    /// not applicable.
+    public private(set) var pageLoadError: (any Error)?
+
+    /// Asks for the page that failed again, without waiting for the end of the list to come
+    /// near: the person asked. Does nothing while a page is being loaded, when there are no more
+    /// pages, or without ``pagination`` and ``loadMore``.
+    public func retryLoadingPage() {
+        guard pagination != nil, loadMore != nil, !reachedEnd, !gate.isRequestInFlight else {
+            return
+        }
+
+        gate.retry(count: items.count, version: itemsVersion)
+        startPageLoad(isRetry: true)
+    }
+
+    /// Starts paging over, for a list whose contents are another list now — a new search, a
+    /// new filter: a page on its way is cancelled and forgotten, a failure and the end are
+    /// forgotten, and the stack asks for the first page as soon as it is laid out. Set `items`
+    /// to the new first items (or to none) as well; this does not touch them.
+    public func restartPagination() {
+        cancelPageLoad()
+        gate = PaginationGate(policy: pagination ?? PaginationPolicy())
+        endState.value = false
+        loadState.value = .idle
+        pageLoadError = nil
+        setNeedsLayout()
+    }
+
+    private let endState = State(false)
+    private let loadState = State(PageLoadState.idle)
+    private var gate = PaginationGate()
+    private var pageLoad: Task<Void, Never>?
+    /// Which load the gate's in-flight page belongs to: a load that finishes after another
+    /// began — or after the stack let it go — must not touch the gate.
+    private var loadGeneration = 0
+    private var lastShownStart: Double?
 
     /// Sets `items` leaving the scroll where it is: the items move under the window as the
     /// new ones have them, where setting `items` keeps what shows in place — so that a row
@@ -326,6 +420,86 @@ public final class LazyStack<Item: Identifiable>: Node {
             }
         }
         return low
+    }
+
+    // MARK: - Asking for pages
+
+    /// Asks the gate whether the end of the list is near enough, from where the window is.
+    private func evaluatePagination(window span: (start: Double, end: Double)) {
+        guard pagination != nil, loadMore != nil, isMounted else { return }
+
+        // The window moving along the list is the person scrolling, for the gate: the pages the
+        // list asked for on its own are counted from there.
+        if let last = lastShownStart, abs(span.start - last) > 0.5 { gate.userDidScroll() }
+        lastShownStart = span.start
+
+        updateStarts()
+        let total = length
+        let shown = lines(from: max(0, span.start), to: min(total, span.end))
+        let lastVisible = shown.isEmpty ? nil : min(items.count, shown.upperBound * perLine) - 1
+        let metrics = PaginationMetrics(
+            count: items.count,
+            lastVisible: lastVisible,
+            remainingLength: max(0, total - span.end),
+            viewportLength: max(0, span.end - span.start)
+        )
+        if gate.evaluate(metrics, version: itemsVersion, reachedEnd: reachedEnd) == .request {
+            startPageLoad(isRetry: false)
+        }
+    }
+
+    /// Runs `loadMore` for a page the gate counts as in flight.
+    private func startPageLoad(isRetry: Bool) {
+        guard let load = loadMore else { return }
+
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        let request = PageRequest(
+            pageSize: pagination?.pageSize,
+            loadedCount: items.count,
+            isRetry: isRetry
+        )
+        pageLoad = Task { [weak self] in
+            // The state is written from the task, not from the layout pass that decided to ask.
+            self?.loadState.value = .loading
+            self?.pageLoadError = nil
+            var failure: (any Error)?
+            do {
+                try await load(request)
+            } catch {
+                failure = error
+            }
+            guard let self, generation == self.loadGeneration else { return }
+
+            if Task.isCancelled {
+                self.gate.cancelInFlight()
+                self.loadState.value = .idle
+            } else if let failure {
+                self.gate.fail()
+                self.pageLoadError = failure
+                self.loadState.value = .failed
+            } else {
+                self.gate.complete(count: self.items.count)
+                self.loadState.value = .idle
+            }
+        }
+    }
+
+    /// Cancels the page on its way, and forgets it.
+    private func cancelPageLoad() {
+        loadGeneration &+= 1
+        pageLoad?.cancel()
+        pageLoad = nil
+        if gate.isRequestInFlight {
+            gate.cancelInFlight()
+            loadState.value = .idle
+        }
+    }
+
+    /// A page on its way does not outlast the stack's place on the screen: it is asked for
+    /// again when the stack shows again, if the end is near.
+    public override func mountedChanged(_ isMounted: Bool) {
+        if !isMounted { cancelPageLoad() }
     }
 
     // MARK: - Where it shows
@@ -599,6 +773,7 @@ public final class LazyStack<Item: Identifiable>: Node {
     func viewportMoved() {
         guard let host, let span = visibleSpan() else { return }
 
+        evaluatePagination(window: span)
         updateStarts()
         let reach = along(host.size) / 2
         let needed = (start: max(0, span.start - reach), end: min(length, span.end + reach))
