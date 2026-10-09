@@ -126,3 +126,12 @@ Play нужно место и когда место освободилось.
 - **#217** — первый показ демо на iPad Pro 13" Simulator долгий (причина не установлена).
 - **#221** — тесты пакета не собираются для tvOS (`UIKitKeyboardAnimationTests` и тесты формата rich text
   используют API, которых нет на tvOS); есть и на чистом `main`.
+
+## Старые библиотеки
+
+Папки `Weave/` и `Trellis/` убраны из дерева 2026-10-10: ни пакет, ни `Benchmarks/` (у него свой `PreviousLayoutEngine`),
+ни скрипты, ни демо на них не ссылались. Последнее дерево с ними — тег `weave-final` (Trellis ещё и `trellis-final`).
+Не перенесено и не планируется без отдельного решения: `Logging` и `Analytics` Weave, `WeaveTesting`, формы
+(`Forms.swift`), drag and drop (`Transfer.swift`), политика и базовая линия API (`check_policy.py`, `check_api.py`),
+экраны `Playground` и `CollectionSnapshot`/`CollectionTransactions` Trellis.
+

@@ -3,7 +3,10 @@
 Следующее поколение Trellis — **отдельная библиотека Espalier** (решено 2026-09-25: имя
 `Trellis` занято другим Swift-пакетом). Код живёт в корне этого репозитория (до 2026-09-26 —
 в папке `v22/` рядом с Trellis); последнее состояние старой библиотеки Trellis — тег
-[`trellis-final`](https://github.com/resoul/test/tree/trellis-final).
+[`trellis-final`](https://github.com/resoul/test/tree/trellis-final). Папки старых библиотек Weave и
+Trellis из дерева убраны 2026-10-10 (всё нужное перенесено или решено не переносить); они остались
+в истории: последнее дерево с ними — тег [`weave-final`](https://github.com/resoul/test/tree/weave-final)
+(Weave и Trellis в папках `Weave/` и `Trellis/`).
 
 **Статус: движок раскладки и DSL для `UIView`/`NSView` написаны** (сверка с Chromium,
 замеры скорости — [10-layout-engine.md](docs/10-layout-engine.md)); слой нод, состояние и
