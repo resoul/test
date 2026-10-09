@@ -22,7 +22,18 @@
         /// `detach()`.
         public let host: NodeHost
 
+        /// What the labels of the debug overlay show; the overlay itself is switched on with
+        /// ``NodeHost/showsDebugOverlay``. Changing it redraws.
+        public var debugOverlayLabelStyle: DebugOverlayLabelStyle {
+            get { debugOverlay.labelStyle }
+            set {
+                debugOverlay.labelStyle = newValue
+                host.setNeedsRender()
+            }
+        }
+
         fileprivate let renderer = LayerRenderer()
+        private let debugOverlay = DebugOverlay()
         /// Holds the tree's layers, scaled by `zoom` from its top left corner.
         private let contentLayer = CALayer()
         private var isLayingOut = false
@@ -123,6 +134,16 @@
                 name: UIAccessibility.reduceMotionStatusDidChangeNotification,
                 object: nil
             )
+            for name in [
+                UIScene.didEnterBackgroundNotification, UIScene.willEnterForegroundNotification,
+            ] {
+                NotificationCenter.default.addObserver(
+                    self,
+                    selector: #selector(sceneActivationChanged),
+                    name: name,
+                    object: nil
+                )
+            }
             if #available(iOS 17, tvOS 17, *) {
                 registerForTraitChanges(
                     [
@@ -218,6 +239,7 @@
                     animation: host.renderAnimation
                 )
                 host.didRender()
+                debugOverlay.update(for: host, in: contentLayer, scale: host.scale)
                 updateScrollDrivers()
                 updateAfterMove()
                 if UIAccessibility.isVoiceOverRunning {
@@ -229,6 +251,7 @@
                 let scrolled = host.scrolledSinceRender
                 renderer.renderScrolls(scrolled)
                 host.didRender()
+                debugOverlay.update(for: host, in: contentLayer, scale: host.scale)
                 for scroll in scrolled {
                     scrollDrivers[scroll.id]?.follow(factor: factor)
                 }
@@ -576,6 +599,16 @@
 
         private func updateShown() {
             host.isShown = window != nil && !isHidden
+            updateBackground()
+        }
+
+        /// The tree is in the background while the scene it is in is.
+        private func updateBackground() {
+            host.isInBackground = window?.windowScene?.activationState == .background
+        }
+
+        @objc private func sceneActivationChanged() {
+            updateBackground()
         }
 
         /// Takes the system's settings into the host's conditions: the interface style,

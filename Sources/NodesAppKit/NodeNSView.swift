@@ -27,10 +27,21 @@
         /// `detach()`.
         public let host: NodeHost
 
+        /// What the labels of the debug overlay show; the overlay itself is switched on with
+        /// ``NodeHost/showsDebugOverlay``. Changing it redraws.
+        public var debugOverlayLabelStyle: DebugOverlayLabelStyle {
+            get { debugOverlay.labelStyle }
+            set {
+                debugOverlay.labelStyle = newValue
+                host.setNeedsRender()
+            }
+        }
+
         private let renderer = LayerRenderer()
         private let hostedLayer = CALayer()
         /// Holds the tree's layers, scaled by `zoom` from its top left corner.
         private let contentLayer = CALayer()
+        private let debugOverlay = DebugOverlay()
         private var isLayingOut = false
         /// The accessibility element of each node, kept while the node is one: VoiceOver
         /// keeps its place by the element's identity, and a scroll redraws many times a
@@ -218,6 +229,7 @@
                     animation: host.renderAnimation
                 )
                 host.didRender()
+                debugOverlay.update(for: host, in: contentLayer, scale: host.scale)
                 updateAfterMove()
                 NSAccessibility.post(element: self, notification: .layoutChanged)
             } else if !host.scrolledSinceRender.isEmpty {
@@ -225,6 +237,7 @@
                 // frames follow.
                 renderer.renderScrolls(host.scrolledSinceRender)
                 host.didRender()
+                debugOverlay.update(for: host, in: contentLayer, scale: host.scale)
                 updateAfterMove()
             }
             if widthChanged {
@@ -442,6 +455,19 @@
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            NotificationCenter.default.removeObserver(
+                self,
+                name: NSWindow.didChangeOcclusionStateNotification,
+                object: nil
+            )
+            if let window {
+                NotificationCenter.default.addObserver(
+                    self,
+                    selector: #selector(occlusionChanged),
+                    name: NSWindow.didChangeOcclusionStateNotification,
+                    object: window
+                )
+            }
             updateShown()
             accessibilityOrder = nil
         }
@@ -469,6 +495,17 @@
 
         private func updateShown() {
             host.isShown = window != nil && !isHiddenOrHasHiddenAncestor
+            updateBackground()
+        }
+
+        /// The tree is in the background while no part of its window can be seen: minimized, the
+        /// app hidden, the window covered or on another space.
+        private func updateBackground() {
+            host.isInBackground = window.map { !$0.occlusionState.contains(.visible) } ?? false
+        }
+
+        @objc private func occlusionChanged() {
+            updateBackground()
         }
 
         /// Follows the window's appearance, light or dark.

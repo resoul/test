@@ -358,6 +358,18 @@
             reconcile()
         }
 
+        /// A video is not made ready for a window nobody can see; coming back prepares it again.
+        /// Playing is not touched: the system pauses what it must, and whether sound goes on in
+        /// the background is the app's audio policy.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: preparation is
+        /// let go in the background.
+        public override func backgroundChanged(_ isInBackground: Bool) {
+            reconcile()
+        }
+
+        private var isInBackground: Bool { host?.isInBackground ?? false }
+
         // MARK: Playback
 
         /// Whether the picture can play now.
@@ -400,10 +412,12 @@
         /// tree and showing.
         private var wantsPreparedPicture: Bool {
             preload == .automatic && loadPhase.failure == nil && isMounted && isShown
+                && !isInBackground
         }
 
         private func prepareIfWanted(_ source: VideoSource) {
-            guard loadPhase.failure == nil, isMounted, isShown, !preparationFailed else {
+            guard loadPhase.failure == nil, isMounted, isShown, !isInBackground, !preparationFailed
+            else {
                 cancelMetadata()
                 preparationBudget.release(self)
                 return

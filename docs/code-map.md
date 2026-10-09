@@ -449,3 +449,18 @@
 | `Permissions.follow(_:)`, `UIKitPermissions/AppKitPermissions.foregroundChanges()` | чтение заново при возврате на передний план | [18](18-permissions.md#15-p4-результаты-на-2026-10-09), P4 |
 | `PermissionAsyncRay` (`Permissions.statusRay(of:)`) | статус потоком AsyncRay для привязки к `State` | то же |
 | `Demo/Shared/PermissionFlowProbe.swift` | экраны объяснения и отказа с «Open Settings» | то же |
+
+## `Sources/Nodes` и `Sources/NodesRender` (отладочный оверлей, остатки видео)
+
+| Код | Что | Основание |
+|---|---|---|
+| `NodeHost.showsDebugOverlay`, `debugFrames()`, `DebugFrame` | рамки видимых нод в координатах корня «как показаны»; скрытые не входят | [05](05-platform-adapters.md#отладочный-оверлей-2026-10-09) |
+| `DebugOverlay`, `DebugOverlayLabelStyle` | контур и подпись на ноду одним контейнером последним слоем; подпись — изображение, чтобы стоять прямо в перевёрнутой геометрии AppKit | то же |
+| `DebugOverlayLabelLayout.place` | подписи не пересекаются и не выходят за холст; глубокие первыми | то же; перенесено из оверлея Trellis |
+| `NodeView`, `NodeNSView` (`debugOverlay`, `debugOverlayLabelStyle`) | оверлей обновляется после отрисовки и после сдвига прокрутки | то же |
+| `Node.distanceToScreen` | зазор от коробки ноды до границ хоста; ноль, пока часть в окне | [16](16-video.md#15-v5-остатки-результаты-на-2026-10-09) |
+| `VideoPreparationBudget.claimForPlay`, `offer` | Play берёт место у самой далёкой подготовки; освободившееся — ближайшему ждущему | то же |
+| `AVVideoSession.readMetadata` | отмена задачи останавливает загрузку описания | то же |
+| `NodeHost.isInBackground`, `Node.backgroundChanged`, `Video.backgroundChanged` | приложение или окно не видно: подготовка не идёт; играющее не трогается | то же |
+| `NodeView.updateBackground`, `NodeNSView.updateBackground` | фон по состоянию сцены (UIKit) и видимости окна (AppKit) | то же |
+

@@ -95,6 +95,16 @@ public final class NodeHost: CommandTarget {
     /// MainActor. Errors: none. Cancellation: not applicable.
     public var onNeedsLayout: (@MainActor () -> Void)?
 
+    /// Whether the adapter draws the debug overlay over the tree: an outline and a label for each
+    /// node that shows, in the frames layout produced. A diagnostic for finding out where a node
+    /// went and how big it came out; it changes nothing about layout or hit testing. Changing it
+    /// asks for a redraw.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var showsDebugOverlay = false {
+        didSet { if showsDebugOverlay != oldValue { setNeedsRender() } }
+    }
+
     /// Called once when something visible changed without needing a layout (an
     /// `appearance`) — the adapter redraws from it.
     ///
@@ -139,6 +149,23 @@ public final class NodeHost: CommandTarget {
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public var solvesInBackground = false
+
+    /// Whether the app is in the background, or the window the tree is in cannot be seen — covered,
+    /// minimized, on another space: the adapter sets it. The tree can still show (`isShown`) then;
+    /// this is what tells its nodes that nobody is looking, so that work made only for a viewer,
+    /// such as getting a video ready, waits until they come back (`Node.backgroundChanged`).
+    /// It does not stop layout or drawing.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var isInBackground = false {
+        didSet {
+            guard isInBackground != oldValue else { return }
+
+            for node in mounted.values {
+                node.backgroundChanged(isInBackground)
+            }
+        }
+    }
 
     /// Whether the tree shows: the adapter sets it — `true` while its view is in a window and
     /// not hidden. It is not whether the nodes are mounted: a screen under the next one in a
