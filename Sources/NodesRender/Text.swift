@@ -378,6 +378,31 @@
                 .draw(in: context, size: size, highlightsMessage: messageIsPressed)
         }
 
+        /// The text as a value: the content of this revision, to be drawn on any thread. It sets
+        /// the text in the same way `draw` does.
+        ///
+        /// Ownership: the snapshot owns copies. Isolation: MainActor. Errors: none.
+        /// Cancellation: not applicable.
+        public func drawingSnapshot() -> (any DrawingSnapshot)? {
+            if let rich {
+                return RichTextSnapshot(
+                    text: rich,
+                    metrics: RichMetrics(shown, rightToLeft: isRightToLeft),
+                    colors: richColors,
+                    maxLines: shown.maxLines.map { max(1, $0) },
+                    highlighted: pressedLink
+                )
+            }
+            return PlainTextSnapshot(
+                text: text,
+                style: shown,
+                rightToLeft: isRightToLeft,
+                message: truncationMessage,
+                messageColor: shownAccent,
+                highlightsMessage: messageIsPressed
+            )
+        }
+
         /// The plain text set for `width`: shrunk to fit `maxLines` when the style allows it,
         /// with the message after the token.
         private func plainLayout(width: Double) -> TextLayout {
@@ -574,6 +599,45 @@
             measurements = TextMeasurements()
             linksChanged()
             setNeedsLayout()
+        }
+    }
+
+    /// Plain text to draw on any thread.
+    struct PlainTextSnapshot: DrawingSnapshot {
+        let text: String
+        let style: TextStyle
+        let rightToLeft: Bool
+        let message: String?
+        let messageColor: Color
+        let highlightsMessage: Bool
+
+        func draw(in context: CGContext, size: CGSize) {
+            TextLayout(
+                text: text,
+                style: TextLayout.fitted(style: style, text: text, width: Double(size.width)),
+                rightToLeft: rightToLeft,
+                message: message,
+                messageColor: messageColor
+            )
+            .draw(in: context, size: size, highlightsMessage: highlightsMessage)
+        }
+    }
+
+    /// Styled text to draw on any thread.
+    struct RichTextSnapshot: DrawingSnapshot {
+        let text: RichText
+        let metrics: RichMetrics
+        let colors: RichColors
+        let maxLines: Int?
+        let highlighted: URL?
+
+        func draw(in context: CGContext, size: CGSize) {
+            let width = Double(size.width)
+            let blocks = text.blocks.map {
+                RichBlockLayout($0, width: width, metrics: metrics, colors: colors)
+            }
+            RichPlacedLayout(blocks: blocks, width: width, metrics: metrics, maxLines: maxLines)
+                .draw(in: context, size: size, colors: colors, highlighting: highlighted)
         }
     }
 

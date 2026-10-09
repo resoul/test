@@ -494,4 +494,11 @@
 | `NodeHost.locale/localizer/resolveLocalized`, `Node.locale/localized(_:)`, `Text.localizedText` | локаль и локализатор хоста, слежение узлов | то же |
 | `NodeView.systemLocaleChanged`, `NodeNSView.systemLocaleChanged` | локаль системы в хост, если приложение не поставило свою | то же |
 | `PageFooter`, `PageFooterNode`, `TableBody`, `Table.pageFooter`, `Table.content` | подвал таблицы: кольцо, сообщение с «Повторить», конец; одной высоты; в содержимом прокрутки после строк | [19](19-pagination-and-localization.md#подвал-table) |
-
+| `Trace.begin/end/event/measure/observe`, `Trace.Name` | метки для Instruments и наблюдатель для тестов | [20](20-rendering-pipeline.md#1-метки-для-instruments) |
+| `Node.hitTestInsets/minimumHitSize`, `Node.hitArea`, `Node.hitTest` | зона нажатия шире или уже рамки | [20](20-rendering-pipeline.md#2-большая-зона-нажатия) |
+| `TextStyle.truncationToken/fitScaleFactors`, `TextLayout.fitted/truncationMessageRect`, `Text.truncationMessage/isTruncated` | метка обрезки, подгонка размера, слово после «…» | [20](20-rendering-pipeline.md#3-текст) |
+| `Node.pressBegan(at:)`, `Text.pressedLink`, `RichPlacedLayout.draw(highlighting:)` | подсветка нажатой ссылки и слова «Ещё» | то же |
+| `DrawingSnapshot`, `LayerDrawing.drawingSnapshot`, `PlainTextSnapshot`, `RichTextSnapshot` | значение для рисования вне главного потока | [20](20-rendering-pipeline.md#4-отрисовка-в-фоне) |
+| `LayerRenderer.drawInBackground/bitmap/cancelDraw/drawingsFinished`, `DrawingMode`, `NodeHost.drawingMode`, `NodeScreen.defaultDrawingMode` | фоновая отрисовка, устаревшие результаты не ложатся | то же |
+| `LazyStack.prefetch/cancelPrefetch/prefetchDistance/evaluatePrefetch`, `ImagePrefetcher` | данные до ноды: объявить, отозвать | [20](20-rendering-pipeline.md#5-зоны-вокруг-экрана) |
+| `DisplayRange`, `NodeHost.displayRange`, `LayerRenderer.reviewDisplayRange/release/trimMemory`, `Node.screenfulsToScreen` | рисовать у экрана, отпускать вдали, сжимать память | то же |

@@ -620,6 +620,24 @@ open class Node: LayoutElement {
         return (gapX * gapX + gapY * gapY).squareRoot()
     }
 
+    /// `distanceToScreen` in lengths of the host's window instead of points: along the axis
+    /// the box is farthest on, a window width or a window height. 0 while some of the box shows,
+    /// 1 for a box just one window away; `nil` while the node is not in a host. It is what the
+    /// ranges around the screen are measured in, so that they mean the same on a phone and on
+    /// a desktop window.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var screenfulsToScreen: Double? {
+        guard isMounted, let host else { return nil }
+
+        let box = host.frameInRoot(of: self)
+        let width = max(1, host.size.width)
+        let height = max(1, host.size.height)
+        let gapX = max(0, box.origin.x - host.size.width, -(box.origin.x + box.size.width))
+        let gapY = max(0, box.origin.y - host.size.height, -(box.origin.y + box.size.height))
+        return max(gapX / width, gapY / height)
+    }
+
     /// Tells the node whether its tree shows.
     func setShown(_ shown: Bool) {
         guard shown != isShown else { return }

@@ -32,18 +32,24 @@ public enum Trace {
 
     /// Which end of a stretch of work a record is, or a single moment.
     public enum Phase: Sendable, Equatable {
+        /// A stretch of work began.
         case begin
+        /// The stretch of work with the same name and detail ended.
         case end
+        /// A single moment.
         case event
     }
 
     /// What an observer is told.
     public struct Record: Sendable, Equatable {
+        /// What the record is about.
         public var name: Name
+        /// Which end of a stretch of work it is, or a single moment.
         public var phase: Phase
         /// What the mark says about this one occurrence — a host's number, an image's size.
         public var detail: String
 
+        /// A record of `name` in `phase`, saying `detail`.
         public init(name: Name, phase: Phase, detail: String) {
             self.name = name
             self.phase = phase
@@ -134,6 +140,8 @@ public enum Trace {
     public struct Observation: Sendable {
         let id: Int
 
+        /// Stops telling the observer. Records made while this runs on another thread may still
+        /// reach it.
         public func cancel() { observers.remove(id) }
     }
 

@@ -317,6 +317,8 @@
             super.init(nibName: nil, bundle: nil)
             nodeView.host.outerResponder = screen
             nodeView.host.solvesInBackground = true
+            nodeView.host.drawingMode = screen.drawingMode
+            nodeView.host.displayRange = screen.displayRange
             modalPresenter.host = self
         }
 

@@ -16,6 +16,7 @@
 | AsyncRay 1.1.0 (потоки с ошибками) | [14](14-storage-and-network.md#15-план-asyncray-110-потоки-с-ошибками), раздел 15 | — | R0–R4; S7 обошёлся без него (`Result` в потоке) |
 | Разрешения системы | [18](18-permissions.md) | P0–P4 (`PermissionCore`, `PermissionSystem` для 13 видов, `follow`, `PermissionAsyncRay`, экран-пример в демо) | проверка новых видов на системе, P5 каталог CLI (нет CLI) |
 | Подгрузка страниц и локализация | [19](19-pagination-and-localization.md) | `LazyStack`/`Table` просят страницы сами, `Table` с готовым подвалом; `LocalizationCore` и `Text(localized:)` | проверка на Simulator и при смене языка в работающем приложении; язык на всё приложение (`Shell`); направление по локали |
+| Конвейер отрисовки (по Texture) | [20](20-rendering-pipeline.md) | метки Instruments, зона нажатия, текст («Ещё», подгонка, подсветка ссылки), отрисовка в фоне, `prefetch`, `DisplayRange` | замер на устройстве и в Instruments; долгое нажатие на ссылку; растеризация и скругление по замеру; GIF |
 | Проект и CLI | [17](17-project-cli.md) | — | см. документ |
 
 ## Не сделано (план C7)

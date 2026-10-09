@@ -106,6 +106,26 @@ open class NodeScreen: Screen {
     /// applicable.
     public let root: Node
 
+    /// Where new screens draw their content when they are not told otherwise (``drawingMode``):
+    /// set it once at launch to move all text drawing to the background. Synchronous by default.
+    public static var defaultDrawingMode: DrawingMode = .synchronous
+
+    /// How far from the screen new screens keep drawn content when they are not told otherwise
+    /// (``displayRange``). `nil` keeps everything mounted, which is the default.
+    public static var defaultDisplayRange: DisplayRange?
+
+    /// Where the tree's content is made; it applies to the tree's host while the screen is
+    /// shown, and a change made later applies at the next render. See ``NodeHost/drawingMode``.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var drawingMode = NodeScreen.defaultDrawingMode
+
+    /// How far from the screen the tree's drawn content is kept; see
+    /// ``NodeHost/displayRange``.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var displayRange = NodeScreen.defaultDisplayRange
+
     /// Ownership: keeps `root`, which must not be in another tree. Isolation: MainActor.
     /// Errors: none. Cancellation: not applicable.
     public init(_ root: Node, title: String = "") {

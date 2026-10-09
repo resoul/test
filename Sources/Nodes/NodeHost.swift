@@ -502,6 +502,24 @@ public final class NodeHost: CommandTarget {
         )
     }
 
+    /// Where the content the tree draws — text — is made; see ``DrawingMode``. The adapter that
+    /// shows the tree draws accordingly. Synchronous by default.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var drawingMode: DrawingMode = .synchronous {
+        didSet { if drawingMode != oldValue { setNeedsRender() } }
+    }
+
+    /// How far from the screen drawn content is kept; see ``DisplayRange``. `nil` keeps all
+    /// that is mounted, drawn as soon as it is, which is the default. The adapter also lets go
+    /// of the content that is off screen when the app goes to the background and when the
+    /// system warns that memory is short.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var displayRange: DisplayRange? {
+        didSet { if displayRange != oldValue { setNeedsRender() } }
+    }
+
     /// Runs pending state updates, then lays the tree out if anything asked for it.
     ///
     /// Ownership: sets frames and subnodes of the tree. Isolation: MainActor; synchronous.
