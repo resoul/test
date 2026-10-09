@@ -402,6 +402,10 @@
 | `NetworkPath`, `NetworkPathMonitoring`, `SystemNetworkPathMonitor` | подсказка о маршруте; `NWPathMonitor` на каждый поток | то же |
 | `WebSocketClient.reconnectNow`, `reconnectWhenReachable`, `backoffWait`, `wokenEarly` | досрочное окончание ожидания перед переподключением | то же |
 | `FileStore.importFile(at:to:)` | копирование внешнего файла в хранилище стало требованием протокола | то же |
+| `BackgroundTransfers`, `BackgroundTransferID`, `BackgroundTransferOutcome`, `BackgroundTransferProgress`, `BackgroundTransferInfo`, `HTTPClient.download(_:inBackground:to:id:)` | передачи без приложения: результат пишется до слушателей и ждёт подтверждения; запрос подписывается при постановке | [14](14-storage-and-network.md#background-transfers-2026-10-09-третий-проход) |
+| `URLSessionBackgroundTransfers`, `BackgroundTransferDelegate`, `BackgroundTransferLabel`, `BackgroundTransferRecords`, `BackgroundDestination` | фоновая сессия: метка в `taskDescription`, запись результата под блокировкой слушателей, проверка пути, системное завершение | то же |
+| `Shell.backgroundSessionHandler`, `ShellApplicationDelegate.application(_:handleEventsForBackgroundURLSession:completionHandler:)` | вызов системы доходит до приложения; пришедший раньше обработчика ждёт его | то же |
+| `Demo/Shared/BackgroundProbe.swift`, `Demo/iOSUITests/BackgroundRelaunchTests.swift` | демо и UI-тест с настоящим завершением приложения между шагами | то же |
 | `ReconnectPolicy`, `Heartbeat`, `WebSocketConfiguration` | пауза с потолком и джиттером, сброс после устойчивого соединения, окончательные коды закрытия, ping | [14](14-storage-and-network.md#9-websocket) |
 | `WebSocketTransport`, `WebSocketConnection`, `URLSessionWebSocketTransport` | соединение открыто после ответа на ping; отказ апгрейда — со статусом HTTP | [14](14-storage-and-network.md#9-websocket) |
 | `NetworkEnvironment` | часы, ожидание и случайность, общие для HTTP и WebSocket | [14](14-storage-and-network.md#9-websocket) |

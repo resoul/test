@@ -15,6 +15,8 @@
 		AA000000000000000000B2 /* PermissionAppKit in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000B2 /* PermissionAppKit */; };
 		AA000000000000000000B1 /* PermissionSystem in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000B1 /* PermissionSystem */; };
 		AA000000000000000000B0 /* PermissionCore in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000B0 /* PermissionCore */; };
+		AA000000000000000000C0 /* NetworkCore in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000C0 /* NetworkCore */; };
+		AA000000000000000000C1 /* NetworkFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000C1 /* NetworkFoundation */; };
 		AA00000000000000000019 /* NodesAppKit in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000018 /* NodesAppKit */; };
 		AA00000000000000000022 /* LayoutCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000021 /* LayoutCore */; };
 		AA00000000000000000024 /* StateCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000023 /* StateCore */; };
@@ -24,6 +26,8 @@
 		AA000000000000000000B5 /* PermissionUIKit in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000B5 /* PermissionUIKit */; };
 		AA000000000000000000B4 /* PermissionSystem in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000B4 /* PermissionSystem */; };
 		AA000000000000000000B3 /* PermissionCore in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000B3 /* PermissionCore */; };
+		AA000000000000000000C2 /* NetworkCore in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000C2 /* NetworkCore */; };
+		AA000000000000000000C3 /* NetworkFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000C3 /* NetworkFoundation */; };
 		AA0000000000000000002A /* NodesUIKit in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000029 /* NodesUIKit */; };
 		AA00000000000000000033 /* LayoutCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000032 /* LayoutCore */; };
 		AA00000000000000000035 /* StateCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000034 /* StateCore */; };
@@ -33,6 +37,8 @@
 		AA000000000000000000B8 /* PermissionUIKit in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000B8 /* PermissionUIKit */; };
 		AA000000000000000000B7 /* PermissionSystem in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000B7 /* PermissionSystem */; };
 		AA000000000000000000B6 /* PermissionCore in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000B6 /* PermissionCore */; };
+		AA000000000000000000C4 /* NetworkCore in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000C4 /* NetworkCore */; };
+		AA000000000000000000C5 /* NetworkFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = A9000000000000000000C5 /* NetworkFoundation */; };
 		AA0000000000000000003B /* NodesUIKit in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000003A /* NodesUIKit */; };
 		AA00000000000000000051 /* ThemeCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000050 /* ThemeCore */; };
 		AA00000000000000000053 /* ThemeCore in Frameworks */ = {isa = PBXBuildFile; productRef = A900000000000000000052 /* ThemeCore */; };
@@ -103,6 +109,8 @@
 				AA000000000000000000B2 /* PermissionAppKit in Frameworks */,
 				AA000000000000000000B1 /* PermissionSystem in Frameworks */,
 				AA000000000000000000B0 /* PermissionCore in Frameworks */,
+				AA000000000000000000C0 /* NetworkCore in Frameworks */,
+				AA000000000000000000C1 /* NetworkFoundation in Frameworks */,
 				AA00000000000000000019 /* NodesAppKit in Frameworks */,
 				AA00000000000000000051 /* ThemeCore in Frameworks */,
 				AA00000000000000000071 /* AppShellAppKit in Frameworks */,
@@ -122,6 +130,8 @@
 				AA000000000000000000B5 /* PermissionUIKit in Frameworks */,
 				AA000000000000000000B4 /* PermissionSystem in Frameworks */,
 				AA000000000000000000B3 /* PermissionCore in Frameworks */,
+				AA000000000000000000C2 /* NetworkCore in Frameworks */,
+				AA000000000000000000C3 /* NetworkFoundation in Frameworks */,
 				AA0000000000000000002A /* NodesUIKit in Frameworks */,
 				AA00000000000000000059 /* LayoutUIKit in Frameworks */,
 				AA00000000000000000053 /* ThemeCore in Frameworks */,
@@ -142,6 +152,8 @@
 				AA000000000000000000B8 /* PermissionUIKit in Frameworks */,
 				AA000000000000000000B7 /* PermissionSystem in Frameworks */,
 				AA000000000000000000B6 /* PermissionCore in Frameworks */,
+				AA000000000000000000C4 /* NetworkCore in Frameworks */,
+				AA000000000000000000C5 /* NetworkFoundation in Frameworks */,
 				AA0000000000000000003B /* NodesUIKit in Frameworks */,
 				AA00000000000000000057 /* LayoutUIKit in Frameworks */,
 				AA00000000000000000055 /* ThemeCore in Frameworks */,
@@ -229,6 +241,8 @@
 				A9000000000000000000B2 /* PermissionAppKit */,
 				A9000000000000000000B1 /* PermissionSystem */,
 				A9000000000000000000B0 /* PermissionCore */,
+				A9000000000000000000C0 /* NetworkCore */,
+				A9000000000000000000C1 /* NetworkFoundation */,
 				A900000000000000000018 /* NodesAppKit */,
 				A900000000000000000050 /* ThemeCore */,
 				A900000000000000000061 /* AppShellAppKit */,
@@ -263,6 +277,8 @@
 				A9000000000000000000B5 /* PermissionUIKit */,
 				A9000000000000000000B4 /* PermissionSystem */,
 				A9000000000000000000B3 /* PermissionCore */,
+				A9000000000000000000C2 /* NetworkCore */,
+				A9000000000000000000C3 /* NetworkFoundation */,
 				A900000000000000000029 /* NodesUIKit */,
 				A900000000000000000058 /* LayoutUIKit */,
 				A900000000000000000052 /* ThemeCore */,
@@ -298,6 +314,8 @@
 				A9000000000000000000B8 /* PermissionUIKit */,
 				A9000000000000000000B7 /* PermissionSystem */,
 				A9000000000000000000B6 /* PermissionCore */,
+				A9000000000000000000C4 /* NetworkCore */,
+				A9000000000000000000C5 /* NetworkFoundation */,
 				A90000000000000000003A /* NodesUIKit */,
 				A900000000000000000056 /* LayoutUIKit */,
 				A900000000000000000054 /* ThemeCore */,
@@ -896,6 +914,16 @@
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = PermissionCore;
 		};
+		A9000000000000000000C0 /* NetworkCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = NetworkCore;
+		};
+		A9000000000000000000C1 /* NetworkFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = NetworkFoundation;
+		};
 		A900000000000000000018 /* NodesAppKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
@@ -941,6 +969,16 @@
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = PermissionCore;
 		};
+		A9000000000000000000C2 /* NetworkCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = NetworkCore;
+		};
+		A9000000000000000000C3 /* NetworkFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = NetworkFoundation;
+		};
 		A900000000000000000029 /* NodesUIKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
@@ -985,6 +1023,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
 			productName = PermissionCore;
+		};
+		A9000000000000000000C4 /* NetworkCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = NetworkCore;
+		};
+		A9000000000000000000C5 /* NetworkFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = NetworkFoundation;
 		};
 		A90000000000000000003A /* NodesUIKit */ = {
 			isa = XCSwiftPackageProductDependency;

@@ -11,6 +11,12 @@ import Nodes
 struct LayoutDemo: Application {
     private let model = DemoModel()
 
+    init() {
+        // Background transfers need their session at launch, before any scene: the system may have
+        // results to deliver the moment the app runs.
+        BackgroundProbe.start(ProcessInfo.processInfo.environment)
+    }
+
     var scenes: [WindowScene] {
         // Several windows are a probe of their own: each makes its content anew.
         if let probe = WindowsProbe.scenes(ProcessInfo.processInfo.environment) { return probe }
@@ -36,6 +42,7 @@ struct LayoutDemo: Application {
         if ProcessInfo.processInfo.environment["TOAST_PROBE"] != nil {
             ToastProbe.install(on: shell)
         }
+        BackgroundProbe.install(on: shell)
         model.askToDelete(from: ProcessInfo.processInfo.environment)
         model.openMessages(from: ProcessInfo.processInfo.environment)
         model.openCompose(from: ProcessInfo.processInfo.environment)

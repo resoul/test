@@ -19,7 +19,8 @@ import ThemeCore
 /// system says about permissions (`PermissionProbe`), `PERMISSION_LAYER=1` the same through the
 /// permission layer (`PermissionLayerProbe`), `PERMISSION_FLOW=1` the explanation and refusal screens around the
 /// camera permission (`PermissionFlowProbe`), `DEBUG_OVERLAY=1` the debug overlay over a tree with a scroll
-/// (`DebugOverlayProbe`).
+/// (`DebugOverlayProbe`), `BACKGROUND_PROBE=1` background transfers across the app's endings
+/// (`BackgroundProbe`).
 @MainActor
 enum ContainerProbe {
     static func content(_ environment: [String: String]) -> (any SceneContent)? {
@@ -42,6 +43,7 @@ enum ContainerProbe {
         if environment["PERMISSION_LAYER"] != nil { return PermissionLayerProbe.content() }
         if environment["PERMISSION_FLOW"] != nil { return PermissionFlowProbe.content() }
         if environment["DEBUG_OVERLAY"] != nil { return DebugOverlayProbe.content() }
+        if environment["BACKGROUND_PROBE"] != nil { return BackgroundProbe.content() }
         if let probe = environment["PERMISSION_PROBE"] {
             return PermissionProbe.content(auto: environment["PERMISSION_AUTO"] ?? (probe == "1" ? nil : probe))
         }
