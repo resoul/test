@@ -152,8 +152,8 @@
     }
 
     @MainActor
-    private func shown(_ feed: Feed) -> NodeHost {
-        let host = NodeHost(root: feed, size: LayoutSize(width: 300, height: 300))
+    private func shown(_ feed: Feed, height: Double = 300) -> NodeHost {
+        let host = NodeHost(root: feed, size: LayoutSize(width: 300, height: height))
         host.layoutIfNeeded()
         for _ in 0..<3 { host.layoutIfNeeded() }
         return host
@@ -711,21 +711,120 @@
             host.detach()
         }
 
-        @Test func aVideoAskedToPlayTakesTheRoomOfTheOldestPreparation() {
+        @Test func aVideoAskedToPlayTakesTheRoomOfThePreparationFarthestFromTheWindow() {
             let budget = VideoPreparationBudget(limit: 2)
             let feed = Feed(count: 3, budget: budget, gap: 0)
             let host = shown(feed)
+            // The second is in the window; the third is 38 points below it. The second asks first,
+            // so the third is the newer preparation — and the farther.
             prepare([1, 2], of: feed, in: host)
+            #expect(feed.videos[1].distanceToScreen == 0)
+            #expect(feed.videos[2].distanceToScreen == 38)
             #expect(feed.prepared == [1, 2])
 
-            // The first video is in the window: asked to play, it gets its room at the cost of
-            // the oldest preparation, which is the second video's.
             feed.videos[0].play()
             settle(host)
 
             #expect(feed.live(0).count == 1, "play gets its session")
-            #expect(feed.live(1).isEmpty, "the oldest preparation was let go")
-            #expect(feed.live(2).count == 1, "the newer one stays")
+            #expect(feed.live(2).isEmpty, "the preparation farthest from the window was let go")
+            #expect(feed.live(1).count == 1, "the nearer one stays, though it is the older")
+            host.detach()
+        }
+
+        @Test func ofPreparationsAsFarAsEachOtherThePlayTakesTheOldest() {
+            let budget = VideoPreparationBudget(limit: 2)
+            let feed = Feed(count: 3, budget: budget, gap: 0)
+            // A window tall enough for all three: every preparation is at distance zero.
+            let host = shown(feed, height: 600)
+            prepare([1, 2], of: feed, in: host)
+            #expect(feed.videos[1].distanceToScreen == 0 && feed.videos[2].distanceToScreen == 0)
+
+            feed.videos[0].play()
+            settle(host)
+
+            #expect(feed.live(0).count == 1)
+            #expect(feed.live(1).isEmpty, "the oldest of equals was let go")
+            #expect(feed.live(2).count == 1)
+            host.detach()
+        }
+
+        @Test func aRoomThatIsFreedGoesToTheWaitingVideoNearestTheWindow() {
+            let budget = VideoPreparationBudget(limit: 1)
+            let feed = Feed(count: 4, budget: budget)
+            let host = shown(feed)
+            // The first holds the room. The fourth, far down the feed, asks next, and the third
+            // after it; the third is nearer.
+            prepare([0, 3, 2], of: feed, in: host)
+            #expect(feed.live(0).count == 1)
+            #expect(feed.live(2).isEmpty && feed.live(3).isEmpty)
+            #expect(
+                feed.videos[2].distanceToScreen! < feed.videos[3].distanceToScreen!,
+                "the third is nearer the window than the fourth"
+            )
+
+            feed.videos[0].source = nil
+            settle(host)
+
+            #expect(feed.live(2).count == 1, "the nearer waiting video gets the room")
+            #expect(feed.live(3).isEmpty, "though the farther one waited longer")
+            host.detach()
+        }
+
+        @Test func aVideoDoesNotPrepareWhileTheHostIsInTheBackgroundAndDoesWhenItReturns() {
+            let budget = VideoPreparationBudget(limit: 2)
+            let feed = Feed(count: 1, budget: budget, preload: .automatic)
+            let host = shown(feed)
+            #expect(feed.live(0).count == 1)
+
+            host.isInBackground = true
+            settle(host)
+            #expect(feed.live(0).isEmpty, "the preparation was let go in the background")
+            #expect(budget.occupied == 0)
+
+            // Asking again while in the background changes nothing; the wish stays.
+            feed.videos[0].preload = .metadata
+            feed.videos[0].preload = .automatic
+            settle(host)
+            #expect(feed.live(0).isEmpty)
+
+            host.isInBackground = false
+            settle(host)
+            #expect(feed.live(0).count == 1, "back in front, the video is prepared again")
+            host.detach()
+        }
+
+        @Test func aVideoThatPlaysIsLeftAloneWhenTheHostGoesToTheBackground() {
+            let budget = VideoPreparationBudget(limit: 2)
+            let feed = Feed(count: 1, budget: budget)
+            let host = shown(feed)
+            feed.videos[0].play()
+            settle(host)
+            let session = feed.sessions[0][0]
+
+            host.isInBackground = true
+            settle(host)
+
+            #expect(!session.isStopped, "what plays is for the system and the app's audio to stop")
+            #expect(!session.calls.contains("pause"))
+            host.detach()
+        }
+
+        @Test func aDescriptionIsNotReadForAHostInTheBackground() async {
+            let feed = Feed(count: 1, budget: VideoPreparationBudget(limit: 2), preload: .none)
+            let host = shown(feed)
+            host.isInBackground = true
+
+            feed.videos[0].preload = .metadata
+            settle(host)
+            try? await Task.sleep(for: .milliseconds(50))
+
+            #expect(feed.metadataReads.isEmpty)
+            host.isInBackground = false
+            for _ in 0..<200 where feed.metadataReads.isEmpty {
+                try? await Task.sleep(for: .milliseconds(5))
+                settle(host)
+            }
+            #expect(feed.metadataReads.count == 1, "read once the host is back in front")
             host.detach()
         }
 
@@ -1174,6 +1273,20 @@
             await #expect(throws: (any Error).self) {
                 _ = try await AVVideoSession.readMetadata(of: missing)
             }
+        }
+
+        @Test func aReadOfTheDescriptionByACancelledTaskDoesNotReadAnything() async throws {
+            let url = try await VideoFixture.make(seconds: 1)
+            defer { try? FileManager.default.removeItem(at: url) }
+
+            let task = Task { () throws -> VideoMetadata in
+                // Wait for the cancellation, then read: the read must see it and stop.
+                while !Task.isCancelled { await Task.yield() }
+                return try await AVVideoSession.readMetadata(of: url)
+            }
+            task.cancel()
+
+            await #expect(throws: CancellationError.self) { _ = try await task.value }
         }
 
         @Test func aVideoNodePlaysAFileThroughItsRealSession() async throws {

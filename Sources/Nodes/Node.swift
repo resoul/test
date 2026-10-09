@@ -518,6 +518,34 @@ open class Node: LayoutElement {
     /// cancels work it no longer needs when the tree stops showing.
     open func shownChanged(_ isShown: Bool) {}
 
+    /// The app, or the window the tree is in, went to the background or came back
+    /// (`NodeHost.isInBackground`) — to stop or start work that is wasted on a person who cannot
+    /// see it, such as making a video ready. A tree can show (`isShown`) and be in the
+    /// background: its view is in a window, and the window is covered or the app is not in front.
+    /// Called on each change. The default does nothing.
+    ///
+    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: an override
+    /// cancels work it no longer needs.
+    open func backgroundChanged(_ isInBackground: Bool) {}
+
+    /// How far the node's box is from showing, in points: zero while some of its box is within the
+    /// host's bounds, otherwise the straight-line gap between the box and those bounds, where
+    /// the scrolls around it put the box. `nil` while the node is not in a host. It measures
+    /// geometry only, so a hidden node is as near as it would be if it showed.
+    ///
+    /// A feed uses it to prepare what the person will reach first: the node just below the window
+    /// is nearer than one three screens down.
+    ///
+    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    public var distanceToScreen: Double? {
+        guard isMounted, let host else { return nil }
+
+        let box = host.frameInRoot(of: self)
+        let gapX = max(0, box.origin.x - host.size.width, -(box.origin.x + box.size.width))
+        let gapY = max(0, box.origin.y - host.size.height, -(box.origin.y + box.size.height))
+        return (gapX * gapX + gapY * gapY).squareRoot()
+    }
+
     /// Tells the node whether its tree shows.
     func setShown(_ shown: Bool) {
         guard shown != isShown else { return }

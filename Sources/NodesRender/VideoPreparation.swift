@@ -27,9 +27,12 @@
     /// player for every row.
     ///
     /// A video that is asked to play always gets its place: if the budget is full it takes the
-    /// place of the oldest preparation of another video, which is let go. Playing videos are never
-    /// let go to make room. A video that is only being prepared never takes a place from
-    /// another: it waits for one, and is prepared when one is free.
+    /// place of the preparation of another video that is farthest from the window (the oldest of
+    /// those, if several are as far), which is let go. Playing videos are never let go to make
+    /// room. A video that is only being prepared never takes a place from another: it waits for
+    /// one, and when one is free it goes to the waiting video nearest to the window (the one that
+    /// waited longest, if several are as near), because that is the one the person reaches first.
+    /// Nearness is ``Node/distanceToScreen``.
     ///
     /// The app owns the budget and gives it to the videos of a screen; ``shared`` is the one
     /// they use unless told otherwise.
@@ -82,11 +85,16 @@
                 entries[id] = Entry(video: video, isActive: true, order: counter)
                 let overflow = entries.count - limit
                 if overflow > 0 {
+                    // The preparation farthest from the window goes first; of equals, the oldest.
                     let victims =
                         entries
                         .filter { $0.key != id && !$0.value.isActive }
-                        .sorted { $0.value.order < $1.value.order }
+                        .map { (key: $0.key, entry: $0.value, away: $0.value.video.distance) }
+                        .sorted {
+                            $0.away != $1.away ? $0.away > $1.away : $0.entry.order < $1.entry.order
+                        }
                         .prefix(overflow)
+                        .map { ($0.key, $0.entry) }
                     for (key, entry) in victims {
                         entries[key] = nil
                         entry.video?.preparationWasTaken()
@@ -135,8 +143,13 @@
         private func offer() {
             prune()
             while entries.count < limit, !waiting.isEmpty {
-                let next = waiting.removeFirst()
-                next.video?.preparationRoomAppeared()
+                // The nearest to the window first; the first to have waited among equals.
+                var best = 0
+                for index in waiting.indices.dropFirst()
+                where waiting[index].video.distance < waiting[best].video.distance {
+                    best = index
+                }
+                waiting.remove(at: best).video?.preparationRoomAppeared()
             }
         }
 
@@ -147,6 +160,13 @@
         }
     }
 
+    extension Optional where Wrapped == Video {
+        /// How far the video is from the window, in points; a video that is gone, or not in a host,
+        /// is as far as can be.
+        @MainActor
+        fileprivate var distance: Double { self?.distanceToScreen ?? .infinity }
+    }
+
     /// What a read of a video's description gives.
     typealias VideoMetadata = (size: LayoutSize?, duration: VideoDuration)
 
@@ -154,15 +174,30 @@
     typealias VideoMetadataReader = @Sendable (URL) async throws -> VideoMetadata
 
     extension AVVideoSession {
-        /// Reads the size (orientation applied) and the length of the video at `url`. The load
-        /// cannot be cancelled once it is under way; its result is dropped by whoever stopped
-        /// waiting.
+        /// Reads the size (orientation applied) and the length of the video at `url`. Cancelling the
+        /// task stops the read: the asset is told to stop loading, and no step after the one under
+        /// way is started, so a video that left before its description arrived does not go on
+        /// reading a file or a network stream for nobody.
+        ///
+        /// - Throws: `CancellationError` once the task is cancelled, and the reading errors of the
+        ///   asset.
         static func readMetadata(of url: URL) async throws -> VideoMetadata {
             let asset = AVURLAsset(url: url)
+            return try await withTaskCancellationHandler {
+                try await read(asset)
+            } onCancel: {
+                asset.cancelLoading()
+            }
+        }
+
+        private static func read(_ asset: AVURLAsset) async throws -> VideoMetadata {
+            try Task.checkCancellation()
             let duration = try await asset.load(.duration)
+            try Task.checkCancellation()
             let tracks = try await asset.loadTracks(withMediaType: .video)
             var size: LayoutSize?
             if let track = tracks.first {
+                try Task.checkCancellation()
                 let natural = try await track.load(.naturalSize)
                 let transform = try await track.load(.preferredTransform)
                 let turned = natural.applying(transform)
