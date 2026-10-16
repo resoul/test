@@ -1,5 +1,8 @@
 #if canImport(CoreText)
     import AppShell
+    #if canImport(FlexEngine)
+        import FlexEngine
+    #endif
     import Foundation
     import ImageIO
     import LayoutCore

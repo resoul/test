@@ -1,0 +1,389 @@
+#if canImport(UIKit)
+    import FlexEngine
+    import LayoutCore
+    import Nodes
+    import NodesUIKit
+    import Testing
+    import UIKit
+
+    @MainActor
+    private final class Row: Node {
+        override var layoutContent: LeafContent? { .size(LayoutSize(width: 50, height: 30)) }
+    }
+
+    /// Ten 30-point rows, one under another.
+    @MainActor
+    private final class List: Node {
+        let rows = (0..<10).map { _ in Row() }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                for row in rows { row }
+            }
+        }
+    }
+
+    /// A 20-point bar over a scroll of the list.
+    @MainActor
+    private final class Screen: Node {
+        let bar = Row()
+        let list = List()
+        lazy var scroll = Scroll(.vertical, content: list)
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                bar.size(width: 50, height: 20)
+                scroll
+            }
+        }
+    }
+
+    /// A 200 × 120 view of the screen, laid out: the scroll gets the 100 points under the bar.
+    @MainActor
+    private func view(of screen: Screen) -> NodeView {
+        let view = NodeView(root: screen)
+        view.zoom = 1
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 120)
+        view.layoutIfNeeded()
+        return view
+    }
+
+    @MainActor
+    private func physics(in view: NodeView) -> UIScrollView? {
+        view.subviews.compactMap { $0 as? UIScrollView }.first
+    }
+
+    @Test @MainActor
+    func aScrollGetsThePlatformsScrollingOverItsFrame() throws {
+        let screen = Screen()
+        let view = view(of: screen)
+        guard view.traitCollection.userInterfaceIdiom != .tv else { return }
+
+        let physics = try #require(physics(in: view))
+        #expect(physics.frame == CGRect(x: 0, y: 20, width: 200, height: 100))
+        #expect(physics.contentSize == CGSize(width: 200, height: 300))
+        #expect(view.gestureRecognizers?.contains { $0 === physics.panGestureRecognizer } == true)
+        // Touches over it come to the node view, so taps reach the nodes.
+        #expect(view.hitTest(CGPoint(x: 10, y: 60), with: nil) === view)
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func thePlatformsScrollingMovesTheScrollAndItsLayer() throws {
+        let screen = Screen()
+        let view = view(of: screen)
+        guard view.traitCollection.userInterfaceIdiom != .tv else { return }
+
+        let physics = try #require(physics(in: view))
+        physics.contentOffset = CGPoint(x: 0, y: 80)
+        view.layoutIfNeeded()
+
+        #expect(screen.scroll.contentOffset == LayoutPoint(x: 0, y: 80))
+        #expect(view.renderedLayer(for: screen.scroll)?.bounds.origin == CGPoint(x: 0, y: 80))
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func pastTheEndTheContentBouncesWithoutChangingTheOffset() throws {
+        let screen = Screen()
+        let view = view(of: screen)
+        guard view.traitCollection.userInterfaceIdiom != .tv else { return }
+
+        let physics = try #require(physics(in: view))
+        physics.contentOffset = CGPoint(x: 0, y: -30)
+        view.layoutIfNeeded()
+
+        #expect(screen.scroll.contentOffset == .zero)
+        #expect(screen.scroll.overscroll == LayoutPoint(x: 0, y: -30))
+        #expect(view.renderedLayer(for: screen.scroll)?.bounds.origin == CGPoint(x: 0, y: -30))
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func theScrollingFollowsAScrollMovedByCode() throws {
+        let screen = Screen()
+        let view = view(of: screen)
+        guard view.traitCollection.userInterfaceIdiom != .tv else { return }
+
+        screen.scroll.contentOffset = LayoutPoint(x: 0, y: 150)
+        view.layoutIfNeeded()
+
+        let physics = try #require(physics(in: view))
+        #expect(physics.contentOffset == CGPoint(x: 0, y: 150))
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func aMoveByCodeIsNotLostToTheFingersNextMove() throws {
+        let screen = Screen()
+        let view = view(of: screen)
+        guard view.traitCollection.userInterfaceIdiom != .tv else { return }
+
+        // Code moves the scroll — as a lazy stack does to keep what shows in place — and the
+        // finger moves the scroll view 10 points before the next drawing.
+        let physics = try #require(physics(in: view))
+        screen.scroll.contentOffset = LayoutPoint(x: 0, y: 150)
+        physics.contentOffset = CGPoint(x: 0, y: 10)
+
+        #expect(screen.scroll.contentOffset == LayoutPoint(x: 0, y: 160))
+        #expect(physics.contentOffset == CGPoint(x: 0, y: 160))
+        view.host.detach()
+    }
+
+    private struct Numbered: Identifiable {
+        let id: Int
+    }
+
+    /// A scroll of a lazy stack of a thousand 30-point rows.
+    @MainActor
+    private final class Feed: Node {
+        var rows: [Int: Row] = [:]
+        lazy var stack = LazyStack<Numbered>(estimatedLength: 30) { [unowned self] item in
+            if let row = rows[item.id] { return row }
+
+            let row = Row()
+            rows[item.id] = row
+            return row
+        }
+        lazy var scroll = Scroll(.vertical, content: stack)
+
+        override init() {
+            super.init()
+            stack.items = (0..<1000).map { Numbered(id: $0) }
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { scroll }
+        }
+    }
+
+    @Test @MainActor
+    func theScrollingOfALazyStackReachesItsWholeLengthAndDrawsWhereItGoes() throws {
+        let feed = Feed()
+        let view = NodeView(root: feed)
+        view.zoom = 1
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 150)
+        view.layoutIfNeeded()
+        guard view.traitCollection.userInterfaceIdiom != .tv else { return }
+
+        let physics = try #require(physics(in: view))
+        #expect(physics.contentSize == CGSize(width: 200, height: 30_000))
+        physics.contentOffset = CGPoint(x: 0, y: 15_000)
+        view.layoutIfNeeded()
+
+        #expect(feed.stack.laidOutItems.contains(500))
+        let row = try #require(feed.rows[500])
+        #expect(view.renderedLayer(for: row)?.frame.origin.y == 15_000)
+        #expect(view.renderedLayer(for: try #require(feed.rows[0])) == nil)
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func anAnimatedFarScrollOfALazyStackMovesWithTheDisplaysFrames() async throws {
+        let feed = Feed()
+        let view = NodeView(root: feed)
+        view.zoom = 1
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 150)
+        view.layoutIfNeeded()
+
+        // Each frame of the move moves the scroll: those between its ends count. Tests run
+        // beside this one hold the main thread for seconds at times, and the frames wait
+        // for it: the move is long enough to be seen between, and the wait longer still.
+        var between = 0
+        feed.scroll.onScroll = { offset in
+            if offset.y > 0, offset.y < 15_000 {
+                between += 1
+            }
+        }
+        withAnimation(.linear(duration: 2)) {
+            feed.scroll.contentOffset = LayoutPoint(x: 0, y: 15_000)
+        }
+        #expect(view.host.needsFrames)
+
+        // The view is in no window, so nothing lays it out but the test.
+        let clock = ContinuousClock()
+        let deadline = clock.now + .seconds(30)
+        while view.host.needsFrames, clock.now < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+            view.layoutIfNeeded()
+            let top = feed.scroll.contentOffset.y
+            if top > 0, top < 15_000 {
+                // What shows on the way is drawn.
+                let row = try #require(feed.rows[Int(top / 30)])
+                #expect(view.renderedLayer(for: row) != nil)
+            }
+        }
+
+        #expect(!view.host.needsFrames)
+        #expect(between > 1)
+        #expect(feed.scroll.contentOffset.y == 15_000)
+        #expect(view.renderedLayer(for: try #require(feed.rows[500]))?.frame.origin.y == 15_000)
+        view.host.detach()
+    }
+
+    /// Lets the frames of the moves under way run until they end, or for 30 seconds.
+    @MainActor
+    private func runFrames(of view: NodeView) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now + .seconds(30)
+        while view.host.needsFrames, clock.now < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+            view.layoutIfNeeded()
+        }
+    }
+
+    @Test @MainActor
+    func theScrollViewAnsweringANewContentSizeDoesNotStopAMoveButAFingerDoes() async throws {
+        let feed = Feed()
+        let view = NodeView(root: feed)
+        view.zoom = 1
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 150)
+        view.layoutIfNeeded()
+        guard view.traitCollection.userInterfaceIdiom != .tv else { return }
+
+        // The scroll view tells its delegate it scrolled when a new content size moves its
+        // offset to fit: here on every new size.
+        let physics = try #require(physics(in: view))
+        let observation = physics.observe(\.contentSize) { scrollView, _ in
+            MainActor.assumeIsolated {
+                scrollView.delegate?.scrollViewDidScroll?(scrollView)
+            }
+        }
+        defer { observation.invalidate() }
+
+        withAnimation(.linear(duration: 0.3)) {
+            feed.scroll.contentOffset = LayoutPoint(x: 0, y: 15_000)
+        }
+        // The content grows while the move goes on.
+        feed.stack.items = (0..<1001).map { Numbered(id: $0) }
+        view.layoutIfNeeded()
+        #expect(physics.contentSize.height == 30_030)
+        try await runFrames(of: view)
+        #expect(feed.scroll.contentOffset.y == 15_000)
+
+        withAnimation(.linear(duration: 0.3)) {
+            feed.scroll.contentOffset = .zero
+        }
+        // A move of the scroll view the driver did not make stops it where it is.
+        physics.delegate?.scrollViewDidScroll?(physics)
+        try await runFrames(of: view)
+        #expect(feed.scroll.contentOffset.y == 15_000)
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func onATVTheFocusScrollsNotTheTouchSurface() {
+        let screen = Screen()
+        let view = view(of: screen)
+        guard view.traitCollection.userInterfaceIdiom == .tv else { return }
+
+        #expect(physics(in: view) == nil)
+        view.host.detach()
+    }
+#endif
+
+#if canImport(UIKit)
+    /// A tappable, so focusable, row.
+    @MainActor
+    private final class Item: Node {
+        override init() {
+            super.init()
+            onTap = {}
+        }
+
+        override var layoutContent: LeafContent? { .size(LayoutSize(width: 50, height: 30)) }
+    }
+
+    @MainActor
+    private final class Items: Node {
+        let items = (0..<10).map { _ in Item() }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                for item in items { item }
+            }
+        }
+    }
+
+    @Test @MainActor
+    func theFocusSystemSearchesAScrollsWholeContentAndScrollsIt() throws {
+        let items = Items()
+        let scroll = Scroll(.vertical, content: items)
+        let view = NodeView(root: scroll)
+        view.zoom = 1
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 100)
+        view.layoutIfNeeded()
+        guard
+            view.traitCollection.userInterfaceIdiom == .tv
+                || view.traitCollection.userInterfaceIdiom == .pad
+        else { return }
+
+        let top = view.focusItems(in: view.bounds)
+        // The scroll's own container, and not the empty scroll view giving its physics.
+        #expect(top.count == 1)
+        let container = try #require(
+            top.compactMap { $0.focusItemContainer as? any UIFocusItemScrollableContainer }.first
+        )
+        #expect(container.contentSize == CGSize(width: 200, height: 300))
+        #expect(container.visibleSize == CGSize(width: 200, height: 100))
+        // The last row, far below what shows, is found in the content.
+        let inside = container.focusItems(in: CGRect(x: 0, y: 0, width: 200, height: 300))
+        #expect(inside.count == 10)
+        #expect(inside.contains { $0.frame == CGRect(x: 0, y: 270, width: 200, height: 30) })
+
+        container.contentOffset = CGPoint(x: 0, y: 150)
+        #expect(scroll.contentOffset == LayoutPoint(x: 0, y: 150))
+        view.host.detach()
+    }
+#endif
+
+#if canImport(UIKit)
+    @MainActor
+    private func itemsView() -> (NodeView, Scroll) {
+        let scroll = Scroll(.vertical, content: Items())
+        let view = NodeView(root: scroll)
+        view.zoom = 1
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 100)
+        view.layoutIfNeeded()
+        return (view, scroll)
+    }
+
+    @Test @MainActor
+    func accessibilityElementsStayTheSameWhileTheirFramesFollowTheScroll() throws {
+        let (view, scroll) = itemsView()
+        let before = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+
+        scroll.contentOffset = LayoutPoint(x: 0, y: 60)
+        view.layoutIfNeeded()
+
+        let after = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+        #expect(after.count == 10)
+        #expect(zip(before, after).allSatisfy { $0 === $1 })
+        #expect(after[2].accessibilityFrameInContainerSpace.minY == 0)
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func threeFingersTurnAPageOfTheScrollAroundTheElement() throws {
+        let (view, scroll) = itemsView()
+        let elements = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+
+        #expect(elements[0].accessibilityScroll(.up))
+        #expect(scroll.contentOffset == LayoutPoint(x: 0, y: 100))
+        #expect(!elements[0].accessibilityScroll(.left))
+        #expect(elements[0].accessibilityScroll(.previous))
+        #expect(scroll.contentOffset == .zero)
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func voiceOverMovingToAnElementOutOfSightScrollsToIt() throws {
+        let (view, scroll) = itemsView()
+        let elements = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+
+        elements[9].accessibilityElementDidBecomeFocused()
+
+        #expect(scroll.contentOffset == LayoutPoint(x: 0, y: 200))
+        view.host.detach()
+    }
+#endif
