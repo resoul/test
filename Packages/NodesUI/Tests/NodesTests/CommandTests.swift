@@ -1,0 +1,279 @@
+import FlexEngine
+import LayoutCore
+import StateCore
+import Testing
+
+@testable import Nodes
+
+extension Command {
+    fileprivate static let flag = Command(
+        "flag",
+        title: "Flag",
+        shortcut: Shortcut("f", [.command, .shift])
+    )
+    fileprivate static let archive = Command("archive", title: "Archive")
+}
+
+/// A row that can be focused and pressed.
+@MainActor
+private final class Row: Node {
+    override init() {
+        super.init()
+        onTap = {}
+    }
+
+    override var layoutContent: LeafContent? { .size(LayoutSize(width: 100, height: 20)) }
+}
+
+/// A list of two rows, inside a screen.
+@MainActor
+private final class List: Node {
+    let first = Row()
+    let second = Row()
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.column) {
+            first; second
+        }
+    }
+}
+
+@MainActor
+private final class Screen: Node {
+    let list = List()
+    let aside = Row()
+
+    override func layoutSpec() -> LayoutSpec? {
+        FlexContainer(.column) {
+            list; aside
+        }
+        .alignItems(.start)
+    }
+}
+
+@MainActor
+private func host(_ screen: Screen) -> NodeHost {
+    let host = NodeHost(root: screen, size: LayoutSize(width: 200, height: 200))
+    host.layoutIfNeeded()
+    return host
+}
+
+@Test @MainActor
+func aCommandGoesFromTheFocusedNodeOutToTheFirstThatCanCarryItOut() {
+    let screen = Screen()
+    let host = host(screen)
+    var done: [String] = []
+    var listCan = false
+    screen.handle(.flag) { done.append("screen") }
+    screen.list.handle(.flag, isEnabled: { listCan }) { done.append("list") }
+    host.focus(screen.list.second.id)
+
+    // The list cannot yet: the screen around it can.
+    #expect(host.canPerform(.flag))
+    #expect(host.perform(.flag))
+    listCan = true
+    #expect(host.perform(.flag))
+    // From a row outside the list, the list's handler is not on the way out.
+    host.focus(screen.aside.id)
+    #expect(host.perform(.flag))
+    #expect(done == ["screen", "list", "screen"])
+
+    #expect(!host.canPerform(.archive))
+    #expect(!host.perform(.archive))
+    host.detach()
+}
+
+@Test @MainActor
+func withoutTheFocusACommandGoesToTheNodeLastPressedElseToTheRoot() {
+    let screen = Screen()
+    let host = host(screen)
+    var done: [String] = []
+    screen.handle(.archive) { done.append("screen") }
+    screen.list.handle(.archive) { done.append("list") }
+
+    host.perform(.archive)
+    // The second row of the list is at 20 from the top.
+    host.pointerDown(at: LayoutPoint(x: 10, y: 30))
+    host.pointerUp(at: LayoutPoint(x: 10, y: 30))
+    host.perform(.archive)
+    host.pointerDown(at: LayoutPoint(x: 10, y: 50))
+    host.pointerCancelled()
+    host.perform(.archive)
+    #expect(done == ["screen", "list", "screen"])
+    host.detach()
+}
+
+@Test @MainActor
+func aShortcutCarriesOutTheCommandItBelongsTo() {
+    let screen = Screen()
+    let host = host(screen)
+    var flags = 0
+    screen.list.handle(.flag) { flags += 1 }
+    host.focus(screen.list.first.id)
+
+    // A capital letter is its small one: Shift is a modifier.
+    #expect(Shortcut("F", [.command, .shift]) == Command.flag.shortcut)
+    #expect(host.canPerform(Shortcut("f", [.command, .shift])))
+    #expect(host.perform(Shortcut("f", [.command, .shift])))
+    #expect(!host.perform(Shortcut("f", [.command])))
+    #expect(flags == 1)
+
+    screen.list.removeHandler(for: .flag)
+    #expect(!host.perform(Shortcut("f", [.command, .shift])))
+    host.detach()
+}
+
+@Test @MainActor
+func theAvailableCommandsAreTheNearestHandlersEachOnce() {
+    let screen = Screen()
+    let host = host(screen)
+    screen.handle(.archive) {}
+    screen.handle(.flag) {}
+    screen.list.handle(.flag, isEnabled: { false }) {}
+    screen.list.second.handle(.back) {}
+    host.focus(screen.list.second.id)
+
+    #expect(host.availableCommands().map(\.id) == ["back", "flag", "archive"])
+    #expect(host.handlesCommands)
+    // A second handler replaces the first.
+    screen.list.second.handle(.back) {}
+    #expect(screen.list.second.handledCommands == [.back])
+    host.detach()
+}
+
+@Test
+func aMenuIsBuiltFromCommandsDividersAndMenus() {
+    let archives = true
+    let bar = MenuBar {
+        Menu("Message") {
+            Command.flag
+            if archives { Command.archive }
+            Divider()
+            Menu("More") { Command.back }
+        }
+        Menu("View") {}
+    }
+
+    #expect(bar.menus.map(\.title) == ["Message", "View"])
+    #expect(
+        bar.menus[0].items == [
+            .command(.flag), .command(.archive), .divider,
+            .menu(Menu("More") { Command.back }),
+        ]
+    )
+}
+
+@Test @MainActor
+func pastTheRootACommandGoesOnToTheOuterRespondersInTurn() {
+    let screen = Screen()
+    let host = host(screen)
+    let stack = CommandResponder()
+    let window = CommandResponder()
+    stack.outer = window
+    host.outerResponder = stack
+    var done: [String] = []
+    var depth = 2
+    stack.handle(.back, isEnabled: { depth > 1 }) {
+        depth -= 1
+        done.append("stack")
+    }
+    window.handle(.back) { done.append("window") }
+    window.handle(.archive) { done.append("window") }
+    screen.list.handle(.archive) { done.append("list") }
+    host.focus(screen.aside.id)
+
+    // A node on the way out comes first; past the root, the stack while it can, then the window.
+    #expect(host.perform(.back))
+    #expect(host.perform(.back))
+    #expect(host.perform(.archive))
+    host.focus(screen.list.first.id)
+    #expect(host.perform(.archive))
+    #expect(done == ["stack", "window", "window", "list"])
+    #expect(host.availableCommands().map(\.id) == ["archive", "back"])
+    #expect(host.canPerform(Shortcut("[", [.command])))
+    host.detach()
+}
+
+@Test @MainActor
+func aTreeWithCommandsOnlyOutsideItStillHandlesCommands() {
+    let screen = Screen()
+    let host = host(screen)
+    let outer = CommandResponder()
+    host.outerResponder = outer
+    #expect(!host.handlesCommands)
+
+    outer.handle(.cancel) {}
+    #expect(host.handlesCommands)
+    #expect(outer.canPerform(.cancel))
+    #expect(!outer.canPerform(.back))
+    host.detach()
+}
+
+@Test @MainActor
+func aResponderGoneFromAroundEndsTheChain() {
+    let inner = CommandResponder()
+    var outer: CommandResponder? = CommandResponder()
+    var backs = 0
+    outer?.handle(.back) { backs += 1 }
+    inner.outer = outer
+
+    #expect(inner.perform(.back))
+    outer = nil
+    #expect(inner.outer == nil)
+    #expect(!inner.perform(.back))
+    #expect(backs == 1)
+}
+
+@Test @MainActor
+func aCommandIsOnAsTheHandlerThatWouldCarryItOutSays() {
+    let screen = Screen()
+    let host = host(screen)
+    var listCan = false
+    let outside = CommandResponder()
+    host.outerResponder = outside
+    screen.list.handle(.flag, isEnabled: { listCan }, isOn: { true }) {}
+    screen.handle(.flag, isOn: { false }) {}
+    host.focus(screen.list.first.id)
+
+    // The screen would carry it out, and it is off there.
+    #expect(!host.isOn(.flag))
+    listCan = true
+    #expect(host.isOn(.flag))
+    // While nothing can, the nearest handler says.
+    screen.removeHandler(for: .flag)
+    listCan = false
+    #expect(!host.canPerform(.flag))
+    #expect(host.isOn(.flag))
+    // A command not turned on and off, or not handled, is off.
+    screen.handle(.archive) {}
+    #expect(!host.isOn(.archive))
+    outside.handle(.archive, isOn: { true }) {}
+    #expect(!host.isOn(.archive))
+    screen.removeHandler(for: .archive)
+    #expect(host.isOn(.archive))
+    #expect(outside.isOn(.archive))
+    host.detach()
+}
+
+@Test @MainActor
+func whatACommandsStateDependsOnIsWatchedWithTheFocus() {
+    let screen = Screen()
+    let host = host(screen)
+    let selected = State(false)
+    screen.list.first.handle(.flag, isEnabled: { selected.value }) {}
+    var changes = 0
+    let watch = Observer { changes += 1 }
+    // From the root, the row's handler is not on the way.
+    #expect(!watch.track { host.canPerform(.flag) })
+    host.focus(screen.list.first.id)
+    StateUpdates.flush()
+    #expect(changes == 1)
+
+    #expect(!watch.track { host.canPerform(.flag) })
+    selected.value = true
+    StateUpdates.flush()
+    #expect(changes == 2)
+    #expect(watch.track { host.canPerform(.flag) })
+    watch.cancel()
+    host.detach()
+}

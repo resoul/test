@@ -1,0 +1,948 @@
+#if canImport(ImageIO)
+    import CryptoKit
+    import Foundation
+    import ImageIO
+    import FlexEngine
+    import LayoutCore
+    import Nodes
+    import ThemeCore
+    import QuartzCore
+    import StateCore
+    import StorageCore
+    import Tracing
+    import os
+
+    /// Where an image is read from. File URLs are read directly; remote URLs use the disk cache.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public enum ImageSource: Sendable, Equatable {
+        case data(Data)
+        case url(URL)
+    }
+
+    /// How an image occupies its node's frame.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public enum ImageContentMode: Sendable {
+        case fit
+        case fill
+        case stretch
+    }
+
+    /// A solid fill shown until image pixels are available, or after the first load fails.
+    /// An optional size measures the image before its original dimensions are known.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public struct ImagePlaceholder: Sendable, Equatable {
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public var color: Color
+
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public var size: LayoutSize?
+
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public init(
+            color: Color = Color(red: 0.9, green: 0.9, blue: 0.9),
+            size: LayoutSize? = nil
+        ) {
+            self.color = color
+            self.size = size
+        }
+    }
+
+    /// Progress of the first usable image. `ready` includes a preview while detail loads.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public enum ImageLoadPhase: Sendable, Equatable {
+        /// No source.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case empty
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case loading
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case ready
+        /// The first load failed, for `ImageLoadFailure`'s reason.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case failed(ImageLoadFailure)
+
+        /// Why the first load failed, or `nil` when it has not.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public var failure: ImageLoadFailure? {
+            if case let .failed(reason) = self { return reason }
+            return nil
+        }
+    }
+
+    /// Why an image could not be shown — for choosing what to tell the user and whether to
+    /// offer `retry()`.
+    ///
+    /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+    public enum ImageLoadFailure: Sendable, Equatable {
+        /// The server could not be reached or stopped answering: no connection, a timeout, a
+        /// name that does not resolve. Worth retrying later.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case network(URLError.Code)
+        /// The server answered with this status instead of the image: 404, 500.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case status(Int)
+        /// The response was larger than the cache's `maximumDownloadBytes`.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case tooLarge
+        /// The bytes are not an image that can be decoded.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case invalidImage
+        /// A file source could not be read: missing, or not permitted.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case file
+        /// Anything else, such as an answer that is not HTTP.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        case other
+
+        /// The reason `error`, thrown by a load, stands for.
+        ///
+        /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
+        public init(_ error: any Error) {
+            switch error {
+            case let error as URLError:
+                self = .network(error.code)
+            case ImageCacheError.status(let code):
+                self = .status(code)
+            case ImageCacheError.responseTooLarge:
+                self = .tooLarge
+            case ImageCacheError.invalidImage, ImageCacheError.processingFailed:
+                self = .invalidImage
+            case is CocoaError:
+                self = .file
+            default:
+                self = .other
+            }
+        }
+    }
+
+    /// Loads and decodes static images. The disk cache holds encoded bytes; decoding happens
+    /// away from the main actor. Decoded sizes are shared within a bounded memory cache.
+    ///
+    /// Ownership: the caller owns the pipeline and its cache. Isolation: actor. Errors: image,
+    /// file, and network errors are thrown. Cancellation: a caller leaves a shared decode;
+    /// the last departing caller cancels it.
+    public actor ImagePipeline {
+        /// Ownership: shared actor. Isolation: actor. Errors: none. Cancellation: not applicable.
+        public static let shared = ImagePipeline()
+
+        /// Ownership: the pipeline owns the cache. Isolation: actor. Errors: none.
+        /// Cancellation: not applicable.
+        public let cache: ImageCache
+
+        /// Optional ceiling for decoded width or height. `nil` lets the requested frame use
+        /// the source's full resolution when needed. Disk bytes are never reduced by this.
+        ///
+        /// Ownership: value. Isolation: actor. Errors: none. Cancellation: not applicable.
+        public let maximumDecodedPixelDimension: Int?
+
+        /// Initial preview size, before the node knows how large it will be drawn.
+        ///
+        /// Ownership: value. Isolation: actor. Errors: none. Cancellation: not applicable.
+        public let previewPixelDimension: Int
+
+        /// Maximum estimated pixel bytes retained by the pipeline for decoded images.
+        /// The estimate is `bytesPerRow * height`; zero disables reuse.
+        /// Nodes and rendered layers can hold the same images beyond this cache's lifetime.
+        ///
+        /// Ownership: value. Isolation: actor. Errors: none. Cancellation: not applicable.
+        public let maximumDecodedCacheBytes: Int
+
+        private struct DecodedKey: Hashable, Sendable {
+            let digest: Data
+            let pixelDimension: Int
+        }
+
+        private struct DecodedEntry {
+            let image: LoadedImage
+            let bytes: Int
+            var lastUse: UInt64
+        }
+
+        private let decodeGate: DecodeGate
+        private var decoded: [DecodedKey: DecodedEntry] = [:]
+        /// Decodes running, one per key, shared by the callers that ask for it meanwhile.
+        private let decodes = SharedLoads<DecodedKey, LoadedImage, SharedUrgency>()
+        private var decodedBytes = 0
+        private var clock: UInt64 = 0
+        private var cacheGeneration: UInt64 = 0
+        private var decodeCount = 0
+        private var runningDecodes = 0
+        private var peakRunningDecodes = 0
+        private var digests: [URL: (stamp: ImageFileStamp, digest: Data)] = [:]
+        private var sourceReads = 0
+
+        /// Ownership: the caller owns the pipeline. Isolation: actor. Errors: none.
+        /// Cancellation: not applicable.
+        public init(
+            cache: ImageCache = ImageCache(),
+            maximumDecodedPixelDimension: Int? = nil,
+            previewPixelDimension: Int = 256,
+            maximumDecodedCacheBytes: Int = 64 * 1024 * 1024
+        ) {
+            self.init(
+                cache: cache,
+                maximumDecodedPixelDimension: maximumDecodedPixelDimension,
+                previewPixelDimension: previewPixelDimension,
+                maximumDecodedCacheBytes: maximumDecodedCacheBytes,
+                decodeGate: DecodeGate()
+            )
+        }
+
+        init(
+            cache: ImageCache,
+            maximumDecodedPixelDimension: Int?,
+            previewPixelDimension: Int,
+            maximumDecodedCacheBytes: Int,
+            decodeGate: DecodeGate
+        ) {
+            self.decodeGate = decodeGate
+            self.cache = cache
+            self.maximumDecodedPixelDimension = maximumDecodedPixelDimension.map { max(1, $0) }
+            self.previewPixelDimension = max(1, previewPixelDimension)
+            self.maximumDecodedCacheBytes = max(0, maximumDecodedCacheBytes)
+        }
+
+        /// `urgency` says whether the caller wants the image first — while its node is on
+        /// screen; a decode shared by several callers is as urgent as the most urgent of them.
+        func load(
+            _ source: ImageSource,
+            targetPixelDimension: Int,
+            urgency: LoadUrgency? = nil
+        ) async throws -> LoadedImage {
+            let limit =
+                maximumDecodedPixelDimension.map {
+                    min(max(1, targetPixelDimension), $0)
+                } ?? max(1, targetPixelDimension)
+            // A file whose size and dates are unchanged still holds the bytes last hashed, so
+            // a decoded size is found without reading or hashing the file again.
+            if case let .url(url) = source, let known = digests[url],
+                await cache.stamp(for: url) == known.stamp,
+                let image = reuse(DecodedKey(digest: known.digest, pixelDimension: limit))
+            {
+                return image
+            }
+
+            let data: Data
+            var stamp: ImageFileStamp?
+            switch source {
+            case let .data(value):
+                data = value
+            case let .url(url):
+                stamp = await cache.stamp(for: url)
+                data = try await cache.load(url, urgency: urgency)
+                sourceReads += 1
+            }
+            try Task.checkCancellation()
+
+            // A URL can be overwritten without changing its spelling. Hash the bytes that
+            // will actually be decoded so an old bitmap cannot stand in for new contents.
+            let digest = Data(SHA256.hash(data: data))
+            // The stamp is remembered only when the file did not change around the read, so
+            // it always belongs to the bytes that were hashed.
+            if case let .url(url) = source, let stamp, await cache.stamp(for: url) == stamp {
+                digests[url] = (stamp, digest)
+            }
+            let key = DecodedKey(digest: digest, pixelDimension: limit)
+            if let image = reuse(key) { return image }
+
+            // Taken before the decode is joined: a clear that comes before it starts leaves its
+            // result out of the cache, as one that comes while it runs does.
+            let generation = cacheGeneration
+            // Decodes run one at a time so several simultaneous images do not create several
+            // full-sized bitmaps at once. They wait in the gate rather than on this actor, which
+            // stays free for cache hits and cancellations; a decode cancelled while queued
+            // leaves the queue without running.
+            let image = try await decodes.value(for: key, want: urgency) {
+                [decodeGate] shared in
+                await self.decodeQueued()
+                try await decodeGate.acquire(isUrgent: { shared.isUrgent })
+                await self.decodeStarted()
+                let interval = Trace.begin(.decode, "\(data.count) bytes limit \(limit)")
+                let result = Result { try Self.decode(data, pixelDimension: limit) }
+                Trace.end(interval)
+                await self.decodeFinished()
+                await decodeGate.release()
+                return try result.get()
+            }
+            // Every caller of a shared decode gets here; the first keeps the bitmap.
+            if generation == cacheGeneration, decoded[key] == nil {
+                retain(image, for: key)
+            }
+            return image
+        }
+
+        private func reuse(_ key: DecodedKey) -> LoadedImage? {
+            guard var entry = decoded[key] else { return nil }
+
+            clock &+= 1
+            entry.lastUse = clock
+            decoded[key] = entry
+            return entry.image
+        }
+
+        /// Drops the pipeline's retained decoded images. Mounted nodes keep what they show.
+        ///
+        /// Ownership: releases the pipeline's references. Isolation: actor. Errors: none.
+        /// Cancellation: in-flight decoding continues for its callers but does not refill
+        /// the cache after this call.
+        public func clearDecodedCache() {
+            decoded.removeAll()
+            digests.removeAll()
+            decodedBytes = 0
+            cacheGeneration &+= 1
+        }
+
+        func decodedCacheState() -> (
+            entries: Int, bytes: Int, decodes: Int, peakRunning: Int, sourceReads: Int
+        ) {
+            (decoded.count, decodedBytes, decodeCount, peakRunningDecodes, sourceReads)
+        }
+
+        private func decodeQueued() {
+            decodeCount &+= 1
+        }
+
+        private func decodeStarted() {
+            runningDecodes += 1
+            peakRunningDecodes = max(peakRunningDecodes, runningDecodes)
+        }
+
+        private func decodeFinished() {
+            runningDecodes -= 1
+        }
+
+        private func retain(_ image: LoadedImage, for key: DecodedKey) {
+            guard maximumDecodedCacheBytes > 0 else { return }
+            let (bytes, overflow) = image.image.bytesPerRow.multipliedReportingOverflow(
+                by: image.image.height
+            )
+            guard !overflow, bytes > 0, bytes <= maximumDecodedCacheBytes else { return }
+
+            while decodedBytes > maximumDecodedCacheBytes - bytes,
+                let oldest = decoded.min(by: { $0.value.lastUse < $1.value.lastUse })
+            {
+                decoded.removeValue(forKey: oldest.key)
+                decodedBytes -= oldest.value.bytes
+            }
+            clock &+= 1
+            decoded[key] = DecodedEntry(image: image, bytes: bytes, lastUse: clock)
+            decodedBytes += bytes
+
+            // Remembered digests are only useful for images still held; drop the rest once
+            // they outnumber the held images, so a long feed does not grow the table forever.
+            if digests.count > 2 * max(decoded.count, 64) {
+                let held = Set(decoded.keys.map(\.digest))
+                digests = digests.filter { held.contains($0.value.digest) }
+            }
+        }
+
+        private nonisolated static func decode(
+            _ data: Data,
+            pixelDimension: Int
+        ) throws -> LoadedImage {
+            try Task.checkCancellation()
+            guard let imageSource = CGImageSourceCreateWithData(data as CFData, nil),
+                CGImageSourceGetCount(imageSource) > 0
+            else { throw ImageCacheError.invalidImage }
+
+            let properties =
+                CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any]
+            let rawWidth =
+                (properties?[kCGImagePropertyPixelWidth as String] as? NSNumber)?.intValue ?? 0
+            let rawHeight =
+                (properties?[kCGImagePropertyPixelHeight as String] as? NSNumber)?.intValue ?? 0
+            let orientation =
+                (properties?[kCGImagePropertyOrientation as String] as? NSNumber)?.intValue ?? 1
+            let swapsAxes = (5...8).contains(orientation)
+            let width = swapsAxes ? rawHeight : rawWidth
+            let height = swapsAxes ? rawWidth : rawHeight
+
+            let options: [String: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways as String: true,
+                kCGImageSourceCreateThumbnailWithTransform as String: true,
+                kCGImageSourceThumbnailMaxPixelSize as String: pixelDimension,
+                kCGImageSourceShouldCacheImmediately as String: true,
+            ]
+            guard
+                let image = CGImageSourceCreateThumbnailAtIndex(
+                    imageSource,
+                    0,
+                    options as CFDictionary
+                )
+            else { throw ImageCacheError.invalidImage }
+            try Task.checkCancellation()
+            return LoadedImage(
+                image: image,
+                size: LayoutSize(
+                    width: Double(width > 0 ? width : image.width),
+                    height: Double(height > 0 ? height : image.height)
+                )
+            )
+        }
+    }
+
+    /// Whether a load is wanted first: set while the node that asked for it is on screen. It
+    /// can change while the load waits: a decode waiting in line is ordered by its value when
+    /// a slot frees, and a download running is told of each change.
+    final class LoadUrgency: Sendable {
+        private struct State {
+            var isUrgent = false
+            var watchers: [UInt64: @Sendable () -> Void] = [:]
+            var nextWatcher: UInt64 = 0
+        }
+
+        private let state = OSAllocatedUnfairLock(initialState: State())
+
+        var isUrgent: Bool {
+            get { state.withLock { $0.isUrgent } }
+            set {
+                let watchers = state.withLock { state -> [@Sendable () -> Void] in
+                    guard state.isUrgent != newValue else { return [] }
+
+                    state.isUrgent = newValue
+                    return Array(state.watchers.values)
+                }
+                // Called outside the lock: a watcher reads the urgency again.
+                for watcher in watchers { watcher() }
+            }
+        }
+
+        /// Calls `changed` after each change, until `stopWatching` with the returned token.
+        func watch(_ changed: @escaping @Sendable () -> Void) -> UInt64 {
+            state.withLock { state in
+                state.nextWatcher &+= 1
+                state.watchers[state.nextWatcher] = changed
+                return state.nextWatcher
+            }
+        }
+
+        func stopWatching(_ token: UInt64) {
+            _ = state.withLock { $0.watchers.removeValue(forKey: token) }
+        }
+
+        var watcherCount: Int { state.withLock { $0.watchers.count } }
+    }
+
+    /// The urgencies of the callers sharing one decode or download: it is urgent while any
+    /// of them is. It tells its own watcher when that may have changed — a caller came or
+    /// left, or one of theirs changed.
+    final class SharedUrgency: LoadDemand {
+        private struct State {
+            var callers: [UInt64: (urgency: LoadUrgency, token: UInt64)] = [:]
+            var changed: (@Sendable () -> Void)?
+        }
+
+        private let state = OSAllocatedUnfairLock(initialState: State())
+
+        deinit {
+            // The callers' urgencies outlive a finished load; they stop calling it.
+            for caller in state.withLock({ $0.callers.values }) {
+                caller.urgency.stopWatching(caller.token)
+            }
+        }
+
+        var isUrgent: Bool {
+            let urgencies = state.withLock { $0.callers.values.map(\.urgency) }
+            return urgencies.contains { $0.isUrgent }
+        }
+
+        /// Sets the one watcher, called after each possible change.
+        func watch(_ changed: @escaping @Sendable () -> Void) {
+            state.withLock { $0.changed = changed }
+        }
+
+        func add(_ urgency: LoadUrgency?, for caller: UInt64) {
+            guard let urgency else { return }
+
+            let token = urgency.watch { [weak self] in self?.notify() }
+            state.withLock { $0.callers[caller] = (urgency, token) }
+            notify()
+        }
+
+        func remove(_ caller: UInt64) {
+            let removed = state.withLock { $0.callers.removeValue(forKey: caller) }
+            guard let removed else { return }
+
+            removed.urgency.stopWatching(removed.token)
+            notify()
+        }
+
+        private func notify() {
+            state.withLock { $0.changed }?()
+        }
+    }
+
+    /// Lets one decode run at a time and queues the rest: the first urgent one goes next,
+    /// otherwise the first to arrive. Urgency is asked when the slot frees, so a caller that
+    /// became urgent while waiting overtakes the others. A queued caller that is cancelled
+    /// leaves the queue and throws `CancellationError`.
+    actor DecodeGate {
+        private struct Waiting {
+            let id: UInt64
+            let isUrgent: @Sendable () -> Bool
+            let continuation: CheckedContinuation<Void, Error>
+        }
+
+        private var isRunning = false
+        private var waiting: [Waiting] = []
+        private var nextID: UInt64 = 0
+
+        var waitingCount: Int { waiting.count }
+
+        func acquire(isUrgent: @escaping @Sendable () -> Bool = { false }) async throws {
+            try Task.checkCancellation()
+            guard isRunning else {
+                isRunning = true
+                return
+            }
+
+            nextID &+= 1
+            let id = nextID
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation {
+                    (continuation: CheckedContinuation<Void, Error>) in
+                    enqueue(Waiting(id: id, isUrgent: isUrgent, continuation: continuation))
+                }
+            } onCancel: {
+                Task { await self.leave(id) }
+            }
+        }
+
+        private func enqueue(_ entry: Waiting) {
+            // Cancellation that arrived before this point found nothing to remove.
+            if Task.isCancelled {
+                entry.continuation.resume(throwing: CancellationError())
+            } else {
+                waiting.append(entry)
+            }
+        }
+
+        func release() {
+            guard !waiting.isEmpty else {
+                isRunning = false
+                return
+            }
+
+            // The slot passes straight to the next caller, so nobody arriving now can overtake
+            // the queue.
+            let next = waiting.firstIndex { $0.isUrgent() } ?? 0
+            waiting.remove(at: next).continuation.resume()
+        }
+
+        private func leave(_ id: UInt64) {
+            guard let index = waiting.firstIndex(where: { $0.id == id }) else { return }
+            waiting.remove(at: index).continuation.resume(throwing: CancellationError())
+        }
+    }
+
+    struct LoadedImage: Sendable {
+        let image: CGImage
+        let size: LayoutSize
+    }
+
+    /// A static image node. It decodes a preview, then pixels for its frame and display scale.
+    /// An old result is discarded when the source, frame, or display scale changes.
+    ///
+    /// Ownership: the creator owns the node; the node owns its load task. Isolation:
+    /// MainActor. Errors: a failed first load sets `phase` to `.failed` with its reason and keeps the
+    /// placeholder visible. Cancellation: replacing the source, requested pixel size, or
+    /// releasing the node cancels the old load.
+    @MainActor
+    public final class Image: Node, LayerDrawing {
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: replaces load.
+        public var source: ImageSource? {
+            didSet { if source != oldValue { reload() } }
+        }
+
+        /// Source pixels per point of the image's own size: 2 for an image made for a 2x
+        /// display. It changes only how large the image measures, not which pixels are decoded
+        /// — those follow the frame and the display scale. Values of zero or less count as 1.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var scale: Double {
+            didSet { if scale != oldValue { setNeedsLayout() } }
+        }
+
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var contentMode: ImageContentMode {
+            didSet {
+                if contentMode != oldValue {
+                    revision &+= 1
+                    requestedPixelDimension = nil
+                    detailTask?.cancel()
+                    detailGeneration &+= 1
+                    host?.setNeedsRender()
+                }
+            }
+        }
+
+        /// What is drawn before pixels arrive and if the first load fails. `nil` is clear.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var placeholder: ImagePlaceholder? {
+            didSet {
+                if placeholder != oldValue {
+                    revision &+= 1
+                    if placeholder?.size != oldValue?.size { setNeedsLayout() }
+                    host?.setNeedsRender()
+                }
+            }
+        }
+
+        /// Observable loading state. Reading it in `update()` tracks changes. A preview
+        /// counts as ready while detail is refined.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none.
+        /// Cancellation: source replacement resets it to loading or empty.
+        public var phase: ImageLoadPhase { phaseState.value }
+
+        /// The original oriented dimensions in pixels, or `nil` until loading succeeds.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public private(set) var pixelSize: LayoutSize?
+
+        /// Pixels currently decoded for display; may be a preview while a sharper image loads.
+        ///
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public private(set) var decodedPixelSize: LayoutSize?
+
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public var drawingRevision: UInt64 { revision }
+
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public override var layoutContent: LeafContent? {
+            let pointScale = scale > 0 ? scale : 1
+            let natural =
+                pixelSize.map {
+                    LayoutSize(width: $0.width / pointScale, height: $0.height / pointScale)
+                } ?? placeholder?.size
+            guard let natural, natural.width > 0, natural.height > 0 else {
+                return .size(natural ?? .zero)
+            }
+
+            return .proportional(natural)
+        }
+
+        /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
+        public override var accessibilityContentTraits: AccessibilityTraits { .image }
+
+        private let pipeline: ImagePipeline
+        /// Whether the node's loads go before those of images off screen: while it is on it.
+        let urgency = LoadUrgency()
+        private let phaseState = State(ImageLoadPhase.empty)
+        private var loaded: LoadedImage?
+        private var loadTask: Task<Void, Never>?
+        private var detailTask: Task<Void, Never>?
+        private var sourceGeneration: UInt64 = 0
+        private var detailGeneration: UInt64 = 0
+        private var requestedPixelDimension: Int?
+        private var revision: UInt64 = 0
+        /// Set while the node is out of the tree after having been in it, or its tree stopped
+        /// showing: nothing loads and no pixels are held until it shows again.
+        private var isSuspended = false
+        private var solid: (color: Color?, image: CGImage)?
+
+        /// Ownership: the caller owns the node. Isolation: MainActor. Errors: none.
+        /// Cancellation: the load stops when the source changes or the node is released.
+        public init(
+            source: ImageSource? = nil,
+            scale: Double = 1,
+            contentMode: ImageContentMode = .fit,
+            placeholder: ImagePlaceholder? = nil,
+            pipeline: ImagePipeline = .shared
+        ) {
+            self.source = source
+            self.scale = scale
+            self.contentMode = contentMode
+            self.placeholder = placeholder
+            self.pipeline = pipeline
+            super.init()
+            tracksScreen = true
+            reload()
+        }
+
+        /// Loads of an image on screen go before those of images near it but off it — the
+        /// ones a lazy stack lays out ahead of the scroll.
+        ///
+        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
+        public override func screenChanged(_ isOnScreen: Bool) {
+            urgency.isUrgent = isOnScreen
+        }
+
+        deinit {
+            loadTask?.cancel()
+            detailTask?.cancel()
+        }
+
+        /// Leaving the tree, or its tree no longer showing — a screen under the next one, a tab
+        /// not chosen — cancels loading and lets go of the decoded pixels; the original size
+        /// stays, so the layout does not jump when the node returns. Showing again resumes an
+        /// unfinished first load; the renderer then asks for pixels for the frame, which the
+        /// pipeline's memory cache often still holds.
+        ///
+        /// Ownership: cancels node-owned tasks. Isolation: MainActor. Errors: none.
+        /// Cancellation: leaving cancels both loads.
+        public override func mountedChanged(_ isMounted: Bool) {
+            if !isMounted {
+                suspend()
+            }
+        }
+
+        /// Ownership: cancels or starts node-owned tasks. Isolation: MainActor. Errors: none.
+        /// Cancellation: no longer showing cancels both loads.
+        public override func shownChanged(_ isShown: Bool) {
+            if isShown {
+                guard isSuspended else { return }
+
+                isSuspended = false
+                if source != nil, pixelSize == nil, phaseState.value == .loading {
+                    startFirstLoad()
+                }
+                host?.setNeedsRender()
+            } else {
+                suspend()
+            }
+        }
+
+        private func suspend() {
+            guard !isSuspended else { return }
+
+            isSuspended = true
+            urgency.isUrgent = false
+            loadTask?.cancel()
+            detailTask?.cancel()
+            loadTask = nil
+            detailTask = nil
+            detailGeneration &+= 1
+            requestedPixelDimension = nil
+            loaded = nil
+            decodedPixelSize = nil
+            revision &+= 1
+        }
+
+        /// Loads the current source again: after a failure, or after a file changed. A remote
+        /// URL goes through the disk cache, which still returns an unexpired copy; remove the
+        /// entry from the cache first to download it anew.
+        ///
+        /// Ownership: starts a node-owned task. Isolation: MainActor. Errors: none.
+        /// Cancellation: replaces the previous load and its detail request.
+        public func retry() {
+            guard source != nil else { return }
+            reload()
+        }
+
+        /// Requests only the pixels needed to cover the visible frame at the display scale.
+        /// Fill and stretch can need more source pixels than fit because they crop or distort.
+        ///
+        /// Ownership: starts a task owned by the node. Isolation: MainActor. Errors: a failed
+        /// refinement leaves the last decoded image visible. Cancellation: a new request
+        /// cancels the old one.
+        public func prepareDrawing(size: CGSize, scale: Double) {
+            guard !isSuspended, let source, let pixelSize,
+                size.width > 0, size.height > 0, scale > 0,
+                pixelSize.width > 0, pixelSize.height > 0
+            else { return }
+
+            let pixelWidth = Double(size.width) * scale
+            let pixelHeight = Double(size.height) * scale
+            guard pixelWidth.isFinite, pixelHeight.isFinite else { return }
+            let horizontal = pixelWidth / pixelSize.width
+            let vertical = pixelHeight / pixelSize.height
+            let factor = contentMode == .fit ? min(horizontal, vertical) : max(horizontal, vertical)
+            let sourceMaximum = max(pixelSize.width, pixelSize.height)
+            let wanted = Int(min(sourceMaximum, max(1, (sourceMaximum * factor).rounded(.up))))
+            guard requestedPixelDimension != wanted else { return }
+
+            requestedPixelDimension = wanted
+            detailTask?.cancel()
+            detailGeneration &+= 1
+            let request = detailGeneration
+            let generation = sourceGeneration
+            let pipeline = pipeline
+            let urgency = urgency
+            detailTask = Task { [weak self] in
+                do {
+                    let result = try await pipeline.load(
+                        source,
+                        targetPixelDimension: wanted,
+                        urgency: urgency
+                    )
+                    guard !Task.isCancelled, let self, self.sourceGeneration == generation,
+                        self.detailGeneration == request
+                    else { return }
+                    self.loaded = result
+                    self.decodedPixelSize = LayoutSize(
+                        width: Double(result.image.width),
+                        height: Double(result.image.height)
+                    )
+                    self.revision &+= 1
+                    self.host?.setNeedsRender()
+                } catch {
+                    // The preview or preceding detail remains visible until another size asks.
+                }
+            }
+        }
+
+        /// The decoded pixels, or before them a single pixel of the placeholder's color (clear
+        /// without one) stretched over the frame. The layer shows them as they are, so no
+        /// frame-sized copy of the image or the fill is made.
+        ///
+        /// Ownership: returns references the node holds. Isolation: MainActor. Errors: none.
+        /// Cancellation: none.
+        public var layerImage: LayerImage? {
+            if let image = loaded?.image {
+                return LayerImage(image: image, contentMode: contentMode)
+            }
+
+            return solidImage().map { LayerImage(image: $0, contentMode: .stretch) }
+        }
+
+        /// Draws what `layerImage` shows, for a caller that needs it in a context.
+        ///
+        /// Ownership: draws into `context`. Isolation: MainActor. Errors: none.
+        /// Cancellation: none.
+        public func draw(in context: CGContext, size: CGSize) {
+            guard size.width > 0, size.height > 0 else { return }
+            guard let image = loaded?.image else {
+                if let placeholder {
+                    context.setFillColor(
+                        red: placeholder.color.red,
+                        green: placeholder.color.green,
+                        blue: placeholder.color.blue,
+                        alpha: placeholder.color.alpha
+                    )
+                    context.fill(CGRect(origin: .zero, size: size))
+                }
+                return
+            }
+            let imageWidth = CGFloat(image.width)
+            let imageHeight = CGFloat(image.height)
+            let box = CGRect(origin: .zero, size: size)
+            let destination: CGRect
+            switch contentMode {
+            case .stretch:
+                destination = box
+            case .fit, .fill:
+                let horizontal = size.width / imageWidth
+                let vertical = size.height / imageHeight
+                let factor =
+                    contentMode == .fit ? min(horizontal, vertical) : max(horizontal, vertical)
+                let width = imageWidth * factor
+                let height = imageHeight * factor
+                destination = CGRect(
+                    x: (size.width - width) / 2,
+                    y: (size.height - height) / 2,
+                    width: width,
+                    height: height
+                )
+            }
+            context.clip(to: box)
+            context.draw(image, in: destination)
+        }
+
+        /// A single pixel of the placeholder's color, kept until the color changes: the
+        /// renderer compares contents by reference, and a new pixel each render would replace
+        /// them every time.
+        private func solidImage() -> CGImage? {
+            let color = placeholder?.color
+            if let solid, solid.color == color { return solid.image }
+
+            guard
+                let context = CGContext(
+                    data: nil,
+                    width: 1,
+                    height: 1,
+                    bitsPerComponent: 8,
+                    bytesPerRow: 0,
+                    space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                        | CGBitmapInfo.byteOrder32Little.rawValue
+                )
+            else { return nil }
+
+            if let color {
+                context.setFillColor(
+                    red: color.red,
+                    green: color.green,
+                    blue: color.blue,
+                    alpha: color.alpha
+                )
+                context.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+            }
+            guard let image = context.makeImage() else { return nil }
+
+            solid = (color, image)
+            return image
+        }
+
+        private func reload() {
+            revision &+= 1
+            sourceGeneration &+= 1
+            detailGeneration &+= 1
+            loadTask?.cancel()
+            detailTask?.cancel()
+            loadTask = nil
+            detailTask = nil
+            requestedPixelDimension = nil
+            loaded = nil
+            pixelSize = nil
+            decodedPixelSize = nil
+            phaseState.value = source == nil ? .empty : .loading
+            setNeedsLayout()
+            host?.setNeedsRender()
+            guard !isSuspended else { return }
+
+            startFirstLoad()
+        }
+
+        private func startFirstLoad() {
+            guard let source else { return }
+
+            let request = sourceGeneration
+            let pipeline = pipeline
+            let urgency = urgency
+            loadTask = Task { [weak self] in
+                do {
+                    let result = try await pipeline.load(
+                        source,
+                        targetPixelDimension: pipeline.previewPixelDimension,
+                        urgency: urgency
+                    )
+                    guard !Task.isCancelled, let self, self.sourceGeneration == request else {
+                        return
+                    }
+                    self.loaded = result
+                    self.pixelSize = result.size
+                    self.decodedPixelSize = LayoutSize(
+                        width: Double(result.image.width),
+                        height: Double(result.image.height)
+                    )
+                    self.phaseState.value = .ready
+                    self.revision &+= 1
+                    self.setNeedsLayout()
+                    self.host?.setNeedsRender()
+                } catch {
+                    guard !Task.isCancelled, let self, self.sourceGeneration == request else {
+                        return
+                    }
+                    self.phaseState.value = .failed(ImageLoadFailure(error))
+                    self.revision &+= 1
+                    self.host?.setNeedsRender()
+                }
+            }
+        }
+    }
+#endif

@@ -1,0 +1,494 @@
+#if canImport(UIKit)
+    import FlexEngine
+    import LayoutCore
+    import Nodes
+    import NodesRender
+    import Testing
+    import UIKit
+
+    @testable import NodesUIKit
+
+    private struct Numbered: Identifiable {
+        let id: Int
+    }
+
+    /// A row that reads its number.
+    @MainActor
+    private final class Row: Node {
+        func showing(_ number: Int) -> Row {
+            accessibility.label = "Row \(number)"
+            return self
+        }
+
+        override var layoutContent: LeafContent? { .size(LayoutSize(width: 50, height: 30)) }
+    }
+
+    /// A title, then a scroll of a thousand 30-point rows, then a button.
+    @MainActor
+    private final class Screen: Node {
+        let rows = NodeCache<Int, Row> { _ in Row() }
+        let title = Row().showing(-1)
+        let done = Row().showing(-2)
+        lazy var stack = LazyStack<Numbered>(estimatedLength: 30) { [rows] item in
+            rows[item.id].showing(item.id)
+        }
+        lazy var scroll = Scroll(.vertical, content: stack)
+
+        override init() {
+            super.init()
+            stack.items = (0..<1000).map { Numbered(id: $0) }
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                title
+                scroll
+                done
+            }
+        }
+    }
+
+    @MainActor
+    private func view(of screen: Screen) -> NodeView {
+        let view = NodeView(root: screen)
+        view.zoom = 1
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 210)
+        view.layoutIfNeeded()
+        return view
+    }
+
+    @Test @MainActor
+    func aLazyListIsAContainerOfAllItsItems() throws {
+        let screen = Screen()
+        let view = view(of: screen)
+        let elements = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+
+        #expect(elements.count == 3)
+        #expect(elements[0].accessibilityLabel == "Row -1")
+        #expect(elements[2].accessibilityLabel == "Row -2")
+        let list = try #require(elements[1] as? ListAccessibilityContainer)
+        #expect(list.accessibilityContainerType == .dataTable)
+        #expect(!list.isAccessibilityElement)
+        #expect(
+            list.accessibilityFrameInContainerSpace == CGRect(x: 0, y: 30, width: 200, height: 150)
+        )
+        // One element for each of the thousand items.
+        #expect(list.accessibilityElementCount() == 1000)
+        let first = try #require(list.accessibilityElement(at: 0) as? UIAccessibilityElement)
+        #expect(first.accessibilityLabel == "Row 0")
+        #expect(list.index(ofAccessibilityElement: first) == 0)
+        #expect(list.accessibilityElement(at: 1000) == nil)
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func anItemNotLaidOutStandsInWhereItIsExpected() throws {
+        let screen = Screen()
+        let view = view(of: screen)
+        let elements = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+        let list = try #require(elements[1] as? ListAccessibilityContainer)
+
+        let standIn = try #require(list.accessibilityElement(at: 700) as? ListItemStandIn)
+        #expect(standIn.item == 700)
+        #expect(standIn.isAccessibilityElement)
+        #expect(list.index(ofAccessibilityElement: standIn) == 700)
+        // In the list's coordinates: 700 rows of 30 points down from its top.
+        #expect(standIn.accessibilityFrameInContainerSpace.minY == 21_000)
+        #expect(list.accessibilityElement(at: 700) as AnyObject === standIn)
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func voiceOverMovingToAnItemNotLaidOutLaysItOut() throws {
+        let screen = Screen()
+        let view = view(of: screen)
+        let elements = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+        let list = try #require(elements[1] as? ListAccessibilityContainer)
+        let standIn = try #require(list.accessibilityElement(at: 700) as? ListItemStandIn)
+
+        standIn.accessibilityElementDidBecomeFocused()
+
+        #expect(screen.stack.laidOutItems.contains(700))
+        #expect(screen.scroll.contentOffset.y == 21_000)
+        let now = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+        #expect(now[1] === list)
+        let element = try #require(list.accessibilityElement(at: 700) as? UIAccessibilityElement)
+        #expect(element.accessibilityLabel == "Row 700")
+        #expect(!(element is ListItemStandIn))
+        #expect(list.index(ofAccessibilityElement: element) == 700)
+        // Its frame is in the list's coordinates: at the top of the window.
+        #expect(element.accessibilityFrameInContainerSpace.minY == 0)
+        // Before and after the items laid out, the others still stand in.
+        #expect(list.accessibilityElement(at: 0) is ListItemStandIn)
+        #expect(list.accessibilityElement(at: 999) is ListItemStandIn)
+        #expect(list.accessibilityElementCount() == 1000)
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func theElementsOfAListAreInsideIt() throws {
+        let screen = Screen()
+        let view = view(of: screen)
+        let elements = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+        let list = try #require(elements[1] as? ListAccessibilityContainer)
+        let row = try #require(list.accessibilityElement(at: 2) as? UIAccessibilityElement)
+
+        #expect(row.accessibilityContainer as AnyObject === list)
+        // Row 2 is 60 points into the list, in the list's coordinates; the list is 30 points
+        // down the view. Screen frames follow from these where the view is on a screen.
+        #expect(
+            row.accessibilityFrameInContainerSpace == CGRect(x: 0, y: 60, width: 200, height: 30)
+        )
+        #expect(list.accessibilityContainer as AnyObject === view)
+        view.host.detach()
+    }
+    /// A row of two elements: its name and a button.
+    @MainActor
+    private final class PairRow: Node {
+        let name = Row()
+        let button = Row()
+
+        func showing(_ number: Int) -> PairRow {
+            _ = name.showing(number)
+            button.accessibility.label = "Open \(number)"
+            button.onTap = {}
+            return self
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.row) {
+                name
+                button
+            }
+        }
+    }
+
+    /// A scroll of a thousand rows of two elements each.
+    @MainActor
+    private final class PairScreen: Node {
+        let rows = NodeCache<Int, PairRow> { _ in PairRow() }
+        lazy var stack = LazyStack<Numbered>(estimatedLength: 30) { [rows] item in
+            rows[item.id].showing(item.id)
+        }
+        lazy var scroll = Scroll(.vertical, content: stack)
+
+        override init() {
+            super.init()
+            stack.items = (0..<1000).map { Numbered(id: $0) }
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { scroll }
+        }
+    }
+
+    @Test @MainActor
+    func itemsOfSeveralElementsCountEachOfThem() throws {
+        let screen = PairScreen()
+        let view = NodeView(root: screen)
+        view.zoom = 1
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 150)
+        view.layoutIfNeeded()
+        let elements = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+        let list = try #require(elements.first as? ListAccessibilityContainer)
+
+        // Items before those laid out stand in one each, those laid out give two elements
+        // each, and the ones after stand in one each again.
+        let laidOut = screen.stack.laidOutItems
+        let first = laidOut.lowerBound
+        let past = first + 2 * laidOut.count
+        let count = past + (1000 - laidOut.upperBound)
+        #expect(list.accessibilityElementCount() == count)
+        let name = try #require(list.accessibilityElement(at: first) as? UIAccessibilityElement)
+        let button = try #require(
+            list.accessibilityElement(at: first + 1) as? UIAccessibilityElement
+        )
+        #expect(name.accessibilityLabel == "Row \(laidOut.lowerBound)")
+        #expect(button.accessibilityLabel == "Open \(laidOut.lowerBound)")
+        let after = try #require(list.accessibilityElement(at: past) as? ListItemStandIn)
+        #expect(after.item == laidOut.upperBound)
+        #expect(list.index(ofAccessibilityElement: after) == past)
+        let last = try #require(list.accessibilityElement(at: count - 1) as? ListItemStandIn)
+        #expect(last.item == 999)
+
+        // Item 700 stands 700 - upperBound places after the first one past those laid out.
+        let far = past + 700 - laidOut.upperBound
+        let standIn = try #require(list.accessibilityElement(at: far) as? ListItemStandIn)
+        #expect(standIn.item == 700)
+        standIn.accessibilityElementDidBecomeFocused()
+        #expect(screen.stack.laidOutItems.contains(700))
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func eachElementOfAListTellsItsRowAmongAllItems() throws {
+        let screen = Screen()
+        let view = view(of: screen)
+        let elements = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+        let list = try #require(elements[1] as? ListAccessibilityContainer)
+
+        // A table of a thousand rows and one column.
+        #expect(list.accessibilityRowCount() == 1000)
+        #expect(list.accessibilityColumnCount() == 1)
+        let laidOut = screen.stack.laidOutItems
+        let row = laidOut.lowerBound + 2
+        let element = try #require(
+            list.accessibilityDataTableCellElement(forRow: row, column: 0)
+                as? NodeAccessibilityElement
+        )
+        #expect(element.accessibilityLabel == "Row \(row)")
+        #expect(element.accessibilityRowRange() == NSRange(location: row, length: 1))
+        #expect(element.accessibilityColumnRange() == NSRange(location: 0, length: 1))
+        let standIn = try #require(
+            list.accessibilityDataTableCellElement(forRow: 700, column: 0) as? ListItemStandIn
+        )
+        #expect(standIn.item == 700)
+        #expect(standIn.accessibilityRowRange() == NSRange(location: 700, length: 1))
+        #expect(standIn.accessibilityColumnRange() == NSRange(location: 0, length: 1))
+        #expect(list.accessibilityDataTableCellElement(forRow: 1000, column: 0) == nil)
+        #expect(list.accessibilityDataTableCellElement(forRow: 5, column: 1) == nil)
+
+        // Elements outside the list are in no table.
+        let title = try #require(elements[0] as? NodeAccessibilityElement)
+        #expect(title.accessibilityRowRange().location == NSNotFound)
+        view.host.detach()
+    }
+
+    @Test @MainActor
+    func theElementsOfOneItemShareItsRow() throws {
+        let screen = PairScreen()
+        let view = NodeView(root: screen)
+        view.zoom = 1
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 150)
+        view.layoutIfNeeded()
+        let elements = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+        let list = try #require(elements.first as? ListAccessibilityContainer)
+
+        let first = screen.stack.laidOutItems.lowerBound
+        // Items before those laid out stand in one each; the second item laid out gives the
+        // third and fourth elements after them.
+        let name = try #require(
+            list.accessibilityElement(at: first + 2) as? NodeAccessibilityElement
+        )
+        let button = try #require(
+            list.accessibilityElement(at: first + 3) as? NodeAccessibilityElement
+        )
+        #expect(button.accessibilityLabel == "Open \(first + 1)")
+        #expect(name.accessibilityRowRange() == NSRange(location: first + 1, length: 1))
+        #expect(button.accessibilityRowRange() == NSRange(location: first + 1, length: 1))
+        // The cell of the row is the item's first element.
+        #expect(list.accessibilityDataTableCellElement(forRow: first + 1, column: 0) === name)
+        view.host.detach()
+    }
+
+    /// A 300-point header, then the list, in one scroll: the list starts below the window.
+    @MainActor
+    private final class Below: Node {
+        let rows = NodeCache<Int, Row> { _ in Row() }
+        let header = Row().showing(-1)
+        lazy var stack = LazyStack<Numbered>(estimatedLength: 30) { [rows] item in
+            rows[item.id].showing(item.id)
+        }
+        lazy var scroll = Scroll(.vertical, content: Column(header: header, stack: stack))
+
+        override init() {
+            super.init()
+            stack.items = (0..<1000).map { Numbered(id: $0) }
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { scroll }
+        }
+
+        private final class Column: Node {
+            let header: Row
+            let stack: LazyStack<Numbered>
+
+            init(header: Row, stack: LazyStack<Numbered>) {
+                self.header = header
+                self.stack = stack
+                super.init()
+            }
+
+            override func layoutSpec() -> LayoutSpec? {
+                FlexContainer(.column) {
+                    header.size(width: 200, height: 300)
+                    stack
+                }
+            }
+        }
+    }
+
+    @Test @MainActor
+    func aListBelowTheWindowKeepsItsPlace() throws {
+        let below = Below()
+        let view = NodeView(root: below)
+        view.zoom = 1
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 150)
+        view.layoutIfNeeded()
+        let elements = try #require(view.accessibilityElements as? [UIAccessibilityElement])
+        let list = try #require(elements.last as? ListAccessibilityContainer)
+
+        // Nothing of it shows: an empty frame would be taken for none, and the items would
+        // lose where the list is. It takes the whole list's.
+        #expect(
+            list.accessibilityFrameInContainerSpace
+                == CGRect(x: 0, y: 300, width: 200, height: 30000)
+        )
+        let second = try #require(list.accessibilityElement(at: 1) as? UIAccessibilityElement)
+        #expect(
+            second.accessibilityFrameInContainerSpace == CGRect(x: 0, y: 30, width: 200, height: 30)
+        )
+        view.host.detach()
+    }
+#endif
+
+#if canImport(UIKit)
+    import LayoutCore
+    import Nodes
+    import Testing
+    import UIKit
+
+    @testable import NodesUIKit
+
+    /// A 30-point line that reads `label`, tapped when `tappable`.
+    @MainActor
+    private final class Line: Node {
+        init(_ label: String, tappable: Bool = false) {
+            super.init()
+            accessibility.label = label
+            if tappable {
+                onTap = {}
+            }
+        }
+
+        override var layoutContent: LeafContent? { .size(LayoutSize(width: 100, height: 30)) }
+    }
+
+    /// A title 30 points high on a box 50 points high, sticking to the top of a scroll, over
+    /// tappable lines.
+    @MainActor
+    private final class Section: Node {
+        let title = Line("Title")
+        let lines = (0..<10).map { Line("Line \($0)", tappable: true) }
+        lazy var scroll = Scroll(.vertical, content: Column(title: title, lines: lines))
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { scroll }
+        }
+    }
+
+    /// A box around the title, 20 points longer than it.
+    @MainActor
+    private final class Header: Node {
+        let title: Line
+
+        init(_ title: Line) {
+            self.title = title
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) { title }
+                .padding(top: 0, leading: 0, bottom: 20, trailing: 0)
+        }
+    }
+
+    @MainActor
+    private final class Column: Node {
+        let header: Header
+        let lines: [Line]
+
+        init(title: Line, lines: [Line]) {
+            header = Header(title)
+            self.lines = lines
+        }
+
+        override func layoutSpec() -> LayoutSpec? {
+            FlexContainer(.column) {
+                header.sticky(top: 0)
+                for line in lines { line }
+            }
+        }
+    }
+
+    @Test @MainActor
+    func anElementIsFoundWhereATouchReachesItsNodeNotUnderANodeOverIt() throws {
+        guard #available(iOS 18, tvOS 18, *) else { return }
+
+        let section = Section()
+        let view = NodeView(root: section)
+        view.zoom = 1
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 150)
+        view.layoutIfNeeded()
+        // The first line goes under the title; the second shows from 30 to 60, its top under
+        // the title's box, which ends at 50.
+        section.scroll.contentOffset = LayoutPoint(x: 0, y: 50)
+        view.layoutIfNeeded()
+
+        func label(at y: Double) -> String? {
+            (view.accessibilityHitTest(CGPoint(x: 20, y: y), event: nil) as? UIAccessibilityElement)?
+                .accessibilityLabel
+        }
+        func tapped(at y: Double) -> Bool {
+            defer { view.host.pointerCancelled() }
+            return view.host.pointerDown(at: LayoutPoint(x: 20, y: y))
+        }
+
+        // The middle of the second line is under the title's box: neither a touch nor an
+        // element reaches it there.
+        #expect(!tapped(at: 45))
+        #expect(label(at: 45) == nil)
+        #expect(tapped(at: 55))
+        #expect(label(at: 55) == "Line 1")
+        #expect(label(at: 15) == "Title")
+        view.host.detach()
+    }
+#endif
+
+#if canImport(UIKit)
+    import LayoutCore
+    import Nodes
+    import Testing
+    import UIKit
+
+    @testable import NodesUIKit
+
+    /// A focusable box that counts the arrows it takes.
+    @MainActor
+    private final class Mover: Node {
+        var moves: [FocusMove] = []
+
+        override init() {
+            super.init()
+            isFocusable = true
+            onMoveCommand = { [unowned self] move in
+                moves.append(move)
+                return true
+            }
+        }
+
+        override var layoutContent: LeafContent? { .size(LayoutSize(width: 50, height: 30)) }
+    }
+
+    @Test @MainActor
+    func theFocusSystemAskingSeveralTimesForOnePressMovesOnce() async {
+        let mover = Mover()
+        let view = NodeView(root: mover)
+        view.frame = CGRect(x: 0, y: 0, width: 100, height: 100)
+        view.layoutIfNeeded()
+        view.host.focus(mover.id)
+
+        // As the focus system asks for one press: once for each place it looks at.
+        for _ in 0..<5 {
+            #expect(view.takesMove(.down))
+        }
+        #expect(mover.moves == [.down])
+
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+        #expect(view.takesMove(.down))
+        #expect(mover.moves == [.down, .down])
+        view.host.detach()
+    }
+#endif
