@@ -16,14 +16,8 @@ import Foundation
 /// A failed fetch is not stored, and every caller waiting for it gets the same error. A stale
 /// value counts as a miss here; to show a stale value while loading, read the cache first.
 public actor CachedLoader {
-    private struct Flight {
-        let id: UUID
-        let task: Task<Void, Never>
-        var waiters: [UUID: CheckedContinuation<Data, any Error>] = [:]
-    }
-
     private let cache: any Cache
-    private var flights: [String: Flight] = [:]
+    private let loads = SharedLoads<String, Data, EqualDemand>()
 
     public init(cache: any Cache) {
         self.cache = cache
@@ -45,102 +39,37 @@ public actor CachedLoader {
     ) async throws -> Data {
         if case .hit(let data, _) = try await cache.get(key) { return data }
 
-        // The cache read suspended, so another call may have started the fetch meanwhile.
-        if flights[key] == nil { start(key, timeToLive: timeToLive, fetch: fetch) }
-        return try await wait(for: key)
+        let cache = cache
+        return try await loads.value(for: key) {
+            let data = try await fetch()
+            // A load cancelled by now — every caller left, or the loader was cleared — stores
+            // nothing.
+            try Task.checkCancellation()
+            try? await cache.set(data, for: key, timeToLive: timeToLive)
+            // Cancelled while the value was being written: the clearing has run or is about to,
+            // and the write must not outlive it, so it is taken back.
+            if Task.isCancelled {
+                _ = try? await cache.remove(key)
+                throw CancellationError()
+            }
+            return data
+        }
     }
 
     /// Removes the value of `key` from the cache and stops a load of it that is running; the
     /// callers waiting for it throw `CancellationError`.
     public func remove(_ key: String) async throws(CacheError) {
-        cancelFlight(key)
+        await loads.cancel(key)
         try await cache.remove(key)
     }
 
     /// Cancels every running load and clears the cache. See the type's documentation.
     public func invalidate() async throws(CacheError) {
-        for key in Array(flights.keys) { cancelFlight(key) }
+        await loads.cancelAll()
         try await cache.removeAll()
     }
 
     /// How many callers are waiting for the load of `key`; for tests, which need to know that
     /// every caller has joined before they let the fetch finish.
-    func waiterCount(for key: String) -> Int { flights[key]?.waiters.count ?? 0 }
-
-    private func start(
-        _ key: String,
-        timeToLive: TimeInterval?,
-        fetch: @escaping @Sendable () async throws -> Data
-    ) {
-        let flightID = UUID()
-        let task = Task { [weak self] in
-            let result: Result<Data, any Error>
-            do {
-                result = .success(try await fetch())
-            } catch {
-                result = .failure(error)
-            }
-            await self?.finish(key, flight: flightID, timeToLive: timeToLive, result: result)
-        }
-        flights[key] = Flight(id: flightID, task: task)
-    }
-
-    private func finish(
-        _ key: String,
-        flight flightID: UUID,
-        timeToLive: TimeInterval?,
-        result: Result<Data, any Error>
-    ) async {
-        // A flight that was cancelled has nothing left to deliver or store.
-        guard flights[key]?.id == flightID else { return }
-
-        if case .success(let data) = result {
-            // The flight stays registered during the write, so callers that arrive now join it
-            // and one that is cancelled now is still found.
-            try? await cache.set(data, for: key, timeToLive: timeToLive)
-            if flights[key]?.id != flightID {
-                // The load was cancelled or the loader cleared while the value was being
-                // written, so the write must not outlive that: take it back.
-                _ = try? await cache.remove(key)
-                return
-            }
-        }
-        guard let current = flights.removeValue(forKey: key) else { return }
-
-        for waiter in current.waiters.values { waiter.resume(with: result) }
-    }
-
-    private func wait(for key: String) async throws -> Data {
-        let waiter = UUID()
-        return try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
-                flights[key]?.waiters[waiter] = continuation
-                // A task that was cancelled before it got here has already run its handler.
-                if Task.isCancelled { dropWaiter(waiter, of: key) }
-            }
-        } onCancel: {
-            Task { await self.dropWaiter(waiter, of: key) }
-        }
-    }
-
-    private func dropWaiter(_ waiter: UUID, of key: String) {
-        guard var flight = flights[key],
-            let continuation = flight.waiters.removeValue(forKey: waiter)
-        else { return }
-
-        continuation.resume(throwing: CancellationError())
-        if flight.waiters.isEmpty {
-            flight.task.cancel()
-            flights[key] = nil
-        } else {
-            flights[key] = flight
-        }
-    }
-
-    private func cancelFlight(_ key: String) {
-        guard let flight = flights.removeValue(forKey: key) else { return }
-
-        flight.task.cancel()
-        for waiter in flight.waiters.values { waiter.resume(throwing: CancellationError()) }
-    }
+    func waiterCount(for key: String) async -> Int { await loads.waiterCount(for: key) }
 }

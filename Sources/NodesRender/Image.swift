@@ -7,6 +7,7 @@
     import ThemeCore
     import QuartzCore
     import StateCore
+    import StorageCore
     import Tracing
     import os
 
@@ -169,21 +170,12 @@
             var lastUse: UInt64
         }
 
-        private struct InFlight {
-            let id: UInt64
-            let cacheGeneration: UInt64
-            let task: Task<LoadedImage, Error>
-            let urgency: SharedUrgency
-            var waiters: Set<UInt64>
-        }
-
         private let decodeGate: DecodeGate
         private var decoded: [DecodedKey: DecodedEntry] = [:]
-        private var inFlight: [DecodedKey: InFlight] = [:]
+        /// Decodes running, one per key, shared by the callers that ask for it meanwhile.
+        private let decodes = SharedLoads<DecodedKey, LoadedImage, SharedUrgency>()
         private var decodedBytes = 0
         private var clock: UInt64 = 0
-        private var nextFlightID: UInt64 = 0
-        private var nextWaiterID: UInt64 = 0
         private var cacheGeneration: UInt64 = 0
         private var decodeCount = 0
         private var runningDecodes = 0
@@ -265,65 +257,30 @@
             let key = DecodedKey(digest: digest, pixelDimension: limit)
             if let image = reuse(key) { return image }
 
-            nextWaiterID &+= 1
-            let waiterID = nextWaiterID
-            let flight: InFlight
-            if var existing = inFlight[key] {
-                existing.waiters.insert(waiterID)
-                existing.urgency.add(urgency, for: waiterID)
-                inFlight[key] = existing
-                flight = existing
-            } else {
-                nextFlightID &+= 1
-                let id = nextFlightID
-                let shared = SharedUrgency()
-                shared.add(urgency, for: waiterID)
-                // Decodes run one at a time so several simultaneous images do not create
-                // several full-sized bitmaps at once. They wait in the gate rather than on
-                // this actor, which stays free for cache hits and cancellations; a decode
-                // cancelled while queued leaves the queue without running.
-                let task = Task.detached(priority: Task.currentPriority) { [decodeGate] in
-                    try await decodeGate.acquire(isUrgent: { shared.isUrgent })
-                    await self.decodeStarted()
-                    let interval = Trace.begin(.decode, "\(data.count) bytes limit \(limit ?? 0)")
-                    let result = Result { try Self.decode(data, pixelDimension: limit) }
-                    Trace.end(interval)
-                    await self.decodeFinished()
-                    await decodeGate.release()
-                    return try result.get()
-                }
-                flight = InFlight(
-                    id: id,
-                    cacheGeneration: cacheGeneration,
-                    task: task,
-                    urgency: shared,
-                    waiters: [waiterID]
-                )
-                inFlight[key] = flight
-                decodeCount &+= 1
+            // Taken before the decode is joined: a clear that comes before it starts leaves its
+            // result out of the cache, as one that comes while it runs does.
+            let generation = cacheGeneration
+            // Decodes run one at a time so several simultaneous images do not create several
+            // full-sized bitmaps at once. They wait in the gate rather than on this actor, which
+            // stays free for cache hits and cancellations; a decode cancelled while queued
+            // leaves the queue without running.
+            let image = try await decodes.value(for: key, want: urgency) {
+                [decodeGate] shared in
+                await self.decodeQueued()
+                try await decodeGate.acquire(isUrgent: { shared.isUrgent })
+                await self.decodeStarted()
+                let interval = Trace.begin(.decode, "\(data.count) bytes limit \(limit)")
+                let result = Result { try Self.decode(data, pixelDimension: limit) }
+                Trace.end(interval)
+                await self.decodeFinished()
+                await decodeGate.release()
+                return try result.get()
             }
-
-            let flightID = flight.id
-            return try await withTaskCancellationHandler {
-                do {
-                    let image = try await flight.task.value
-                    try Task.checkCancellation()
-                    if inFlight[key]?.id == flightID {
-                        inFlight[key] = nil
-                        if flight.cacheGeneration == cacheGeneration {
-                            retain(image, for: key)
-                        }
-                    }
-                    return image
-                } catch {
-                    removeWaiter(waiterID, from: key, flightID: flightID)
-                    throw error
-                }
-            } onCancel: {
-                Task {
-                    await self.removeWaiter(waiterID, from: key, flightID: flightID)
-                }
+            // Every caller of a shared decode gets here; the first keeps the bitmap.
+            if generation == cacheGeneration, decoded[key] == nil {
+                retain(image, for: key)
             }
+            return image
         }
 
         private func reuse(_ key: DecodedKey) -> LoadedImage? {
@@ -353,6 +310,10 @@
             (decoded.count, decodedBytes, decodeCount, peakRunningDecodes, sourceReads)
         }
 
+        private func decodeQueued() {
+            decodeCount &+= 1
+        }
+
         private func decodeStarted() {
             runningDecodes += 1
             peakRunningDecodes = max(peakRunningDecodes, runningDecodes)
@@ -360,18 +321,6 @@
 
         private func decodeFinished() {
             runningDecodes -= 1
-        }
-
-        private func removeWaiter(_ id: UInt64, from key: DecodedKey, flightID: UInt64) {
-            guard var flight = inFlight[key], flight.id == flightID else { return }
-            flight.waiters.remove(id)
-            flight.urgency.remove(id)
-            if flight.waiters.isEmpty {
-                flight.task.cancel()
-                inFlight[key] = nil
-            } else {
-                inFlight[key] = flight
-            }
         }
 
         private func retain(_ image: LoadedImage, for key: DecodedKey) {
@@ -489,7 +438,7 @@
     /// The urgencies of the callers sharing one decode or download: it is urgent while any
     /// of them is. It tells its own watcher when that may have changed — a caller came or
     /// left, or one of theirs changed.
-    final class SharedUrgency: Sendable {
+    final class SharedUrgency: LoadDemand {
         private struct State {
             var callers: [UInt64: (urgency: LoadUrgency, token: UInt64)] = [:]
             var changed: (@Sendable () -> Void)?

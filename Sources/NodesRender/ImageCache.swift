@@ -4,6 +4,7 @@
     import ImageIO
     import NetworkCore
     import os
+    import StorageCore
 
     /// Metadata kept when an image is written to the disk cache.
     ///
@@ -93,18 +94,11 @@
         /// Cancellation: not applicable.
         public let session: URLSession
 
-        private struct Download {
-            let id: UInt64
-            let task: Task<Data, Error>
-            let urgency: SharedUrgency
-            var waiters: Set<UInt64>
-        }
-
         /// Marks the files written under this cache's processing policies. Caches that share a
         /// directory count limits and ages only over files carrying their own mark.
         private let policyTag: String
-        private var downloads: [URL: Download] = [:]
-        private var nextID: UInt64 = 0
+        /// Downloads running, one per URL, shared by the callers that ask for it meanwhile.
+        private let downloads = SharedLoads<URL, Data, SharedUrgency>()
         /// Bytes of this cache's entries as last counted plus the writes since, or `nil`
         /// before the first count.
         private var storedBytes: Int?
@@ -156,41 +150,11 @@
             if url.isFileURL { return try Data(contentsOf: url) }
             if let cached = try freshData(for: url) { return cached }
 
-            nextID &+= 1
-            let waiter = nextID
-            let download: Download
-            if var existing = downloads[url] {
-                existing.waiters.insert(waiter)
-                existing.urgency.add(urgency, for: waiter)
-                downloads[url] = existing
-                download = existing
-            } else {
-                let id = waiter
-                let shared = SharedUrgency()
-                shared.add(urgency, for: waiter)
-                download = Download(
-                    id: id,
-                    task: Task { [removals] in
-                        try await self.download(
-                            url,
-                            id: id,
-                            urgency: shared,
-                            removalsAtStart: removals
-                        )
-                    },
-                    urgency: shared,
-                    waiters: [waiter]
-                )
-                downloads[url] = download
-            }
-
-            let id = download.id
-            return try await withTaskCancellationHandler {
-                let data = try await download.task.value
-                try Task.checkCancellation()
-                return data
-            } onCancel: {
-                Task { await self.leave(waiter, from: url, id: id) }
+            // Taken before the download is joined: a removal of all entries that comes before
+            // it starts keeps its result off the disk, as one that comes while it runs does.
+            let removals = removals
+            return try await downloads.value(for: url, want: urgency) { urgency in
+                try await self.download(url, urgency: urgency, removalsAtStart: removals)
             }
         }
 
@@ -365,21 +329,17 @@
 
         func directoryScanCount() -> Int { directoryScans }
 
-        func downloadWaiters(for url: URL) -> Int {
-            downloads[url]?.waiters.count ?? 0
+        func downloadWaiters(for url: URL) async -> Int {
+            await downloads.waiterCount(for: url)
         }
 
-        /// `removalsAtStart` is taken when the download is created, not when its task first
+        /// `removalsAtStart` is taken when a caller asks, not when the download's task first
         /// runs: a removal of all entries can reach the actor in between.
         private func download(
             _ url: URL,
-            id: UInt64,
             urgency: SharedUrgency,
             removalsAtStart: UInt64
         ) async throws -> Data {
-            // Later loads find the file on disk, or start over after a failure.
-            defer { if downloads[url]?.id == id { downloads[url] = nil } }
-
             let file = fileURL(for: url)
             // A stale entry with validators is checked with the server rather than fetched.
             let stored = HTTPValidators.read(at: file).flatMap { $0.canRevalidate ? $0 : nil }
@@ -397,7 +357,6 @@
                     // there is nothing to keep, so the image is fetched whole.
                     return try await download(
                         url,
-                        id: id,
                         urgency: urgency,
                         removalsAtStart: removalsAtStart
                     )
@@ -452,18 +411,6 @@
             }
             if let limit, result.0.count > limit { throw ImageCacheError.responseTooLarge }
             return result
-        }
-
-        private func leave(_ waiter: UInt64, from url: URL, id: UInt64) {
-            guard var download = downloads[url], download.id == id else { return }
-            download.waiters.remove(waiter)
-            download.urgency.remove(waiter)
-            if download.waiters.isEmpty {
-                download.task.cancel()
-                downloads[url] = nil
-            } else {
-                downloads[url] = download
-            }
         }
 
         private func fileURL(for url: URL) -> URL {

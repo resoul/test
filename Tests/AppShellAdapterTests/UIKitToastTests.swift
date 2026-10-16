@@ -80,4 +80,32 @@
         StateUpdates.flush()
         #expect(controller.pill === pill)
     }
+    @Test @MainActor
+    func aToastAnotherJoinsChangesItsWordsInTheSameView() throws {
+        let (controller, session) = try controller()
+        func deleted() -> Toast {
+            Toast("Message deleted", group: "deleted", counted: { "\($0) messages deleted" })
+        }
+
+        session.show(deleted())
+        StateUpdates.flush()
+        let pill = try #require(controller.pill)
+        session.show(deleted())
+        StateUpdates.flush()
+        #expect(controller.pill === pill)
+        #expect(pill.label.text == "2 messages deleted")
+
+        // Gaining an action builds it again, in the same place.
+        session.show(
+            Toast("Message deleted", action: ToastAction("Undo") {}, group: "deleted")
+        )
+        StateUpdates.flush()
+        let rebuilt = try #require(controller.pill)
+        #expect(rebuilt !== pill)
+        #expect(pill.superview == nil)
+        #expect(rebuilt.label.text == "Message deleted")
+        if UIDevice.current.userInterfaceIdiom != .tv {
+            #expect(rebuilt.actionButton.title(for: .normal) == "Undo")
+        }
+    }
 #endif
