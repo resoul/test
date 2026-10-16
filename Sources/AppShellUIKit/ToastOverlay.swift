@@ -77,9 +77,25 @@
             watch?.track { [weak self] in self?.update() }
         }
 
-        /// Shows what the session shows: a new toast comes in, the same stays, none goes.
+        /// Shows what the session shows: a new toast comes in, the same stays, none goes. A
+        /// toast another one joined keeps its place and changes its words, said again to
+        /// VoiceOver.
         func update() {
             let shown = session.shownToast
+            if let shown, shown.id == shownID, let pill {
+                let said = pill.label.text
+                if pill.refresh(shown) {
+                    if pill.label.text != said {
+                        UIAccessibility.post(notification: .announcement, argument: shown.message)
+                    }
+                    return
+                }
+                // It gained or lost its action: it is built again, without leaving and coming in.
+                pill.removeFromSuperview()
+                self.pill = nil
+                add(shown, animated: false)
+                return
+            }
             guard shown?.id != shownID else { return }
 
             shownID = shown?.id
@@ -94,18 +110,24 @@
             }
             guard let shown else { return }
 
-            let pill = ToastPillView(shown.toast, session: session)
+            add(shown, animated: true)
+        }
+
+        private func add(_ shown: ShownToast, animated: Bool) {
+            let pill = ToastPillView(shown, session: session)
             self.pill = pill
             view.addSubview(pill)
             pill.place(in: view)
             view.layoutIfNeeded()
-            pill.alpha = 0
-            pill.transform = CGAffineTransform(translationX: 0, y: 16)
-            UIView.animate(withDuration: 0.25) {
-                pill.alpha = 1
-                pill.transform = .identity
+            if animated {
+                pill.alpha = 0
+                pill.transform = CGAffineTransform(translationX: 0, y: 16)
+                UIView.animate(withDuration: 0.25) {
+                    pill.alpha = 1
+                    pill.transform = .identity
+                }
             }
-            UIAccessibility.post(notification: .announcement, argument: shown.toast.message)
+            UIAccessibility.post(notification: .announcement, argument: shown.message)
             // While VoiceOver reads it, it stays.
             if UIAccessibility.isVoiceOverRunning {
                 session.holdToast()
@@ -121,7 +143,8 @@
         let actionButton = UIButton(type: .system)
         private let hasAction: Bool
 
-        init(_ toast: Toast, session: SceneSession) {
+        init(_ shown: ShownToast, session: SceneSession) {
+            let toast = shown.toast
             self.session = session
             // A TV has no button to take an action with.
             hasAction = toast.action != nil && UIDevice.current.userInterfaceIdiom != .tv
@@ -140,7 +163,7 @@
                 blur.bottomAnchor.constraint(equalTo: bottomAnchor),
             ])
 
-            label.text = toast.message
+            label.text = shown.message
             label.font = .preferredFont(forTextStyle: .body)
             label.adjustsFontForContentSizeCategory = true
             label.numberOfLines = 0
@@ -195,6 +218,20 @@
 
         required init?(coder: NSCoder) {
             nil
+        }
+
+        /// Shows `shown`, a toast that others joined, in place: its words and its action's title.
+        /// Returns `false` when it gained or lost its action and has to be built again.
+        func refresh(_ shown: ShownToast) -> Bool {
+            let wantsAction =
+                shown.toast.action != nil && UIDevice.current.userInterfaceIdiom != .tv
+            guard wantsAction == hasAction else { return false }
+
+            label.text = shown.message
+            if let action = shown.toast.action {
+                actionButton.setTitle(action.title, for: .normal)
+            }
+            return true
         }
 
         func actionTapped() {

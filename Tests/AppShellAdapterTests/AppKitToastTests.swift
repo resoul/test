@@ -101,4 +101,30 @@
         try await Task.sleep(nanoseconds: 1_400_000_000)
         #expect(session.shownToast == nil, "let go: it goes")
     }
+    @Test @MainActor
+    func aToastAnotherJoinsChangesItsWordsInTheSameView() throws {
+        let (overlay, session) = try overlay()
+        func deleted() -> Toast {
+            Toast("Message deleted", group: "deleted", counted: { "\($0) messages deleted" })
+        }
+
+        session.show(deleted())
+        StateUpdates.flush()
+        let pill = try #require(overlay.pill)
+        session.show(deleted())
+        StateUpdates.flush()
+        #expect(overlay.pill === pill)
+        #expect(pill.label.stringValue == "2 messages deleted")
+        #expect(pill.label.accessibilityLabel() == "2 messages deleted")
+
+        // Gaining an action builds it again, in the same place.
+        session.show(
+            Toast("Message deleted", action: ToastAction("Undo") {}, group: "deleted")
+        )
+        StateUpdates.flush()
+        let rebuilt = try #require(overlay.pill)
+        #expect(rebuilt !== pill)
+        #expect(pill.superview == nil)
+        #expect(rebuilt.actionButton.title == "Undo")
+    }
 #endif

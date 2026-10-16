@@ -207,7 +207,7 @@
 | `Image`, `ImagePipeline`, `ImagePlaceholder`, `ImageLoadPhase` | статичная картинка как нода; placeholder и состояние загрузки; превью, декодирование под рамку × масштаб, общий ограниченный кэш bitmap и защита от запоздавшего результата | [11](11-image.md) |
 | `DecodeGate`, `ImagePipeline.load` (очередь декодирования) | декодирования pipeline идут по одному вне актора; отменённый в очереди запрос уходит без работы; дефект #155 | [11](11-image.md), [defects](defects.md) |
 | `HTTPValidators` (`read`/`write` — расширенный атрибут, `freshUntil`, `forbidsStoring`); `ImageCache.freshData`, условный запрос в `fetch`, 304 в `download`, свежесть в `stamp` | HTTP-кэширование: `Cache-Control`, `Expires`, `Age`, `ETag`/`Last-Modified` | [11](11-image.md#http-кэширование); RFC 9111 |
-| `DownloadWatch` (приоритет задачи и предел размера), `ImageCache.load(_:urgency:)`, `Download.urgency`; `LoadUrgency.watch`, `SharedUrgency.watch`/`deinit` | загрузка картинки на экране — высокий приоритет, меняется на ходу | [11](11-image.md#приоритет-видимых) |
+| `DownloadWatch` (приоритет задачи и предел размера), `ImageCache.load(_:urgency:)`; `LoadUrgency.watch`, `SharedUrgency` (`LoadDemand`), `watch`/`deinit` | загрузка картинки на экране — высокий приоритет, меняется на ходу | [11](11-image.md#приоритет-видимых) |
 | `DecodeGate.release` — первый срочный; `LoadUrgency`, `SharedUrgency`, `InFlight.urgency`; `Image.urgency`, `screenChanged` | картинки на экране декодируются раньше запаса | [11](11-image.md#приоритет-видимых) |
 | `Node.tracksScreen`, `isOnScreen`, `screenChanged`, `shownRect`, `updateScreen`; `NodeHost.screenTrackers` | видимость ноды — по запросу, после проходов и движений прокрутки | [11](11-image.md#приоритет-видимых) |
 | `ImagePipeline.init(..., decodeGate:)` (внутренний) | тест держит очередь сам, без расчёта на время | тест `thePipelineDecodesAnImageOnScreenBeforeOnesQueuedEarlier` |
@@ -216,12 +216,12 @@
 | `LayerDrawing.layerImage`, `LayerImage`, `LayerRenderer.show`, `fillCrop`, `Image.solidImage` | картинка в `contents` без копии под рамку; вписывание — gravity и `contentsRect`; placeholder — один пиксель | [11](11-image.md) |
 | `LayerDrawing.prepareDrawing`, `LayerRenderer.draw` | рендерер сообщает размер и масштаб до рисования, чтобы нода могла обновить детализацию | [11](11-image.md) |
 | `ImageCache`, `ImageCacheConfiguration` | дисковый кэш URL, предел/возраст, отдельные настройки метаданных и PNG-оптимизации | [11](11-image.md) |
-| `ImageCache.load`, `ImageCache.download`, `leave` | одна загрузка на URL для одновременных запросов; последний ушедший отменяет её до записи; дефект #158 | [11](11-image.md), [defects](defects.md) |
+| `ImageCache.load` (`downloads: SharedLoads`), `ImageCache.download`; `ImagePipeline.load` (`decodes`, `decodeQueued`) | одна загрузка на URL и одно декодирование на ключ для одновременных запросов; последний ушедший отменяет загрузку до записи; дефект #158; [14](14-storage-and-network.md#s8-общая-загрузка-2026-10-16) | [11](11-image.md), [defects](defects.md) |
 | `ImageCache.session`, `maximumDownloadBytes`, `DownloadLimit` | сеть через переданную сессию; предел тела ответа по счётчикам байтов задачи (асинхронный `URLSession` не отдаёт делегату задачи колбэки данных); дефект #159 | [11](11-image.md), [defects](defects.md) |
 | `ImageCache.removeAll`, `remove(for:)`, `removeExpired`, `entries`, `storedBytes` | только свои записи (имя — 64 hex); очистка; счётчик размера с пересчётом при лимите и раз в 64 записи; загрузка после `removeAll` не пишется; дефект #161 | [11](11-image.md), [defects](defects.md) |
 | `ImageCache.policyTag`, `fileURL`, `Naming` | имя записи — метка политик и отпечаток URL; лимит и срок — по записям своих политик в общей папке; прежние имена удаляются; дефект #162 | [11](11-image.md), [defects](defects.md) |
 | `Image.mountedChanged`, `isSuspended`, `startFirstLoad` | уход из дерева отменяет загрузки и отпускает bitmap, возвращение возобновляет; дефект #163 | [11](11-image.md), [defects](defects.md) |
-| `ImageCache.download(removalsAtStart:)` | счётчик `removeAll()` берётся при создании загрузки, не при старте её задачи; дефект #164 | [defects](defects.md) |
+| `ImageCache.download(removalsAtStart:)` | счётчик `removeAll()` берётся, когда вызывающий просит картинку, не при старте задачи загрузки; дефект #164 | [defects](defects.md) |
 | `ImageCache.prepare` (метаданные), `exifAndTIFF` | метаданные источника передаются в copy-source (иначе Image I/O пишет пустые и теряет ориентацию); для XMP-политики — только EXIF/TIFF; дефект #166 | [11](11-image.md), [defects](defects.md) |
 | `ImageCache.load` (`processingFailed`) | формат, к которому политика метаданных неприменима, показывается без записи на диск; дефект #156 | [11](11-image.md), [defects](defects.md) |
 | `TextLayout(rightToLeft:)`, `Text.drawingRevision` с направлением хоста | `leading` у правого края в RTL; смена направления перерисовывает | [03](03-layout-api.md) |
@@ -343,6 +343,7 @@
 | `Application.main`, `ShellApplicationDelegate`, `ShellSceneDelegate` (UIKit); `Application.main`, `ShellApplicationDelegate`, `NSMenu(standardAround:)` (AppKit) | точка входа: сцены UIKit с отключением отдельно от уничтожения; окна и стандартные меню Mac | [12](12-app-layer.md) (A2) |
 | `EmbeddedNode`, `EmbeddedItem`, `NodeHost.embeddedItems`/`keyboardInset`/`reveal`, `Node.keyboardInset`, `Scroll.keyboardDismissal`, `KeyboardDismissal`; `TextField`, `ReturnKey`, `TextContent` (NodesRender); `EmbeddedHolder`, `NodeView.placeEmbeddedViews`/`embeddedView(of:)`/`revealEditingField`, `FieldView`, `KeyboardFollowing`, `NodeView.keyboardProbe` (UIKit); `Demo` `FormNode`, `DemoRoute.form` | вложенный системный вид, поле ввода, клавиатура (прототип) | [13](13-controls.md) (прототип C2–C4); дефекты 208, 210 |
 | `Control`, `ControlState`, `ToolTipItem`, `Node.toolTip`/`hoverChanged`/`isInteractive`/`shownToolTip`, `NodeHost.pointerMoved`/`toolTip(at:)`/`toolTipItems`/`canPerform(_:from:)`/`perform(_:from:)`; `Button` на `Control`, `Button(command:)` (NodesRender); `NodeNSView.mouseMoved`/`updateToolTips`, `NSViewToolTipOwner` (AppKit); `NodeView.followPointer`, `PointerTracker` (UIKit); `Demo` `FollowBadge` | общий контрол, наведение, подсказки | [13](13-controls.md) (C0) |
+| `Toast` (`group`, `counted`, `isJoined(by:)`, `joining`), `ShownToast` (`count`, `message`), `ToastQueueing`, `Shell.toastQueueing`, `SceneSession.show`/`queuedToasts`/`dismissToast`/`dismissAllToasts`/`restartToastTimer`; `ToastController.update`/`ToastPillView.refresh` (UIKit, AppKit) | склейка тостов одной группы со счётчиком и общим действием (новейшее первым), очередь по настройке, удержание при входе; дефект #232 | [13](13-controls.md#c5-шаг-3-очередь-и-склейка-тостов-2026-10-16), [defects](defects.md) |
 
 ## `Sources/StorageCore`, `Sources/StorageFoundation`
 
@@ -361,7 +362,8 @@
 | `Cache.get(_:for:)`/`set(_:for:)` для `Codable` | JSON поверх байтов; не расшифровавшееся значение — промах | [14](14-storage-and-network.md#6-cache-общий-кэш-и-существующие-изображения) |
 | `MemoryCache` | кэш в памяти: срок, предел байтов, вытеснение просроченных, затем LRU | [14](14-storage-and-network.md#6-cache-общий-кэш-и-существующие-изображения) |
 | `DiskCache` (`loadIndex`, `acquire`/`release`, `encode`/`decode`, `fileName`) | кэш на `FileStore`: индекс из имён файлов, заголовок с ключом и суммой, версия, операции по одной | [14](14-storage-and-network.md#6-cache-общий-кэш-и-существующие-изображения) |
-| `CachedLoader` (`value(for:)`, `invalidate()`, `dropWaiter`, `finish`) | общая загрузка с независимыми ожидающими; очистка отменяет загрузки и берёт назад позднюю запись | [14](14-storage-and-network.md#6-cache-общий-кэш-и-существующие-изображения) (поколение и отмена) |
+| `CachedLoader` (`value(for:)`, `invalidate()`) | общая загрузка с независимыми ожидающими; очистка отменяет загрузки и берёт назад позднюю запись (проверка `Task.isCancelled` после записи) | [14](14-storage-and-network.md#6-cache-общий-кэш-и-существующие-изображения) (поколение и отмена) |
+| `SharedLoads`, `LoadDemand`, `EqualDemand` | одна загрузка на ключ: отменённый ждущий уходит сразу, последний ушедший отменяет загрузку; спрос ждущих читается по ходу | [14](14-storage-and-network.md#s8-общая-загрузка-2026-10-16) |
 
 ## `Sources/StorageGRDB`
 

@@ -312,8 +312,10 @@ public final class SceneSession: CommandResponder {
 
     private let activationState = State(SceneActivation.background)
 
-    // The toast over the window: what shows, and the timer that takes it away.
+    // The toast over the window: what shows, what waits behind it, and the timer that takes
+    // it away.
     let toastState = State<ShownToast?>(nil)
+    var toastQueue: [ShownToast] = []
     var toastTimer: Task<Void, Never>?
     var toastDeadline: Date?
     var toastRemaining: Double?
@@ -436,6 +438,10 @@ public final class Shell: CommandResponder {
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public var linkQueueLimit = 16
+
+    /// What a window does with a toast asked for while another one shows: replace it, the
+    /// default, or queue it. It applies to every window, at the next toast each one shows.
+    public var toastQueueing = ToastQueueing.replace
 
     /// How the platform opens scenes; the adapter sets it.
     package var platformScenes: PlatformScenes?
@@ -642,7 +648,7 @@ public final class Shell: CommandResponder {
     /// stack in it of its screens.
     package func sessionClosed(_ session: SceneSession) {
         sessionsState.value.removeAll { $0 === session }
-        session.dismissToast()
+        session.dismissAllToasts()
         (session.content as? any ClosableContent)?.closeContent()
         session.content.outer = nil
         session.outer = nil

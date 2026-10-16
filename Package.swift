@@ -130,7 +130,7 @@ let package = Package(
             name: "NodesRender",
             dependencies: [
                 "Nodes", "LayoutCore", "StateCore", "ThemeCore", "RichTextCore", "NetworkCore",
-                "LocalizationCore", "Tracing",
+                "StorageCore", "LocalizationCore", "Tracing",
             ]
         ),
         .target(

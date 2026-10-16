@@ -141,3 +141,141 @@ func theShellShowsAToastInTheActiveWindowAndSaysWhenThereIsNone() throws {
     shell.sessionClosed(second)
     #expect(second.shownToast == nil)
 }
+
+@Test @MainActor
+func toastsOfOneGroupAreOneThatCountsThemAndUndoesTheNewestFirst() throws {
+    let (_, window) = try session()
+    var undone: [Int] = []
+    func deleted(_ number: Int) -> Toast {
+        Toast(
+            "Message deleted",
+            action: ToastAction("Undo") { undone.append(number) },
+            group: "deleted",
+            counted: { "\($0) messages deleted" }
+        )
+    }
+
+    window.show(deleted(1))
+    let first = try #require(window.shownToast)
+    #expect(first.count == 1)
+    #expect(first.message == "Message deleted")
+
+    window.show(deleted(2))
+    window.show(deleted(3))
+    let joined = try #require(window.shownToast)
+    #expect(joined.id == first.id, "the same toast, shown in place")
+    #expect(joined.count == 3)
+    #expect(joined.message == "3 messages deleted")
+
+    window.performToastAction()
+    #expect(undone == [3, 2, 1])
+    #expect(window.shownToast == nil)
+
+    // Another group is another toast; without `counted` the newest words show.
+    window.show(Toast("Archived 1", group: "archived"))
+    let archived = try #require(window.shownToast)
+    window.show(Toast("Archived 2", group: "archived"))
+    #expect(window.shownToast?.id == archived.id)
+    #expect(window.shownToast?.message == "Archived 2")
+    window.show(Toast("Message deleted", group: "deleted"))
+    #expect(window.shownToast?.id != archived.id)
+}
+
+@Test @MainActor
+func aJoinedToastKeepsAnActionAndStaysPersistentIfEitherWas() throws {
+    let (_, window) = try session()
+    var undone = 0
+    window.show(
+        Toast("Could not send", action: ToastAction("Retry") { undone += 1 }, group: "send")
+    )
+    window.show(Toast("Could not send", persistent: true, group: "send"))
+
+    let joined = try #require(window.shownToast)
+    #expect(joined.toast.action?.title == "Retry")
+    #expect(joined.toast.isPersistent)
+    window.performToastAction()
+    #expect(undone == 1)
+}
+
+@Test @MainActor
+func aHeldToastStaysHeldWhenAnotherJoinsIt() async throws {
+    let (_, window) = try session()
+    window.show(Toast("Deleted", duration: 0.3, group: "deleted"))
+    window.holdToast()
+    window.show(Toast("Deleted", duration: 0.3, group: "deleted"))
+    await wait(0.6)
+    #expect(window.shownToast != nil, "the finger is still on it")
+
+    window.resumeToast()
+    await wait(0.6)
+    #expect(window.shownToast == nil)
+}
+
+@Test @MainActor
+func aQueueingShellShowsToastsOneAfterAnotherAndJoinsTheWaitingOnes() async throws {
+    let (shell, window) = try session()
+    shell.toastQueueing = .queue
+
+    window.show(Toast("First", duration: 0.2))
+    window.show(Toast("Second", duration: 5))
+    window.show(Toast("Deleted 1", group: "deleted", counted: { "\($0) deleted" }))
+    window.show(Toast("Deleted 2", group: "deleted", counted: { "\($0) deleted" }))
+    // The same words without a group are the waiting toast again, not one more.
+    window.show(Toast("Second", duration: 5))
+    #expect(window.shownToast?.message == "First")
+    #expect(window.queuedToasts.map(\.message) == ["Second", "2 deleted"])
+
+    // The first goes by itself and the next comes in its place.
+    await wait(0.4)
+    #expect(window.shownToast?.message == "Second")
+    #expect(window.queuedToasts.map(\.message) == ["2 deleted"])
+
+    // Closing one shows the next; taking its action too.
+    window.dismissToast()
+    #expect(window.shownToast?.message == "2 deleted")
+    #expect(window.queuedToasts.isEmpty)
+    window.dismissToast()
+    #expect(window.shownToast == nil)
+
+    var undone = 0
+    window.show(Toast("A", action: ToastAction("Undo") { undone += 1 }))
+    window.show(Toast("B"))
+    window.performToastAction()
+    #expect(undone == 1)
+    #expect(window.shownToast?.message == "B")
+
+    // Everything goes at once, and with the window.
+    window.show(Toast("C"))
+    window.dismissAllToasts()
+    #expect(window.shownToast == nil)
+    #expect(window.queuedToasts.isEmpty)
+    window.show(Toast("D"))
+    window.show(Toast("E"))
+    shell.sessionClosed(window)
+    #expect(window.shownToast == nil)
+    #expect(window.queuedToasts.isEmpty)
+}
+
+@Test @MainActor
+func aPersistentToastHoldsTheQueueUntilItIsClosed() async throws {
+    let (shell, window) = try session()
+    shell.toastQueueing = .queue
+
+    window.show(Toast("Could not save", persistent: true))
+    window.show(Toast("Saved", duration: 0.1))
+    await wait(0.3)
+    #expect(window.shownToast?.message == "Could not save")
+    window.dismissToast()
+    #expect(window.shownToast?.message == "Saved")
+}
+
+@Test @MainActor
+func withoutTheQueueANewToastStillReplacesTheShownOne() throws {
+    let (shell, window) = try session()
+    #expect(shell.toastQueueing == .replace)
+
+    window.show(Toast("First"))
+    window.show(Toast("Second"))
+    #expect(window.shownToast?.message == "Second")
+    #expect(window.queuedToasts.isEmpty)
+}
