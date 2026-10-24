@@ -29,6 +29,16 @@
         case stretch
     }
 
+    /// When an image node begins obtaining data and decoded pixels.
+    public enum ImageLoadingMode: Sendable, Hashable {
+        /// Starts a preview load at initialization, preserving existing image behavior.
+        case immediate
+        /// Waits for renderer demand: preload obtains bytes, display decodes pixels, and
+        /// visible raises this client's urgency. Configure the host's content range policy
+        /// to evaluate these ranges separately. Before the first render no work starts.
+        case demandDriven
+    }
+
     /// A solid fill shown until image pixels are available, or after the first load fails.
     /// An optional size measures the image before its original dimensions are known.
     ///
@@ -213,6 +223,21 @@
             self.maximumDecodedPixelDimension = maximumDecodedPixelDimension.map { max(1, $0) }
             self.previewPixelDimension = max(1, previewPixelDimension)
             self.maximumDecodedCacheBytes = max(0, maximumDecodedCacheBytes)
+        }
+
+        /// Obtains encoded bytes without decoding pixels, for model or node preloading.
+        ///
+        /// URL sources use the shared encoded cache and download. Cancelling stops only
+        /// this client's wait; other clients may finish and retain the shared download.
+        /// In-memory data needs no work. Cache failures and cancellation are thrown.
+        public func preload(_ source: ImageSource) async throws {
+            try await preload(source, urgency: nil)
+        }
+
+        fileprivate func preload(_ source: ImageSource, urgency: LoadUrgency?) async throws {
+            try Task.checkCancellation()
+            if case let .url(url) = source { _ = try await cache.load(url, urgency: urgency) }
+            try Task.checkCancellation()
         }
 
         /// `urgency` says whether the caller wants the image first — while its node is on
@@ -639,6 +664,17 @@
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public override var accessibilityContentTraits: AccessibilityTraits { .image }
 
+        /// Whether this node starts immediately or waits for renderer demand.
+        public let loadingMode: ImageLoadingMode
+
+        /// Data and decoded-image readiness for demand-driven loading.
+        /// A ready preview is drawable while a higher-resolution refinement runs. These
+        /// states describe this source's attempts; encoded cache entries may be evicted
+        /// independently. Immediate loading continues to report through `phase`.
+        public var contentReadiness: ContentReadiness { resourceLifecycle.readiness }
+
+        private var resourceLifecycle = ContentLifecycle<UInt64>(key: 0)
+        private var preloadTask: Task<Void, Never>?
         private let pipeline: ImagePipeline
         /// Whether the node's loads go before those of images off screen: while it is on it.
         let urgency = LoadUrgency()
@@ -662,13 +698,15 @@
             scale: Double = 1,
             contentMode: ImageContentMode = .fit,
             placeholder: ImagePlaceholder? = nil,
-            pipeline: ImagePipeline = .shared
+            pipeline: ImagePipeline = .shared,
+            loadingMode: ImageLoadingMode = .immediate
         ) {
             self.source = source
             self.scale = scale
             self.contentMode = contentMode
             self.placeholder = placeholder
             self.pipeline = pipeline
+            self.loadingMode = loadingMode
             super.init()
             tracksScreen = true
             reload()
@@ -679,10 +717,12 @@
         ///
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public override func screenChanged(_ isOnScreen: Bool) {
-            urgency.isUrgent = isOnScreen
+            urgency.isUrgent =
+                loadingMode == .immediate ? isOnScreen : resourceLifecycle.demand.contains(.visible)
         }
 
         deinit {
+            preloadTask?.cancel()
             loadTask?.cancel()
             detailTask?.cancel()
         }
@@ -708,7 +748,9 @@
                 guard isSuspended else { return }
 
                 isSuspended = false
-                if source != nil, pixelSize == nil, phaseState.value == .loading {
+                if loadingMode == .immediate, source != nil, pixelSize == nil,
+                    phaseState.value == .loading
+                {
                     startFirstLoad()
                 }
                 host?.setNeedsRender()
@@ -721,6 +763,10 @@
             guard !isSuspended else { return }
 
             isSuspended = true
+            resourceLifecycle.updateDemand([])
+            preloadTask?.cancel()
+            preloadTask = nil
+            resourceLifecycle.release(.drawing)
             urgency.isUrgent = false
             loadTask?.cancel()
             detailTask?.cancel()
@@ -731,6 +777,68 @@
             loaded = nil
             decodedPixelSize = nil
             revision &+= 1
+        }
+
+        /// Suspends demand-driven resources while the host is in the background.
+        public override func backgroundChanged(_ isInBackground: Bool) {
+            if loadingMode == .demandDriven, isInBackground { contentDemandChanged([]) }
+        }
+
+        /// Applies renderer demand without conflating data readiness and decoded pixels.
+        /// Leaving Display releases this node's decoded image and cancels its decode waits;
+        /// leaving Preload also cancels its byte wait. Shared cache entries remain owned by
+        /// the pipeline. Failed byte or preview attempts wait for `retry()`.
+        public func contentDemandChanged(_ demand: ContentDemand) {
+            guard loadingMode == .demandDriven else { return }
+            resourceLifecycle.updateDemand(demand)
+            urgency.isUrgent = demand.contains(.visible)
+            guard demand.requirements.contains(.preload) else {
+                suspend()
+                return
+            }
+            isSuspended = false
+            if !demand.requirements.contains(.display) {
+                loadTask?.cancel()
+                detailTask?.cancel()
+                loadTask = nil
+                detailTask = nil
+                detailGeneration &+= 1
+                requestedPixelDimension = nil
+                resourceLifecycle.release(.drawing)
+                if loaded != nil {
+                    loaded = nil
+                    decodedPixelSize = nil
+                    revision &+= 1
+                }
+            }
+            startPreload()
+            if demand.requirements.contains(.display), loaded == nil, loadTask == nil,
+                resourceLifecycle.readiness.drawing != .failed
+            {
+                startFirstLoad()
+            }
+        }
+
+        private func startPreload() {
+            guard let source, let ticket = resourceLifecycle.begin(.data) else { return }
+            let pipeline = pipeline
+            let urgency = urgency
+            preloadTask = Task { [weak self] in
+                do {
+                    try await pipeline.preload(source, urgency: urgency)
+                    guard !Task.isCancelled, let self,
+                        self.resourceLifecycle.complete(ticket, with: .ready)
+                    else { return }
+                    self.preloadTask = nil
+                } catch {
+                    guard !Task.isCancelled, let self,
+                        self.resourceLifecycle.complete(ticket, with: .failed)
+                    else { return }
+                    self.preloadTask = nil
+                    self.phaseState.value = .failed(ImageLoadFailure(error))
+                    self.host?.setNeedsRender()
+                }
+            }
         }
 
         /// Loads the current source again: after a failure, or after a file changed. A remote
@@ -751,7 +859,9 @@
         /// refinement leaves the last decoded image visible. Cancellation: a new request
         /// cancels the old one.
         public func prepareDrawing(size: CGSize, scale: Double) {
-            guard !isSuspended, let source, let pixelSize,
+            guard !isSuspended,
+                loadingMode == .immediate || resourceLifecycle.demand.contains(.display),
+                let source, let pixelSize,
                 size.width > 0, size.height > 0, scale > 0,
                 pixelSize.width > 0, pixelSize.height > 0
             else { return }
@@ -891,6 +1001,9 @@
         private func reload() {
             revision &+= 1
             sourceGeneration &+= 1
+            resourceLifecycle.reset(for: sourceGeneration)
+            preloadTask?.cancel()
+            preloadTask = nil
             detailGeneration &+= 1
             loadTask?.cancel()
             detailTask?.cancel()
@@ -903,6 +1016,10 @@
             phaseState.value = source == nil ? .empty : .loading
             setNeedsLayout()
             host?.setNeedsRender()
+            if loadingMode == .demandDriven {
+                contentDemandChanged(resourceLifecycle.demand)
+                return
+            }
             guard !isSuspended else { return }
 
             startFirstLoad()
@@ -912,6 +1029,8 @@
             guard let source else { return }
 
             let request = sourceGeneration
+            let ticket = loadingMode == .demandDriven ? resourceLifecycle.begin(.drawing) : nil
+            if loadingMode == .demandDriven, ticket == nil { return }
             let pipeline = pipeline
             let urgency = urgency
             loadTask = Task { [weak self] in
@@ -924,6 +1043,8 @@
                     guard !Task.isCancelled, let self, self.sourceGeneration == request else {
                         return
                     }
+                    if let ticket, !self.resourceLifecycle.complete(ticket, with: .ready) { return }
+                    self.loadTask = nil
                     self.loaded = result
                     self.pixelSize = result.size
                     self.decodedPixelSize = LayoutSize(
@@ -938,6 +1059,10 @@
                     guard !Task.isCancelled, let self, self.sourceGeneration == request else {
                         return
                     }
+                    if let ticket, !self.resourceLifecycle.complete(ticket, with: .failed) {
+                        return
+                    }
+                    self.loadTask = nil
                     self.phaseState.value = .failed(ImageLoadFailure(error))
                     self.revision &+= 1
                     self.host?.setNeedsRender()

@@ -186,6 +186,7 @@
                         putDown(pickedUp)
                     }
                 }
+                refreshPreparedEntries()
                 setNeedsLayout()
             }
         }
@@ -195,7 +196,10 @@
         ///
         /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
         public var allowsMultipleSelectionDuringEditing = false {
-            didSet { setNeedsLayout() }
+            didSet {
+                refreshPreparedEntries()
+                setNeedsLayout()
+            }
         }
 
         /// Whether, out of editing, a tap on a row selects it or no longer does, instead of
@@ -229,7 +233,10 @@
         /// Ownership: the table keeps the closure; it must not keep the table. Isolation:
         /// MainActor. Errors: none. Cancellation: not applicable.
         public var onMove: (@MainActor (TableMove<Item.ID>) -> Void)? {
-            didSet { setNeedsLayout() }
+            didSet {
+                refreshPreparedEntries()
+                setNeedsLayout()
+            }
         }
 
         /// Whether the row of an item can be moved; every row can without it.
@@ -237,7 +244,10 @@
         /// Ownership: the table keeps the closure; it must not keep the table. Isolation:
         /// MainActor. Errors: none. Cancellation: not applicable.
         public var canMove: (@MainActor (Item) -> Bool)? {
-            didSet { setNeedsLayout() }
+            didSet {
+                refreshPreparedEntries()
+                setNeedsLayout()
+            }
         }
 
         /// What a tap on a row does, unless it selects the row (`allowsMultipleSelection`).
@@ -273,6 +283,7 @@
         private lazy var stack = LazyStack<Entry>(estimatedLength: estimatedRowHeight) {
             [unowned self] entry in node(for: entry)
         }
+        private var hasPreparation = false
         private let estimatedRowHeight: Double
 
         /// A table of rows `row` makes for each item — it may keep and return the same node
@@ -294,6 +305,104 @@
             scroll?.content = content
             scroll?.onScroll = { [weak self] _ in self?.closeOpenRow() }
             stack.onLayoutApplied = { [weak self] in self?.stackLaidOut() }
+        }
+
+        /// Creates a table whose immutable row plans are prepared away from the main actor.
+        ///
+        /// `key` runs on the main actor and must change with every model input used by
+        /// `prepare`. The table adds width, environment, and editing controls to that key.
+        /// `prepare` receives the width available inside the selection mark and move handle;
+        /// its optional length describes the content, not the table's decorations. `row`
+        /// creates or updates nodes on the main actor and shows a lightweight pending state.
+        ///
+        /// The table owns the closures and bounds workers through `policy`. They must not
+        /// retain the table. Leaving its preparation range cancels the client's wait;
+        /// already completed shared cache work is not rolled back. Failures require
+        /// ``retryPreparation(for:)``. Paging remains independent of row preparation.
+        public convenience init<Revision: Hashable & Sendable, Value: Sendable>(
+            scrolls: Bool = true,
+            estimatedRowHeight: Double = 44,
+            preparation policy: ItemPreparationPolicy = ItemPreparationPolicy(),
+            key: @escaping @MainActor (Item) -> Revision,
+            prepare:
+                @escaping @Sendable (Item, ItemPreparationContext) async throws -> PreparedItem<
+                    Value
+                >,
+            row: @escaping @MainActor (Item, PreparedItemState<Value>) -> Node
+        ) where Item: Sendable, Item.ID: Sendable {
+            self.init(scrolls: scrolls, estimatedRowHeight: estimatedRowHeight) { _ in Node() }
+            hasPreparation = true
+            stack = LazyStack<Entry>(
+                estimatedLength: estimatedRowHeight,
+                preparation: policy,
+                key: { entry -> TablePlanRevision<Revision> in
+                    switch entry {
+                    case let .header(_, title): return .header(title)
+                    case let .row(item, shape): return .row(key(item), shape)
+                    }
+                },
+                prepare: { entry, context -> PreparedItem<TablePlanValue<Value>> in
+                    switch entry {
+                    case .header: return PreparedItem(.header)
+                    case let .row(item, shape):
+                        let inner = context.replacingCrossAxisLength(
+                            context.crossAxisLength - shape.width
+                        )
+                        let plan = try await prepare(item, inner)
+                        return PreparedItem(
+                            .row(plan),
+                            length: plan.length.map { max($0, shape.minimumHeight) }
+                        )
+                    }
+                },
+                content: { [unowned self] entry, state in
+                    guard case let .row(item, _) = entry else { return node(for: entry) }
+                    let rowState: PreparedItemState<Value>
+                    switch state {
+                    case .pending: rowState = .pending
+                    case let .failed(error): rowState = .failed(error)
+                    case let .ready(plan):
+                        if case let .row(value) = plan.value {
+                            rowState = .ready(value)
+                        } else {
+                            rowState = .pending
+                        }
+                    }
+                    return node(for: entry, content: row(item, rowState))
+                }
+            )
+            stack.onLayoutApplied = { [weak self] in self?.stackLaidOut() }
+            scroll?.content = content
+        }
+
+        /// Counts of running workers, queued plans, and retained entries, including headers.
+        /// Returns `nil` for a table constructed without background row preparation.
+        public var preparationProgress: ItemPreparationProgress? {
+            hasPreparation ? stack.preparationProgress : nil
+        }
+
+        /// Retries a retained failed row within the same queue limits.
+        /// Returns false when no failure for this row is retained.
+        @discardableResult
+        public func retryPreparation(for id: Item.ID) -> Bool {
+            stack.retryPreparation(for: .row(id))
+        }
+
+        /// Waits for the currently admitted plans, including cancelled workers, to finish.
+        /// This does not wait for page loading or force a layout of the prepared rows.
+        /// Caller cancellation stops waiting between worker completions; it does not cancel
+        /// work owned by the table.
+        public func preparationsFinished() async { await stack.preparationsFinished() }
+
+        private func refreshPreparedEntries() {
+            if hasPreparation { stack.items = entries() }
+        }
+
+        private func rowShape(_ item: Item) -> TableRowShape {
+            TableRowShape(
+                marksSelection: isEditing && allowsMultipleSelectionDuringEditing,
+                moves: isEditing && onMove != nil && (canMove?(item) ?? true)
+            )
         }
 
         // MARK: - Paging
@@ -408,19 +517,19 @@
         // MARK: - Rows
 
         /// A header or a row, in the order they are laid out.
-        private enum Entry: Identifiable {
+        fileprivate enum Entry: Identifiable {
             case header(id: String, title: String)
-            case row(Item)
+            case row(Item, TableRowShape)
 
             var id: EntryID {
                 switch self {
                 case let .header(id, _): .header(id)
-                case let .row(item): .row(item.id)
+                case let .row(item, _): .row(item.id)
                 }
             }
         }
 
-        private enum EntryID: Hashable {
+        fileprivate enum EntryID: Hashable {
             case header(String)
             case row(Item.ID)
         }
@@ -428,18 +537,18 @@
         private func entries() -> [Entry] {
             sections.flatMap { section -> [Entry] in
                 let header = section.title.map { [Entry.header(id: section.id, title: $0)] } ?? []
-                return header + section.items.map(Entry.row)
+                return header + section.items.map { Entry.row($0, rowShape($0)) }
             }
         }
 
-        private func node(for entry: Entry) -> Node {
+        private func node(for entry: Entry, content: Node? = nil) -> Node {
             switch entry {
             case let .header(id, title):
                 let header = headers[id]
                 header.title = title
                 header.sectionID = id
                 return header
-            case let .row(item):
+            case let .row(item, _):
                 let row = rows[item.id]
                 if lift == nil, landing == nil, settlingRow == nil, shifts.isEmpty {
                     // Nothing is moved aside: a row kept from an earlier move shows in place.
@@ -447,7 +556,7 @@
                 }
                 let id = item.id
                 row.show(
-                    rowContent(item),
+                    content ?? rowContent(item),
                     leading: leadingActions?(item) ?? [],
                     trailing: trailingActions?(item) ?? [],
                     selects: onSelect != nil || allowsMultipleSelection,
@@ -1012,7 +1121,7 @@
             switch entries[index - 1] {
             case let .header(section, _):
                 return TablePosition(section: section, index: 0)
-            case let .row(item):
+            case let .row(item, _):
                 guard var before = position(of: item.id), let from = position(of: id) else {
                     return nil
                 }
@@ -1069,6 +1178,26 @@
                 openRow = nil
             }
         }
+    }
+
+    extension Table.Entry: Sendable where Item: Sendable, Item.ID: Sendable {}
+    extension Table.EntryID: Sendable where Item.ID: Sendable {}
+
+    fileprivate struct TableRowShape: Sendable, Hashable {
+        let marksSelection: Bool
+        let moves: Bool
+        var width: Double { (marksSelection ? 38 : 0) + (moves ? 48 : 0) }
+        var minimumHeight: Double { marksSelection ? 22 : (moves ? 14 : 0) }
+    }
+
+    private enum TablePlanRevision<Revision: Hashable & Sendable>: Hashable, Sendable {
+        case header(String)
+        case row(Revision, TableRowShape)
+    }
+
+    private enum TablePlanValue<Value: Sendable>: Sendable {
+        case header
+        case row(PreparedItem<Value>)
     }
 
     /// A table's row: the content on a cell that moves aside over the buttons of its actions.
@@ -1179,7 +1308,8 @@
                     }
                     .absolute(top: 0, bottom: 0, trailing: 0)
                 }
-                cell.flex(grow: 1)
+                // The cell fills the row even when its contents have a wide intrinsic size.
+                cell.flex(grow: 1, shrink: 1).limits(minWidth: .points(0))
             }
         }
 
@@ -1394,7 +1524,7 @@
         override func layoutSpec() -> LayoutSpec? {
             FlexContainer(.row) {
                 if editing?.marksSelection ?? false { mark }
-                if let content { content.flex(grow: 1, shrink: 1) }
+                if let content { content.flex(grow: 1, shrink: 1).limits(minWidth: .points(0)) }
                 if editing?.drag != nil { handle }
                 separator
                     .absolute(leading: 16, bottom: 0, trailing: 0)

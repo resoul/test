@@ -32,6 +32,8 @@ public struct LayoutPlacement {
 /// Errors: none. Cancellation: not applicable.
 @MainActor
 public struct PreparedLayout {
+    let preparationID = UUID()
+
     /// The tree to give `FlexboxEngine.layout`.
     ///
     /// Ownership: value. Isolation: none. Errors: none. Cancellation: not applicable.
@@ -99,6 +101,44 @@ public struct PreparedLayout {
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public var elementCount: Int { elements.count }
 
+    /// Captures this preparation's input and the constraints for a separate solve.
+    ///
+    /// The request can be sent to another task. Check its `requiresMainThread` before
+    /// choosing an executor. Copies of this preparation accept its computations; a new
+    /// call to `prepare` creates a different identity, even for the same elements.
+    public func request(size: LayoutSize) -> LayoutRequest {
+        LayoutRequest(
+            input: input,
+            size: size,
+            requiresMainThread: requiresMainThread,
+            preparationID: preparationID
+        )
+    }
+
+    /// Applies a computation only when it belongs to this snapshot and rectangle size.
+    ///
+    /// Returns `nil` without changing any element when the snapshot or size differs, or
+    /// when an element would occupy several places. Otherwise returns the placements,
+    /// which may be empty for a spec without elements. The rectangle's origin and pixel
+    /// scale may differ from a previous application; they do not change the solved size.
+    ///
+    /// The owner must replace its current preparation whenever content, constraints, or
+    /// environment changes, and apply through that current value after an `await`.
+    /// This check cannot discover mutations to live elements by itself. Applying is
+    /// synchronous; cancelling a solver task does not undo frames already applied.
+    @discardableResult
+    public func apply(
+        _ computation: ComputedLayout,
+        in rect: LayoutRect,
+        scale: Double = 1
+    ) -> [LayoutPlacement]? {
+        guard computation.preparationID == preparationID, computation.size == rect.size,
+            elementsPlacedMoreThanOnce(in: computation.result).isEmpty
+        else { return nil }
+
+        return apply(computation.result, in: rect, scale: scale)
+    }
+
     /// Whether `id` is an element's rather than a container's.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
@@ -131,6 +171,10 @@ public struct PreparedLayout {
     /// rounded, so neighbours never overlap or leave hairline gaps). Elements of `hidden`,
     /// `invisible` and `Breakpoint` specs are shown or hidden to match. Returns where every
     /// element went, in the order the spec mentions them.
+    ///
+    /// The caller must supply the result of this preparation at `rect.size`. This
+    /// low-level overload does not validate the preparation or reject duplicate placements.
+    /// Use the `ComputedLayout` overload to check the preparation and size before applying.
     ///
     /// Ownership: borrows the elements for the call. Isolation: MainActor. Errors: none.
     /// Cancellation: not applicable.

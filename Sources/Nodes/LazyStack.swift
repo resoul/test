@@ -47,6 +47,7 @@ public final class LazyStack<Item: Identifiable>: Node {
         didSet {
             itemsVersion &+= 1
             gate.itemsChanged(count: items.count)
+            preparation?.itemsChanged(items)
             startsAreStale = true
             setNeedsLayout()
         }
@@ -304,6 +305,22 @@ public final class LazyStack<Item: Identifiable>: Node {
     public private(set) var laidOutItems: Range<Int> = 0..<0
 
     private let content: @MainActor (Item) -> Node
+    private var preparation: (any ItemPreparing<Item>)?
+
+    /// Counts in this stack's optional preparation budget, or zero for a synchronous stack.
+    public var preparationProgress: ItemPreparationProgress {
+        preparation?.progress ?? ItemPreparationProgress(running: 0, queued: 0, retained: 0)
+    }
+
+    /// Retries a retained failed item. Returns false if the item has no retained failure.
+    /// The retry follows the same worker and queue limits as initial preparation.
+    @discardableResult
+    public func retryPreparation(for id: Item.ID) -> Bool { preparation?.retry(id) ?? false }
+
+    /// Waits until the preparation workers and admitted queue drain, including jobs admitted
+    /// while waiting. It does not run pending layouts or cancel work if the waiter is cancelled.
+    /// A worker that ignores cancellation can delay this wait until it returns.
+    public func preparationsFinished() async { await preparation?.finished() }
 
     /// Lengths along the axis of items laid out at `measuredAcross`.
     private var measured: [Item.ID: Double] = [:]
@@ -314,6 +331,9 @@ public final class LazyStack<Item: Identifiable>: Node {
     private var startsAreStale = true
     /// The items and nodes the last `layoutSpec()` placed, in order.
     private var placed: [(id: Item.ID, node: Node)] = []
+    /// The last applied items, which remain authoritative while a newer pass is pending
+    /// or rejected. Remembering the anchor from `placed` would lose it after such a pass.
+    private var mountedItems: [(id: Item.ID, node: Node, index: Int)] = []
     /// The part of the stack, from its start, that the nodes placed cover once laid out;
     /// the ends are unbounded where the first or the last item is among them.
     private var covered: (start: Double, end: Double) = (.infinity, -.infinity)
@@ -358,6 +378,56 @@ public final class LazyStack<Item: Identifiable>: Node {
         super.init()
     }
 
+    /// Creates a list that prepares model values before asking for their live nodes.
+    ///
+    /// `key` identifies every application input that changes a plan, including the item's
+    /// revision. Identity, item cross-axis constraints, host size, scale, direction, resolved
+    /// theme, and locale are added automatically. The key and factory run on the main actor;
+    /// keep the key pure and the factory light. All three closures are retained and must
+    /// not capture the stack strongly. Supply immutable model snapshots and replace `items`
+    /// with a new revision when their preparation inputs change.
+    ///
+    /// `prepare` runs in a detached task within the per-list budget. It receives only
+    /// Sendable values, must cooperate with cancellation, and owns any client waits it starts.
+    /// It must not cancel resources shared with other clients. No network resource is required
+    /// to finish before a placeholder is shown. Failures reach the factory without automatic
+    /// retries. Additional environments such as a custom catalog revision belong in `key`.
+    ///
+    /// The factory receives pending, ready, or failed state for the current key. It creates
+    /// or updates nodes on the main actor, including lightweight placeholders for cold or
+    /// urgent entry. Preparation supplies measurement plans; data and drawing phases are
+    /// still owned by the content. Plans outside the retained range or count limit are freed.
+    public convenience init<Revision: Hashable & Sendable, Value: Sendable>(
+        _ axis: ScrollAxis = .vertical,
+        items: [Item] = [],
+        lanes: Int = 1,
+        estimatedLength: Double,
+        spacing: Double = 0,
+        preparation policy: ItemPreparationPolicy = ItemPreparationPolicy(),
+        key: @escaping @MainActor (Item) -> Revision,
+        prepare:
+            @escaping @Sendable (Item, ItemPreparationContext) async throws -> PreparedItem<Value>,
+        content: @escaping @MainActor (Item, PreparedItemState<Value>) -> Node
+    ) where Item: Sendable, Item.ID: Sendable {
+        let driver = PreparedItems(policy: policy, key: key, prepare: prepare, content: content)
+        self.init(
+            axis,
+            items: items,
+            lanes: lanes,
+            estimatedLength: estimatedLength,
+            spacing: spacing,
+            content: { item in driver.node(for: item, context: nil) }
+        )
+        preparation = driver
+        driver.contextIsCurrent = { [weak self] context in
+            guard let self, self.isMounted, self.isShown, let host = self.host,
+                !host.isInBackground, self.shownRect != nil
+            else { return false }
+            return self.preparationContext(in: host) == context
+        }
+        driver.onChange = { [weak self] in self?.setNeedsLayout() }
+    }
+
     /// Ownership: returns a value borrowing the nodes of the items laid out. Isolation:
     /// MainActor. Errors: none. Cancellation: none.
     public override func layoutSpec() -> LayoutSpec? {
@@ -372,10 +442,17 @@ public final class LazyStack<Item: Identifiable>: Node {
         // it, and the reach after.
         var span = untracked { visibleSpan() } ?? (start: 0, end: reach)
         if holdsScroll {
-            holdsScroll = false
             anchor = nil
         } else {
             untracked { rememberAnchor() }
+        }
+        let context = host.map { preparationContext(in: $0) }
+        if let context, let preparation {
+            for (id, length) in preparation.lengths(in: context) where measured[id] != length {
+                measured[id] = length
+                startsAreStale = true
+            }
+            updateStarts()
         }
         // Items added, removed or measured before what shows moved it along the stack, and
         // the scroll will follow it there: the window is where it will be then, however far.
@@ -386,7 +463,10 @@ public final class LazyStack<Item: Identifiable>: Node {
             lines.isEmpty
             ? 0..<0 : lines.lowerBound * perLine..<min(items.count, lines.upperBound * perLine)
 
-        placed = range.map { index in (items[index].id, content(items[index])) }
+        placed = range.map { index in
+            let item = items[index]
+            return (item.id, preparation?.node(for: item, context: context) ?? content(item))
+        }
         placedVersion = itemsVersion
         laidOutItems = range
         let total = length
@@ -594,9 +674,111 @@ public final class LazyStack<Item: Identifiable>: Node {
     /// again when the stack shows again, if the end is near.
     public override func mountedChanged(_ isMounted: Bool) {
         if !isMounted {
+            preparation?.stop()
+            mountedItems = []
+            anchor = nil
             cancelPageLoad()
             cancelAllPrefetches()
         }
+    }
+
+    /// Suspends model preparation while the host is hidden; showing it refreshes demand.
+    public override func shownChanged(_ isShown: Bool) {
+        guard preparation != nil else { return }
+        if isShown { setNeedsLayout() } else { preparation?.stop() }
+    }
+
+    /// Suspends model preparation in the background, without changing existing scroll physics.
+    public override func backgroundChanged(_ isInBackground: Bool) {
+        guard preparation != nil else { return }
+        if isInBackground { preparation?.stop() } else { setNeedsLayout() }
+    }
+
+    private func preparationContext(in host: NodeHost) -> ItemPreparationContext {
+        ItemPreparationContext(
+            axis: axis,
+            crossAxisLength: max(
+                0,
+                (across(frame.size) - Double(perLine - 1) * spacing) / Double(perLine)
+            ),
+            viewportSize: host.size,
+            scale: host.scale,
+            direction: host.direction,
+            theme: theme,
+            locale: locale
+        )
+    }
+
+    private func updatePreparation() {
+        guard let preparation else { return }
+        guard isShown, let host, !host.isInBackground, let bounds = shownRect else {
+            preparation.stop()
+            return
+        }
+        let viewport = ContentViewport(bounds: bounds)
+        let policy = preparation.policy.range
+        let windowStart: Double
+        let windowEnd: Double
+        if isReversed {
+            windowStart = frame.size.width - bounds.origin.x - bounds.size.width
+            windowEnd = frame.size.width - bounds.origin.x
+        } else {
+            windowStart = along(bounds.origin)
+            windowEnd = windowStart + along(bounds.size)
+        }
+        updateStarts()
+        let reach = along(bounds.size) * policy.preloadRetentionDistance
+        // Line lookup uses open intersections, while range thresholds include touching
+        // their boundary. Include those candidates and let the range policy decide.
+        let near = lines(
+            from: max(0, windowStart - reach).nextDown,
+            to: min(length, windowEnd + reach).nextUp
+        )
+        let context = preparationContext(in: host)
+        var candidates: [(index: Int, demand: ContentDemand, distance: Double)] = []
+        for index in near.lowerBound * perLine..<min(items.count, near.upperBound * perLine) {
+            let line = index / perLine
+            let itemLength = measured[items[index].id] ?? estimatedLength
+            let crossStart = Double(index % perLine) * (context.crossAxisLength + spacing)
+            let position = isReversed ? frame.size.width - starts[line] - itemLength : starts[line]
+            let itemFrame =
+                axis == .vertical
+                ? LayoutRect(
+                    x: crossStart,
+                    y: position,
+                    width: context.crossAxisLength,
+                    height: itemLength
+                )
+                : LayoutRect(
+                    x: position,
+                    y: crossStart,
+                    width: itemLength,
+                    height: context.crossAxisLength
+                )
+            var demand = policy.demand(
+                for: itemFrame,
+                in: viewport,
+                previous: preparation.demand(for: items[index].id)
+            )
+            guard !demand.isEmpty else { continue }
+            // Known cross-axis constraints allow geometry preparation throughout preload,
+            // independently of fetching bytes or producing the final drawing.
+            demand.insert(.measure)
+            let distance = max(0, starts[line] - windowEnd, windowStart - end(of: line))
+            candidates.append((index, demand, distance))
+        }
+        func rank(_ demand: ContentDemand) -> Int {
+            demand.contains(.visible) ? 0 : demand.contains(.display) ? 1 : 2
+        }
+        candidates.sort {
+            if rank($0.demand) != rank($1.demand) { return rank($0.demand) < rank($1.demand) }
+            if $0.distance != $1.distance { return $0.distance < $1.distance }
+            return $0.index < $1.index
+        }
+        preparation.update(
+            candidates.map { ItemPreparationCandidate(item: items[$0.index], demand: $0.demand) },
+            context: context
+        )
     }
 
     // MARK: - Where it shows
@@ -774,10 +956,10 @@ public final class LazyStack<Item: Identifiable>: Node {
         anchor = nil
         // Showing the start, the window shows what is added there.
         guard let span = visibleSpan(), span.start > 0, span.start < span.end,
-            let scroll, placedAreMounted
+            let scroll
         else { return }
 
-        for (offset, (id, node)) in placed.enumerated() {
+        for (id, node, index) in mountedItems where node.isMounted && node.supernode === self {
             let start = start(of: node)
             guard start + along(node.frame.size) > span.start, start < span.end else { continue }
 
@@ -787,7 +969,7 @@ public final class LazyStack<Item: Identifiable>: Node {
                     position: along(rect.origin),
                     scroll: scroll,
                     start: start,
-                    index: laidOutItems.lowerBound + offset
+                    index: index
                 )
             }
             return
@@ -817,6 +999,9 @@ public final class LazyStack<Item: Identifiable>: Node {
     func layoutApplied() {
         guard placedAreMounted else { return }
 
+        mountedItems = placed.enumerated().map {
+            ($0.element.id, $0.element.node, laidOutItems.lowerBound + $0.offset)
+        }
         let across = across(frame.size)
         if measuredAcross != across {
             // Lengths at another width no longer hold.
@@ -859,6 +1044,8 @@ public final class LazyStack<Item: Identifiable>: Node {
             }
         }
         anchor = nil
+        // A rejected capture must not consume the caller's request to preserve scroll.
+        if placedVersion == itemsVersion { holdsScroll = false }
         viewportMoved()
         if placedVersion == itemsVersion {
             onLayoutApplied?()
@@ -870,6 +1057,7 @@ public final class LazyStack<Item: Identifiable>: Node {
     func viewportMoved() {
         guard let host, let span = visibleSpan() else { return }
 
+        updatePreparation()
         evaluatePagination(window: span)
         evaluatePrefetch(window: span)
         updateStarts()
