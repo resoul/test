@@ -231,9 +231,11 @@
 | `Button` (`NodesRender`) | текст на фоне, затемнение при нажатии | демо |
 | `NodeCache`, `NodeCache.reserve`, `clearReserve()`, `NodeHost.passGeneration` | нода на id модели; ушедшие отпускаются на следующем проходе или ждут в запасе | [04](04-conditionals-and-responsive.md#7-кэш-нод-для-динамических-списков) |
 | `LayoutSpec.prepare`, `PreparedLayout` | подготовка (MainActor) / расчёт (где угодно) / применение (MainActor) | фоновый расчёт |
+| `PreparedLayout.request`, `LayoutRequest.solve/solveOnMainActor`, `ComputedLayout`, `PreparedLayout.apply(ComputedLayout)` | Sendable-запрос фиксирует снимок/размер; применение отклоняет чужой снимок, другой размер и дубли до изменения элементов | [анализ UI](../ui-architecture-and-scroll-analysis.md#15-реализованная-граница-layout) |
 | `ContentMeasurer.requiresMainThread` | view меряются только на главном: такая раскладка решается там | `ViewMeasurer` |
 | `NodeHost.mainThreadStackBudget`, `SolveOutcome`, `reject`; `LayoutReport.Stack` | проход не поместился в стек главного — на поток хоста или отклонён | дефект #124 |
-| `Node.pendingHost`, `NodeHost.pending`/`releasePending` | изменение ноды, которую монтирует проход в полёте | дефект #138 |
+| `Node.pendingHost`, `NodeHost.trackPending`/`releasePending` | ещё не смонтированные ноды инвалидируют снимок до конца отчёта, на main и background; старый проход не очищает pending нового | дефекты #138, #234 |
+| `NodeHost.layOut`, `solve`, `finish`, `isCurrent`, `reject` | solver получает LayoutRequest, возвращает ComputedLayout; поколение, dirty flag и размер проверяются до отчёта и после callback; устаревшее не применяется, анимация сохраняется | дефект #234; [анализ UI](../ui-architecture-and-scroll-analysis.md#16-интеграция-запроса-в-nodehost) |
 | `NodeHost.solvesInBackground`, `solve`, `adopt` | поток со стеком 8 МиБ; поток регистрируется изнутри тела; обогнанный расчёт отменяется и выбрасывается | дефекты #124, #22 (Trellis) |
 | `AccessibilityEntry`, `AccessibilityList` (`rowCount`, `columnCount`, `position(ofItem:)`, `item(row:column:)`), `AccessibilityListItem`; `NodeHost.accessibilityEntries`, `accessibilityList`, `accessibilityFrame(ofItem:in:)`, `revealItem`; `AccessibleList` (`LazyStack`) | ленивый стек для VoiceOver — список со всеми строками | [03](03-layout-api.md) (десятый срез, VoiceOver) |
 | `ListAccessibilityElement`, `ListRowAccessibilityElement`, `ShowableAccessibilityElement` (AppKit); `NodeNSView.parentSpace(_:in:)`, `accessibilityReveal` | Mac: список со строкой на каждый элемент данных, `AXScrollToVisible` раскладывает строку; рамки от низа родителя | [03](03-layout-api.md) (десятый срез, Mac); дефекты #190, #191; UI-тест `Demo/MacUITests` |
@@ -504,3 +506,44 @@
 | `LayerRenderer.drawInBackground/bitmap/cancelDraw/drawingsFinished`, `DrawingMode`, `NodeHost.drawingMode`, `NodeScreen.defaultDrawingMode` | фоновая отрисовка, устаревшие результаты не ложатся | то же |
 | `LazyStack.prefetch/cancelPrefetch/prefetchDistance/evaluatePrefetch`, `ImagePrefetcher` | данные до ноды: объявить, отозвать | [20](20-rendering-pipeline.md#5-зоны-вокруг-экрана) |
 | `DisplayRange`, `NodeHost.displayRange`, `LayerRenderer.reviewDisplayRange/release/trimMemory`, `Node.screenfulsToScreen` | рисовать у экрана, отпускать вдали, сжимать память | то же |
+
+
+## `Sources/Nodes/ContentLifecycle.swift`, `ContentRange.swift`
+
+| Код | Что | Основание |
+|---|---|---|
+| `ContentDemand.requirements/requires`, `PreparationPhase`, `ContentReadiness` | флаги потребности отдельно от готовности данных, геометрии и рисунка; Measure может понадобиться до Display | [анализ UI §17](../ui-architecture-and-scroll-analysis.md#17-контракт-потребности-и-готовности-контента) |
+| `ContentLifecycle.updateDemand/begin/complete/reset/release`, `PreparationTicket` | один текущий ticket на фазу, явный retry ошибки; отмена/смена ключа/освобождение отвергают поздние результаты, ready сохраняется вне диапазона | то же |
+| `ContentViewport`, `ContentActivity`, `ContentRangePolicy.demand` | effective viewport с clips в общей системе координат, обе оси, скрытая pane без Visible, отдельные entry/retention пороги | то же |
+
+
+## `Sources/Nodes/ItemPreparation.swift`, подготовка `LazyStack`
+
+| Код | Что | Основание |
+|---|---|---|
+| `ItemPreparationContext`, `PreparedItem`, `PreparedItemState`, `ItemPreparationPolicy/Progress` | Sendable-план без UI; snapshot cross-axis/окружения; pending/ready/failed и лимиты одного списка | [анализ UI §18](../ui-architecture-and-scroll-analysis.md#18-подготовка-элементов-lazystack) |
+| `PreparedItems.update/pump/start/finish/stop`, `ContentLifecycle` | очередь по текущей потребности, detached workers, отменённый worker сохраняет слот; версии и context проверяются до принятия; bounded entries, явный retry | то же |
+| `LazyStack` prepared initializer, `preparationContext/updatePreparation`, `layoutSpec`, `retryPreparation/preparationsFinished` | модель до Node, effective viewport по обеим осям, планы через main-actor фабрику следующей раскладки; длины уточняют дальние оценки | то же |
+| `LazyStack.mountedItems/rememberAnchor/layoutApplied` | anchor берётся из последней применённой раскладки, даже если новый prepared диапазон ещё не принят | дефект #240 |
+
+
+## Table и потребность renderer
+
+| Код | Что | Основание |
+|---|---|---|
+| `ItemPreparationContext.replacingCrossAxisLength`, `Table` prepared initializer, `TableRowShape`, `TablePlanRevision/Value` | prepared-модель для строк с секциями и editing chrome; корректный inner width и ключ; диагностика/retry через Table | [анализ UI §19](../ui-architecture-and-scroll-analysis.md#19-интеграция-table-и-renderer) |
+| `Node.contentDemand`, `NodeHost.contentRangePolicy`, `LayerDrawing.contentDemandChanged`, `LayerRenderer.effectiveDemand/updateDemand/reviewDisplayRange` | единые диапазоны в clips, обе оси, активность host; уведомление владельцев ресурсов до display work | то же |
+| `DrawingPreparationPolicy`, `LayerRenderer.pumpDrawings/finished/isCurrent`, `PendingDraw`, `workers/lifecycles` | bounded physical workers/snapshots, отмена со слотом до возврата, актуальность bitmap перед commit | то же; дефекты #243–245 |
+| `ImageLoadingMode`, `Image.contentDemandChanged/startPreload/contentReadiness`, `ImagePipeline.preload` | bytes в Preload, decoded pixels в Display, urgency в Visible, явный retry и независимые клиентские отмены | то же |
+| `NodeHost.preparationInvalidated/layoutIfNeeded/layOut`, `LazyStack.holdsScroll/layoutApplied` | повтор захвата после мутации детей фабрикой; сохранение scroll intent до применения | дефекты #248–249 |
+
+
+## `ComparisonDemo/`
+
+| Код | Что | Основание |
+|---|---|---|
+| `ComparisonScene`, `FeedController`, `ComparisonSession`, `FeedData` | два независимых контроллера на одном наборе данных, общая нагрузка и сохранение, собственный iOS project без внешних зависимостей | [руководство демо](../ComparisonDemo/README.md) |
+| `NativeFeedController`, `NativePostCell`, `NativeImageLoader` | обычный UITableView/Auto Layout, prefetch, actor decode и 64-MiB cache | то же |
+| `NodeFeedController`, `ProfileFeedNode`, `FeedPlan`, `PostCardNode` | Table prepared API во внешнем Scroll, Sendable worker, MainActor UI commit, Display demand и renderer | то же |
+| `NativeProfileHeader`, `ProfileHeaderNode`, `AlbumStrip` | профиль и горизонтальная лента в вертикальной странице обеих реализаций | то же |
+| `TableRow.layoutSpec`, `Cell.layoutSpec` shrink/minWidth, `aTableCellShrinksWideIntrinsicContentToTheRowWidth` | внешняя и внутренняя ячейки ограничены шириной строки даже при большой natural image width | дефект #260 |

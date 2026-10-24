@@ -144,23 +144,45 @@ Breakpoint(from: .sm) {
 card.spec().apply(in: rect)
 ```
 
-Решение прохода вне main actor. Спецификация читается на main actor (она спрашивает
-элементы об их содержимом), решается в другой задаче, а рамки отдаются элементам снова
-на main actor:
+Для раздельного расчёта спецификация читается на main actor, а `LayoutRequest` хранит
+снимок входа и фиксированный размер. `ComputedLayout` связывает результат с этой
+подготовкой. Пример одного прохода с передачей отмены фоновой задаче:
 
 ```swift
 let prepared = card.spec().prepare()
-let input = prepared.input
-let size = rect.size
-let result = try await Task.detached {
-    try FlexboxEngine.layout(input, size: size)
-}.value
-prepared.apply(result, in: rect)
+let request = prepared.request(size: rect.size)
+let computed: ComputedLayout
+if request.requiresMainThread {
+    computed = try request.solveOnMainActor()
+} else {
+    let worker = Task.detached { try request.solve() }
+    computed = try await withTaskCancellationHandler {
+        try await worker.value
+    } onCancel: {
+        worker.cancel()
+    }
+}
+guard !Task.isCancelled else { throw LayoutCancelled() }
+prepared.apply(computed, in: rect)
 ```
 
-Если хотя бы один измеритель требует main thread (`requiresMainThread`, например
-спрашивает размер у представления), `prepared.requiresMainThread` равно `true` и
-решать проход нужно на main.
+`solve()` сам не создаёт задачу: в приложении запрос можно передать ограниченной очереди
+подготовки вместо отдельного `Task.detached`. Он бросает `LayoutRequestError.requiresMainThread`
+до измерений, если контент требует main actor; явный путь `solveOnMainActor()` поддерживает
+такой контент. По умолчанию отмена следует текущей задаче. Если передан свой LayoutContext,
+именно он определяет проверку отмены, трассировку и ограничение стека.
+
+Проверяемое применение возвращает `nil` и ничего не меняет при другом снимке, размере
+или дублирующем размещении элемента. Другая позиция прямоугольника и pixel scale разрешены:
+они применяются после расчёта. Успешная пустая спецификация возвращает пустой массив,
+а не `nil`.
+
+На живом экране владелец сохраняет **текущий** PreparedLayout и заменяет его при изменении
+контента, темы, локали или других входов. После `await` результат нужно применять через
+текущую подготовку и текущий размер: новый снимок отклонит результат старого. Применение
+через сохранённую локальную старую подготовку по-прежнему применит старый снимок — пакет
+не наблюдает мутации UI автоматически. Геометрия не ждёт сетевые изображения: их загрузка
+и готовность остаются ответственностью слоя UI.
 
 ## Тема
 

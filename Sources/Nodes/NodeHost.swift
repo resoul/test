@@ -13,8 +13,10 @@ import Tracing
 /// then lays out the whole tree in one engine pass — nested nodes' layouts are part of it —
 /// and finally mounts the nodes the layouts mention and unmounts those they no longer do.
 ///
-/// Ownership: the host keeps the root, which keeps its mounted subnodes. Isolation:
-/// MainActor; the pass runs synchronously. Errors: none. Cancellation: `detach()`.
+/// The host keeps the root, which keeps its mounted subnodes. Preparation, application,
+/// and callbacks run on the main actor. With ``solvesInBackground``, only the immutable
+/// layout request moves to the host's solver thread. Invalidated results are discarded;
+/// ``detach()`` cancels a solve and unmounts the tree.
 @MainActor
 public final class NodeHost: CommandTarget {
     /// Ownership: owned by the host. Isolation: MainActor. Errors: none. Cancellation: not
@@ -190,20 +192,21 @@ public final class NodeHost: CommandTarget {
     /// Solve layouts after the first one on a background thread. The main thread still asks
     /// the nodes for their layouts and content (`layoutSpec()`, `update()`), and applies the
     /// frames; only the engine's work moves. The tree keeps its old frames until the new ones
-    /// arrive, and a solve that a newer layout overtakes is cancelled and its result dropped.
+    /// arrive. Invalidating the layout prevents an in-flight result from being applied,
+    /// even before the next pass starts; starting that pass also cancels the older solve.
     /// A layout whose content only measures on the main thread (views inside it) is solved
     /// there anyway, and so is the layout of each frame of a scroll moving frame by frame
     /// (`needsFrames`), and a layout a scroll needs because its window moved past the content
     /// laid out: what shows would be missing until it lands.
     ///
-    /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public var solvesInBackground = false
 
     /// Whether the app is in the background, or the window the tree is in cannot be seen — covered,
     /// minimized, on another space: the adapter sets it. The tree can still show (`isShown`) then;
     /// this is what tells its nodes that nobody is looking, so that work made only for a viewer,
     /// such as getting a video ready, waits until they come back (`Node.backgroundChanged`).
-    /// It does not stop layout or drawing.
+    /// Layout continues. When `contentRangePolicy` is set, the renderer suspends resource
+    /// and drawing demand until the host returns to the foreground.
     ///
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public var isInBackground = false {
@@ -213,6 +216,7 @@ public final class NodeHost: CommandTarget {
             for node in mounted.values {
                 node.backgroundChanged(isInBackground)
             }
+            if contentRangePolicy != nil { setNeedsRender() }
         }
     }
 
@@ -231,7 +235,7 @@ public final class NodeHost: CommandTarget {
                 node.setShown(isShown)
             }
             updateScreen()
-            if isShown {
+            if isShown || contentRangePolicy != nil {
                 setNeedsRender()
             }
         }
@@ -272,11 +276,12 @@ public final class NodeHost: CommandTarget {
     /// Ownership: value. Isolation: MainActor. Errors: none. Cancellation: not applicable.
     public let number: Int
 
-    /// Called after every layout pass with what it found. The adapter sets one that logs
-    /// problems; an app can replace it.
+    /// Reports a completed, current pass before its frames are applied, including passes
+    /// rejected for duplicate placements or insufficient stack space.
     ///
-    /// Ownership: the host keeps the closure; it must not keep the host. Isolation:
-    /// MainActor. Errors: none. Cancellation: not applicable.
+    /// A result already invalidated or overtaken produces no report. Changing the layout
+    /// or starting another pass inside this callback prevents the reported result from
+    /// being applied. The host keeps the closure; capture the host weakly to avoid a cycle.
     public var onLayoutReport: (@MainActor (LayoutReport) -> Void)?
 
     /// What the engine records for the report: nothing when empty.
@@ -520,6 +525,17 @@ public final class NodeHost: CommandTarget {
         didSet { if displayRange != oldValue { setNeedsRender() } }
     }
 
+    /// Opts the renderer into separate preload, display, and visible demand.
+    ///
+    /// This policy takes precedence over `displayRange`. It uses enclosing clips and both
+    /// axes, and suspends demand while the host is unshown or in the background. Resource
+    /// nodes must opt into demand-driven loading to defer their initial data requests.
+    /// `nil` preserves the legacy drawing range behavior. List model preparation has its
+    /// own policy because it also runs before nodes exist.
+    public var contentRangePolicy: ContentRangePolicy? {
+        didSet { if contentRangePolicy != oldValue { setNeedsRender() } }
+    }
+
     /// Runs pending state updates, then lays the tree out if anything asked for it.
     ///
     /// Ownership: sets frames and subnodes of the tree. Isolation: MainActor; synchronous.
@@ -528,15 +544,23 @@ public final class NodeHost: CommandTarget {
         defer { laysOutNow = false }
         for _ in 0..<NodeHost.settlingPasses {
             StateUpdates.flush()
-            guard needsLayout, layOut() else { return }
+            guard needsLayout else { return }
+            guard layOut() || preparationInvalidated else { return }
         }
     }
+
+    // A factory can update an existing child while the snapshot is being captured.
+    // Retry that capture in the settling loop; callback invalidations after solving still
+    // leave the dirty tree to the caller, rather than reentering its callback here.
+    private var preparationInvalidated = false
 
     /// Lays the tree out; returns whether the pass was applied on this thread, rather than
     /// sent to the background or rejected.
     private func layOut() -> Bool {
         needsLayout = false
+        preparationInvalidated = false
         generation &+= 1
+        let pass = generation
         NodeHost.passGeneration &+= 1
         // A pass that overtakes an animated one still in flight carries its animation on.
         let animation = pendingAnimation ?? solvingAnimation
@@ -550,13 +574,25 @@ public final class NodeHost: CommandTarget {
             breakpoints: theme.breakpoints
         )
         NodeHost.preparing = outer
+        if needsLayout {
+            preparationInvalidated = true
+            pendingAnimation = pendingAnimation ?? animation
+            return false
+        }
         let rect = LayoutRect(origin: .zero, size: size)
+        let request = prepared.request(size: rect.size)
         let trace = traceRequest(for: prepared)
+        trackPending(in: prepared)
+        defer {
+            if pass == generation, solving == nil {
+                releasePending()
+            }
+        }
         // A scroll moving frame by frame needs each frame's layout in that frame, the last
         // one's too, and a window moved past what is laid out shows nothing until its layout
         // lands: solved in the background, it would land frames later, and while a scroll
         // goes on every pass would overtake the one before.
-        guard solvesInBackground, passes > 0, !laysOutNow, !prepared.requiresMainThread
+        guard solvesInBackground, passes > 0, !laysOutNow, !request.requiresMainThread
         else {
             let context = LayoutContext(trace: trace, stackBudget: mainThreadStackBudget)
             let clock = ContinuousClock()
@@ -564,36 +600,40 @@ public final class NodeHost: CommandTarget {
             let interval = Trace.begin(.layoutOnMain, "host \(number) pass \(generation)")
             defer { Trace.end(interval) }
             do {
-                let result = try FlexboxEngine.layout(
-                    prepared.input,
-                    size: rect.size,
-                    context: context
-                )
+                let computation = try request.solveOnMainActor(context: context)
                 return finish(
                     prepared,
-                    result,
+                    computation,
+                    pass: pass,
                     duration: clock.now - start,
                     stack: .enough,
                     in: rect,
                     animation: animation
                 )
-            } catch is LayoutStackExhausted where !prepared.requiresMainThread {
+            } catch is LayoutStackExhausted where !request.requiresMainThread {
                 solvingAnimation = animation
-                solveInBackground(prepared, trace: trace, stack: .moved, in: rect)
+                solveInBackground(prepared, request: request, trace: trace, stack: .moved, in: rect)
             } catch is LayoutStackExhausted {
-                reject(prepared, duration: clock.now - start)
+                reject(prepared, pass: pass, duration: clock.now - start, in: rect)
             } catch {}
             return false
         }
 
         solvingAnimation = animation
-        solveInBackground(prepared, trace: trace, stack: .enough, in: rect)
+        solveInBackground(prepared, request: request, trace: trace, stack: .enough, in: rect)
         return false
     }
 
     /// Reports a pass too deep for any thread it could be solved on; the tree keeps the
     /// pass before.
-    private func reject(_ prepared: PreparedLayout, duration: Duration) {
+    private func reject(
+        _ prepared: PreparedLayout,
+        pass: UInt64,
+        duration: Duration,
+        in rect: LayoutRect
+    ) {
+        guard isCurrent(pass, in: rect) else { return }
+
         onLayoutReport?(
             LayoutReport(
                 host: number,
@@ -622,10 +662,10 @@ public final class NodeHost: CommandTarget {
         )
     }
 
-    /// Waits for a background solve in flight, if any, and its frames to be applied.
+    /// Waits for the background pass in flight at the time of the call to finish.
     ///
-    /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: returns early if
-    /// the solve is cancelled.
+    /// An invalidated or overtaken pass finishes without applying frames. This method does
+    /// not start a pending layout or wait for a newer pass started by a callback.
     public func layoutFinished() async {
         await solving?.value
     }
@@ -636,33 +676,53 @@ public final class NodeHost: CommandTarget {
     @discardableResult
     private func finish(
         _ prepared: PreparedLayout,
-        _ result: LayoutResult,
+        _ computation: ComputedLayout,
+        pass: UInt64,
         duration: Duration,
         stack: LayoutReport.Stack,
         in rect: LayoutRect,
         animation: Animation?
     ) -> Bool {
+        var applied = false
+        defer {
+            if !applied, pass == generation, needsLayout {
+                pendingAnimation = pendingAnimation ?? animation
+            }
+        }
+        guard isCurrent(pass, in: rect) else { return false }
+
+        let result = computation.result
         let duplicates = prepared.elementsPlacedMoreThanOnce(in: result)
         if let onLayoutReport {
             onLayoutReport(
                 report(prepared, result, duration: duration, stack: stack, duplicates: duplicates)
             )
         }
-        guard duplicates.isEmpty else { return false }
+        // A report callback can invalidate this snapshot or synchronously start a new
+        // pass. Recheck before the checked apply mutates any live element.
+        guard isCurrent(pass, in: rect), duplicates.isEmpty else { return false }
 
         let interval = Trace.begin(.layoutApply, "host \(number) pass \(generation)")
         defer { Trace.end(interval) }
+        guard let placements = prepared.apply(computation, in: rect, scale: scale) else {
+            return false
+        }
+        applied = true
         passes += 1
         needsRender = true
         if let animation {
             renderAnimation = animation
         }
-        mount(prepared.apply(result, in: rect, scale: scale))
+        mount(placements)
         for dependent in viewportDependents {
             dependent.layoutApplied()
         }
         updateScreen()
         return true
+    }
+
+    private func isCurrent(_ pass: UInt64, in rect: LayoutRect) -> Bool {
+        pass == generation && !needsLayout && rect.size == size
     }
 
     /// A scroll moved: nodes whose layout depends on where they show look again, and nodes
@@ -715,22 +775,16 @@ public final class NodeHost: CommandTarget {
 
     private func solveInBackground(
         _ prepared: PreparedLayout,
+        request: LayoutRequest,
         trace: LayoutTraceRequest?,
         stack: LayoutReport.Stack,
         in rect: LayoutRect
     ) {
-        let input = prepared.input
         let pass = generation
-        releasePending()
-        for case let node as Node in prepared.mentionedElements where !node.isMounted {
-            node.pendingHost = self
-            pending.append(node)
-        }
         let label = "host \(number) pass \(pass)"
         solving = Task { [weak self] in
             let outcome = await NodeHost.solve(
-                input,
-                size: rect.size,
+                request,
                 trace: trace,
                 label: label
             ) { thread in
@@ -739,46 +793,54 @@ public final class NodeHost: CommandTarget {
             guard let self, pass == self.generation else { return }
 
             let animation = self.solvingAnimation
+            defer {
+                // A report or mounting callback may have started another solve. Its
+                // pending nodes and cancellation handle belong to that newer pass.
+                if pass == self.generation {
+                    self.releasePending()
+                    self.solving = nil
+                    self.solverThread = nil
+                    self.solvingAnimation = nil
+                }
+            }
+            guard self.isCurrent(pass, in: rect) else {
+                self.pendingAnimation = self.pendingAnimation ?? animation
+                return
+            }
             switch outcome {
             case .cancelled:
                 return
             case let .tooDeep(duration):
-                self.releasePending()
-                self.solving = nil
-                self.solverThread = nil
-                self.solvingAnimation = nil
-                self.reject(prepared, duration: duration)
-            case let .solved(result, duration):
-                self.releasePending()
-                self.solving = nil
-                self.solverThread = nil
-                self.solvingAnimation = nil
-                self.finish(
+                self.reject(prepared, pass: pass, duration: duration, in: rect)
+            case let .solved(computation, duration):
+                let applied = self.finish(
                     prepared,
-                    result,
+                    computation,
+                    pass: pass,
                     duration: duration,
                     stack: stack,
                     in: rect,
                     animation: animation
                 )
-                self.onNeedsRender?()
+                if applied {
+                    self.onNeedsRender?()
+                }
             }
         }
     }
 
     /// How a solve on the host's thread ended.
     private enum SolveOutcome: Sendable {
-        case solved(LayoutResult, Duration)
+        case solved(ComputedLayout, Duration)
         case tooDeep(Duration)
         case cancelled
     }
 
-    /// Solves `input` on a thread of its own. The thread is handed to `started` from inside
+    /// Solves `request` on a thread of its own. The thread is handed to `started` from inside
     /// its body, once it certainly runs: a thread cancelled before its body starts never
     /// runs it, and the wait would never end.
     private nonisolated static func solve(
-        _ input: LayoutNode,
-        size: LayoutSize,
+        _ request: LayoutRequest,
         trace: LayoutTraceRequest?,
         label: String,
         started: @escaping @MainActor @Sendable (Thread) -> Void
@@ -798,8 +860,8 @@ public final class NodeHost: CommandTarget {
                 defer { Trace.end(interval) }
                 let outcome: SolveOutcome
                 do {
-                    let result = try FlexboxEngine.layout(input, size: size, context: context)
-                    outcome = .solved(result, clock.now - start)
+                    let computation = try request.solve(context: context)
+                    outcome = .solved(computation, clock.now - start)
                 } catch is LayoutStackExhausted {
                     outcome = .tooDeep(clock.now - start)
                 } catch {
@@ -820,6 +882,15 @@ public final class NodeHost: CommandTarget {
             solverThread = thread
         } else {
             thread.cancel()
+        }
+    }
+
+    /// Unmounted nodes must still invalidate the host if their content changes while a
+    /// solve or its report callback is using the prepared snapshot.
+    private func trackPending(in prepared: PreparedLayout) {
+        for case let node as Node in prepared.mentionedElements where !node.isMounted {
+            node.pendingHost = self
+            pending.append(node)
         }
     }
 

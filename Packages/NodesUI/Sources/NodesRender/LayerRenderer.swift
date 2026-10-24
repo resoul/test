@@ -19,6 +19,13 @@
         /// owns any work it starts.
         func prepareDrawing(size: CGSize, scale: Double)
 
+        /// Receives effective range demand before any display preparation.
+        /// Resource owners may preload bytes, decode for display, and prioritize visible
+        /// clients independently. Owners should cancel their client waits on empty demand.
+        /// The default does nothing. The renderer delivers changes on the main actor,
+        /// including removal.
+        func contentDemandChanged(_ demand: ContentDemand)
+
         /// Grows whenever what `draw` produces changes; the renderer redraws only then (or
         /// when the size or scale changes).
         ///
@@ -85,6 +92,9 @@
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public func prepareDrawing(size: CGSize, scale: Double) {}
 
+        /// Ignores range changes for drawings without demand-owned resources.
+        public func contentDemandChanged(_ demand: ContentDemand) {}
+
         /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: none.
         public func drawingSnapshot() -> (any DrawingSnapshot)? { nil }
 
@@ -110,6 +120,23 @@
         }
     }
 
+    /// Limits bitmap workers and queued snapshots for one renderer.
+    /// Cancelled workers keep their slots until their synchronous draw returns. These are
+    /// task counts, not a byte budget; mounted layers and shared image caches have separate
+    /// lifetimes. Main-actor-only drawings do not use this worker queue.
+    public struct DrawingPreparationPolicy: Sendable, Hashable {
+        /// Maximum physically running bitmap workers, including cancelled ones.
+        public let maximumConcurrentTasks: Int
+        /// Maximum snapshots waiting for a worker. Other mounted nodes wait without a snapshot.
+        public let maximumQueuedDrawings: Int
+
+        /// Creates a bounded policy with at least one worker and a nonnegative queue size.
+        public init(maximumConcurrentTasks: Int = 2, maximumQueuedDrawings: Int = 16) {
+            self.maximumConcurrentTasks = max(1, maximumConcurrentTasks)
+            self.maximumQueuedDrawings = max(0, maximumQueuedDrawings)
+        }
+    }
+
     /// Draws a tree of nodes as a tree of `CALayer`s: one layer per mounted node, framed by the
     /// node's frame, styled by its appearance, with the layers of its subnodes as sublayers in
     /// the same order. The same renderer serves UIKit and AppKit.
@@ -121,9 +148,10 @@
     /// again does the same. Drawn content (text) is not animated: it changes at
     /// once and keeps its size while the frame moves.
     ///
-    /// Ownership: the renderer owns the layers it creates; layers of nodes no longer mounted
-    /// are removed from their superlayers and released, after their fade when animated.
-    /// Isolation: MainActor. Errors: none. Cancellation: not applicable.
+    /// The renderer owns its layers and snapshots. Layers of removed nodes are released
+    /// after their fade when animated. All tree and layer access runs on the main actor;
+    /// background workers receive only immutable snapshots. Releasing the renderer cancels
+    /// its workers; a synchronous snapshot already running can finish before returning.
     @MainActor
     public final class LayerRenderer {
         /// Where drawn content is made.
@@ -145,13 +173,24 @@
         ///
         /// The ranges are reviewed after each render and, while scrolling, whenever a scroll
         /// has moved by a quarter of its length since the last review.
+        /// The host's `contentRangePolicy`, when set, takes precedence and reviews every move.
         public var displayRange: DisplayRange?
 
         private var layers: [NodeID: CALayer] = [:]
         private var drawn: [NodeID: Drawing] = [:]
-        /// Drawings on their way from the background, by node.
+        /// Current queued or running requests, separate from cancelled physical workers.
         private var pendingDraws: [NodeID: PendingDraw] = [:]
         private var nextDrawToken: UInt64 = 0
+        private var workers: [UInt64: Task<CGImage?, Never>] = [:]
+        private var queuedDraws: [NodeID] = []
+        private var deferredDraws: Set<NodeID> = []
+        private var lifecycles: [NodeID: ContentLifecycle<Drawing>] = [:]
+        private var demands: [NodeID: ContentDemand] = [:]
+        private var isPumping = false
+        private var isRendering = false
+
+        /// Worker and snapshot queue limits used by this renderer.
+        public let preparationPolicy: DrawingPreparationPolicy
         /// Every mounted node with a drawing, for the review of `displayRange`.
         private var drawingEntries: [NodeID: DrawingEntry] = [:]
         /// The scale of the last render, which later reviews draw at.
@@ -166,7 +205,12 @@
 
         private struct PendingDraw {
             let token: UInt64
-            let task: Task<CGImage?, Never>
+            let snapshot: any DrawingSnapshot
+            let wanted: Drawing
+            let ticket: PreparationTicket<Drawing>
+            let hostScale: Double?
+            weak var node: Node?
+            weak var layer: CALayer?
         }
         /// Layers of nodes that left in an animated render, fading out in place. They are
         /// dropped at the first render after their fade is over.
@@ -181,10 +225,17 @@
         private var transitions: [NodeID: Transition] = [:]
 
         /// What a layer's contents were drawn from.
-        private struct Drawing: Equatable {
+        private struct Drawing: Hashable, Sendable {
             let revision: UInt64
             let size: CGSize
             let scale: Double
+
+            func hash(into hasher: inout Hasher) {
+                hasher.combine(revision)
+                hasher.combine(Double(size.width))
+                hasher.combine(Double(size.height))
+                hasher.combine(scale)
+            }
         }
 
         /// The state of one render: what it visited, what it has to draw, and the layers it
@@ -205,9 +256,15 @@
             var formerSuperlayers: [ObjectIdentifier: CALayer] = [:]
         }
 
-        /// Ownership: the caller owns the renderer. Isolation: MainActor. Errors: none.
-        /// Cancellation: not applicable.
-        public init() {}
+        /// Creates a renderer with bounded background bitmap preparation.
+        /// Main-actor-only drawings bypass the worker queue.
+        public init(preparation: DrawingPreparationPolicy = DrawingPreparationPolicy()) {
+            preparationPolicy = preparation
+        }
+
+        deinit {
+            for worker in workers.values { worker.cancel() }
+        }
 
         /// The layer drawing `node`, if it has been rendered.
         ///
@@ -248,7 +305,10 @@
             }
 
             lastScale = scale
-            for entry in pass.drawings {
+            isRendering = true
+            for entry in pass.drawings.sorted(by: {
+                ($0.node.distanceToScreen ?? .infinity) < ($1.node.distanceToScreen ?? .infinity)
+            }) {
                 drawingEntries[entry.node.id] = DrawingEntry(node: entry.node, layer: entry.layer)
                 draw(
                     entry.drawing,
@@ -267,7 +327,10 @@
                 transitions[id] = nil
                 drawn[id] = nil
                 cancelDraw(of: id)
+                (drawingEntries[id]?.node as? any LayerDrawing)?.contentDemandChanged([])
                 drawingEntries[id] = nil
+                lifecycles[id] = nil
+                demands[id] = nil
                 reviewedOffsets[id] = nil
                 indicators[id] = nil
                 drawnOffsets[id] = nil
@@ -275,7 +338,9 @@
             settle(pass.detached, gone: gone, pass: pass)
             // The drawings of this pass were already placed by their distance; what is left is
             // to let go of the content that is far now.
-            if displayRange != nil { reviewDisplayRange(drawingNear: false) }
+            reviewDisplayRange(drawingNear: false)
+            isRendering = false
+            pumpDrawings()
         }
 
         /// Moves the content of `scrolls` to their offsets, and shows their indicators, without
@@ -307,6 +372,11 @@
                     sticky.position = LayerRenderer.position(of: node)
                 }
             }
+            if drawingEntries.values.contains(where: { $0.node?.host?.contentRangePolicy != nil }) {
+                reviewDisplayRange(drawingNear: true)
+                pumpDrawings()
+                return
+            }
             guard displayRange != nil else { return }
 
             var moved = false
@@ -326,38 +396,82 @@
             if moved { reviewDisplayRange(drawingNear: true) }
         }
 
-        /// Releases the content that has gone out of `displayRange` and, with `drawingNear`,
-        /// draws the content that has come within it. Does nothing without a range.
+        /// Reviews resource demand before drawing nearby content or releasing far bitmaps.
+        /// The legacy display range retains existing bitmaps between its two thresholds.
         private func reviewDisplayRange(drawingNear: Bool) {
-            guard let range = displayRange else { return }
-
             for (id, entry) in drawingEntries {
                 guard let node = entry.node, let layer = entry.layer,
                     let drawing = node as? any LayerDrawing
                 else { continue }
 
-                guard let distance = node.screenfulsToScreen else { continue }
-
-                if distance <= range.drawDistance {
-                    guard drawingNear else { continue }
-
-                    draw(
-                        drawing,
-                        of: node,
-                        into: layer,
-                        scale: lastScale * LayerRenderer.zoom(of: node),
-                        animation: nil
-                    )
-                } else if distance > range.releaseDistance, drawn[id] != nil {
-                    release(id, layer: layer)
+                let demand = updateDemand(of: node, drawing: drawing)
+                if node.host?.contentRangePolicy != nil {
+                    if !demand.contains(.display) {
+                        release(id, layer: layer)
+                    } else if drawingNear {
+                        draw(
+                            drawing,
+                            of: node,
+                            into: layer,
+                            scale: lastScale * LayerRenderer.zoom(of: node),
+                            animation: nil
+                        )
+                    }
+                } else if let range = displayRange, let distance = node.screenfulsToScreen {
+                    if distance <= range.drawDistance, drawingNear {
+                        draw(
+                            drawing,
+                            of: node,
+                            into: layer,
+                            scale: lastScale * LayerRenderer.zoom(of: node),
+                            animation: nil
+                        )
+                    } else if distance > range.releaseDistance {
+                        release(id, layer: layer)
+                    }
                 }
             }
+        }
+
+        private func effectiveDemand(of node: Node) -> ContentDemand {
+            if let policy = node.host?.contentRangePolicy {
+                return node.contentDemand(in: policy, previous: demands[node.id] ?? [])
+            }
+            if let range = displayRange, let distance = node.screenfulsToScreen,
+                distance > range.drawDistance
+            {
+                return []
+            }
+            return node.distanceToScreen == 0
+                ? ContentDemand.visible.requirements : ContentDemand.display.requirements
+        }
+
+        @discardableResult
+        private func updateDemand(of node: Node, drawing: any LayerDrawing) -> ContentDemand {
+            let demand = effectiveDemand(of: node)
+            if demands[node.id] != demand {
+                demands[node.id] = demand
+                lifecycles[node.id]?.updateDemand(demand)
+                drawing.contentDemandChanged(demand)
+            }
+            if !demand.contains(.display) { cancelDraw(of: node.id) }
+            return demand
+        }
+
+        /// The last evaluated range demand for a rendered drawing, or empty before rendering.
+        public func contentDemand(for node: Node) -> ContentDemand { demands[node.id] ?? [] }
+
+        /// Readiness of this renderer's bitmap or layer image for the last rendered inputs.
+        /// This does not report whether a resource node has finished its data request.
+        public func drawingState(for node: Node) -> PreparationState {
+            lifecycles[node.id]?.readiness.drawing ?? .idle
         }
 
         /// Takes the bitmap out of the layer of `id`; it is made again when the node is drawn.
         private func release(_ id: NodeID, layer: CALayer) {
             cancelDraw(of: id)
             drawn[id] = nil
+            lifecycles[id]?.release(.drawing)
             layer.contents = nil
         }
 
@@ -370,11 +484,20 @@
         /// their way for released content are dropped.
         public func trimMemory() {
             for (id, entry) in drawingEntries {
-                guard let node = entry.node, let layer = entry.layer, drawn[id] != nil,
-                    node is any LayerDrawing, let distance = node.screenfulsToScreen,
-                    distance > 0
+                guard let node = entry.node, let layer = entry.layer,
+                    let drawing = node as? any LayerDrawing
                 else { continue }
+                let visible =
+                    node.host?.contentRangePolicy != nil
+                    ? effectiveDemand(of: node).contains(.visible) : node.screenfulsToScreen == 0
+                guard !visible else { continue }
 
+                if node.host?.contentRangePolicy != nil {
+                    let demand = (demands[id] ?? []).intersection(.preload)
+                    demands[id] = demand
+                    lifecycles[id]?.updateDemand(demand)
+                    drawing.contentDemandChanged(demand)
+                }
                 release(id, layer: layer)
             }
         }
@@ -966,29 +1089,35 @@
             if animation == nil {
                 layer.removeAnimation(forKey: "contents")
             }
+            let demand = updateDemand(of: node, drawing: drawing)
+            guard demand.contains(.display) else { return }
+
             let size = CGSize(width: node.frame.size.width, height: node.frame.size.height)
             drawing.prepareDrawing(size: size, scale: scale)
             let wanted = Drawing(revision: drawing.drawingRevision, size: size, scale: scale)
+            if lifecycles[node.id]?.key != wanted {
+                cancelDraw(of: node.id)
+                lifecycles[node.id] = ContentLifecycle(key: wanted, demand: demand)
+            }
             let before = drawn[node.id]
             if let shown = drawing.layerImage {
+                cancelDraw(of: node.id)
                 show(shown, as: wanted, of: node, in: layer, animation: animation)
+                if let ticket = lifecycles[node.id]?.begin(.drawing) {
+                    lifecycles[node.id]?.complete(ticket, with: .ready)
+                }
                 return
             }
             layer.contentsRect = CGRect(x: 0, y: 0, width: 1, height: 1)
-            guard before != wanted else { return }
+            guard before != wanted, pendingDraws[node.id]?.wanted != wanted else { return }
 
-            // Content far from the screen waits: the review draws it when it comes near.
-            if let range = displayRange, let distance = node.screenfulsToScreen,
-                distance > range.drawDistance
-            {
-                return
-            }
-            drawn[node.id] = wanted
             if drawingMode == .asynchronous, let snapshot = drawing.drawingSnapshot() {
-                drawInBackground(snapshot, of: node, into: layer, size: size, scale: scale)
+                drawInBackground(snapshot, of: node, into: layer, wanted: wanted)
                 return
             }
             cancelDraw(of: node.id)
+            guard let ticket = lifecycles[node.id]?.begin(.drawing) else { return }
+            drawn[node.id] = wanted
             let pixelWidth = Int((Double(size.width) * scale).rounded(.up))
             let pixelHeight = Int((Double(size.height) * scale).rounded(.up))
             guard pixelWidth > 0, pixelHeight > 0,
@@ -1004,6 +1133,7 @@
                 )
             else {
                 layer.contents = nil
+                lifecycles[node.id]?.complete(ticket, with: .failed)
                 return
             }
 
@@ -1020,6 +1150,7 @@
             let image = context.makeImage()
             layer.contentsScale = CGFloat(scale)
             layer.contents = image
+            lifecycles[node.id]?.complete(ticket, with: image == nil ? .failed : .ready)
             if let animation, let before, before.revision != wanted.revision, let shown,
                 let image
             {
@@ -1044,30 +1175,118 @@
             _ snapshot: any DrawingSnapshot,
             of node: Node,
             into layer: CALayer,
-            size: CGSize,
-            scale: Double
+            wanted: Drawing
         ) {
+            if pendingDraws[node.id]?.wanted == wanted { return }
             cancelDraw(of: node.id)
-            nextDrawToken &+= 1
-            let token = nextDrawToken
-            let id = node.id
-            let priority: TaskPriority = node.distanceToScreen == 0 ? .userInitiated : .utility
-            let task = Task.detached(priority: priority) {
-                LayerRenderer.bitmap(of: snapshot, size: size, scale: scale)
+            let capacity =
+                preparationPolicy.maximumQueuedDrawings
+                + max(0, preparationPolicy.maximumConcurrentTasks - workers.count)
+            guard queuedDraws.count < capacity else {
+                deferredDraws.insert(node.id)
+                return
             }
-            pendingDraws[id] = PendingDraw(token: token, task: task)
-            Task { [weak self, weak layer] in
-                let image = await task.value
-                guard let self, let layer, self.pendingDraws[id]?.token == token else { return }
+            guard let ticket = lifecycles[node.id]?.begin(.drawing) else { return }
+            nextDrawToken &+= 1
+            pendingDraws[node.id] = PendingDraw(
+                token: nextDrawToken,
+                snapshot: snapshot,
+                wanted: wanted,
+                ticket: ticket,
+                hostScale: node.host?.scale,
+                node: node,
+                layer: layer
+            )
+            queuedDraws.append(node.id)
+            deferredDraws.remove(node.id)
+            if !isRendering { pumpDrawings() }
+        }
 
-                self.pendingDraws[id] = nil
-                layer.contentsScale = CGFloat(scale)
-                layer.contents = image
+        private func isCurrent(_ job: PendingDraw) -> Bool {
+            guard let node = job.node, let layer = job.layer,
+                layers[node.id] === layer, node.isMounted, node.isShown,
+                let host = node.host, !host.needsLayout,
+                let drawing = node as? any LayerDrawing,
+                lifecycles[node.id]?.isCurrent(job.ticket) == true,
+                drawing.drawingRevision == job.wanted.revision,
+                node.frame.size.width == Double(job.wanted.size.width),
+                node.frame.size.height == Double(job.wanted.size.height),
+                lastScale * LayerRenderer.zoom(of: node) == job.wanted.scale,
+                host.scale == job.hostScale,
+                effectiveDemand(of: node).contains(.display)
+            else { return false }
+            return true
+        }
+
+        private func priority(of id: NodeID) -> Double {
+            guard let node = drawingEntries[id]?.node else { return .infinity }
+            return node.distanceToScreen ?? .infinity
+        }
+
+        private func pumpDrawings() {
+            guard !isPumping, !isRendering else { return }
+            isPumping = true
+            defer { isPumping = false }
+            // Overflow stores only identities. Snapshots are recaptured from current nodes
+            // when a slot opens, so a long page does not retain a snapshot for every node.
+            for id in deferredDraws.sorted(by: { priority(of: $0) < priority(of: $1) }) {
+                let capacity =
+                    preparationPolicy.maximumQueuedDrawings
+                    + max(0, preparationPolicy.maximumConcurrentTasks - workers.count)
+                guard queuedDraws.count < capacity else { break }
+                deferredDraws.remove(id)
+                guard let entry = drawingEntries[id], let node = entry.node,
+                    let layer = entry.layer, let drawing = node as? any LayerDrawing
+                else { continue }
+                draw(
+                    drawing,
+                    of: node,
+                    into: layer,
+                    scale: lastScale * LayerRenderer.zoom(of: node),
+                    animation: nil
+                )
+            }
+            queuedDraws.sort { priority(of: $0) < priority(of: $1) }
+            while workers.count < preparationPolicy.maximumConcurrentTasks, !queuedDraws.isEmpty {
+                let id = queuedDraws.removeFirst()
+                guard let job = pendingDraws[id] else { continue }
+                guard isCurrent(job) else {
+                    cancelDraw(of: id)
+                    continue
+                }
+                let priority: TaskPriority = priority(of: id) == 0 ? .userInitiated : .utility
+                let snapshot = job.snapshot
+                let wanted = job.wanted
+                let task = Task.detached(priority: priority) {
+                    Self.bitmap(of: snapshot, size: wanted.size, scale: wanted.scale)
+                }
+                workers[job.token] = task
+                Task { [weak self] in
+                    let image = await task.value
+                    self?.finished(job, id: id, image: image)
+                }
             }
         }
 
+        private func finished(_ job: PendingDraw, id: NodeID, image: CGImage?) {
+            workers[job.token] = nil
+            defer { pumpDrawings() }
+            guard pendingDraws[id]?.token == job.token else { return }
+            guard isCurrent(job), let layer = job.layer else {
+                cancelDraw(of: id)
+                return
+            }
+            pendingDraws[id] = nil
+            guard
+                lifecycles[id]?.complete(job.ticket, with: image == nil ? .failed : .ready) == true
+            else { return }
+            drawn[id] = job.wanted
+            layer.contentsScale = CGFloat(job.wanted.scale)
+            layer.contents = image
+        }
+
         /// A bitmap of `snapshot` for a box of `size` points at `scale`, or `nil` when the box
-        /// has no pixels or the work was cancelled before it began.
+        /// has no pixels or the work was cancelled before or during drawing.
         private nonisolated static func bitmap(
             of snapshot: any DrawingSnapshot,
             size: CGSize,
@@ -1094,27 +1313,36 @@
             let interval = Trace.begin(.draw, "\(pixelWidth)x\(pixelHeight) background")
             snapshot.draw(in: context, size: size)
             Trace.end(interval)
+            guard !Task.isCancelled else { return nil }
             return context.makeImage()
         }
 
         /// Drops the drawing on its way for `id`, if any.
         private func cancelDraw(of id: NodeID) {
-            pendingDraws.removeValue(forKey: id)?.task.cancel()
+            if let job = pendingDraws.removeValue(forKey: id) {
+                workers[job.token]?.cancel()
+                lifecycles[id]?.release(.drawing)
+            }
+            queuedDraws.removeAll { $0 == id }
+            deferredDraws.remove(id)
         }
 
-        /// How many drawings are on their way from the background.
+        /// Drawings admitted to the worker queue, including running current requests.
+        /// Cancelled workers are counted separately until they physically return.
         public var pendingDrawCount: Int { pendingDraws.count }
 
-        /// Returns once every drawing that was started has been put into its layer or dropped.
-        ///
-        /// Ownership: none. Isolation: MainActor. Errors: none. Cancellation: returns early if
-        /// the calling task is cancelled.
+        /// Physically running bitmap workers, including cancelled work that has not returned.
+        public var runningDrawCount: Int { workers.count }
+
+        /// Snapshots waiting for a worker, bounded by the preparation policy after scheduling.
+        public var queuedDrawCount: Int { queuedDraws.count }
+
+        /// Waits until admitted and deferred drawings finish or are discarded.
+        /// Cancelling the caller stops waiting; it does not cancel renderer-owned work.
         public func drawingsFinished() async {
-            while !pendingDraws.isEmpty, !Task.isCancelled {
-                for pending in Array(pendingDraws.values) {
-                    _ = await pending.task.value
-                }
-                // The tasks that put the bitmaps into the layers run after the drawing ends.
+            pumpDrawings()
+            while !workers.isEmpty, !Task.isCancelled {
+                for task in Array(workers.values) { _ = await task.value }
                 await Task.yield()
             }
         }

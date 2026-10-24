@@ -698,6 +698,46 @@ open class Node: LayoutElement {
         return LayoutRect(x: low.x, y: low.y, width: high.x - low.x, height: high.y - low.y)
     }
 
+    /// Evaluates preparation ranges against the host and enclosing clips in this node's space.
+    ///
+    /// Hidden, transparent, unmounted, unshown, or background trees request no work. Both
+    /// scroll axes, appearance offsets, and zoom participate. This does not start work or
+    /// change screen tracking; pass the previous demand to preserve range hysteresis.
+    public func contentDemand(
+        in policy: ContentRangePolicy,
+        previous: ContentDemand = []
+    ) -> ContentDemand {
+        guard isMounted, isShown, let host, !host.isInBackground,
+            !isHidden, appearance.opacity > 0
+        else { return [] }
+
+        var placement = Placement.identity
+        var clips: [LayoutRect] = []
+        func bounds(_ size: LayoutSize) -> LayoutRect {
+            LayoutRect(
+                x: -placement.origin.x / placement.scale,
+                y: -placement.origin.y / placement.scale,
+                width: size.width / placement.scale,
+                height: size.height / placement.scale
+            )
+        }
+        var node: Node = self
+        while let parent = node.supernode {
+            guard !parent.isHidden, parent.appearance.opacity > 0 else { return [] }
+
+            placement = placement.moved(into: parent, from: node.shownOrigin)
+            if parent.appearance.clipsContent { clips.append(bounds(parent.frame.size)) }
+            node = parent
+        }
+        placement.origin.x += node.frame.origin.x
+        placement.origin.y += node.frame.origin.y
+        return policy.demand(
+            for: LayoutRect(x: 0, y: 0, width: frame.size.width, height: frame.size.height),
+            in: ContentViewport(bounds: bounds(host.size), clips: clips),
+            previous: previous
+        )
+    }
+
     /// The deepest visible node under `point`, given in this node's coordinates, or `nil`.
     /// Later subnodes are on top. Subnodes outside the node's box are found too, unless the
     /// node clips its content.
